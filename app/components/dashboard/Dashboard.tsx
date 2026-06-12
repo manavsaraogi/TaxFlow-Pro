@@ -16,29 +16,21 @@ interface DashboardStats {
 }
 
 const WORKFLOW_LABELS: Record<string, string> = {
-  NOT_STARTED:           'Not Started',
-  DATA_IMPORTED:         'Data Imported',
-  DATA_ENTRY_PENDING:    'Data Entry Pending',
-  RECONCILIATION_PENDING:'Reconciliation Pending',
-  COMPUTATION_READY:     'Computation Ready',
-  REVIEW_PENDING:        'Review Pending',
-  READY_FOR_FILING:      'Ready for Filing',
-  FILED:                 'Filed',
-  ITR_V_PENDING:         'ITR-V Pending',
-  COMPLETED:             'Completed',
+  DRAFT:          'Draft',
+  IN_PROGRESS:    'In Progress',
+  REVIEW:         'Under Review',
+  FILED:          'Filed',
+  ACKNOWLEDGED:   'Acknowledged',
+  CANCELLED:      'Cancelled',
 };
 
 const WORKFLOW_COLORS: Record<string, string> = {
-  NOT_STARTED:            '#586069',
-  DATA_IMPORTED:          '#58A6FF',
-  DATA_ENTRY_PENDING:     '#D29922',
-  RECONCILIATION_PENDING: '#F0883E',
-  COMPUTATION_READY:      '#A371F7',
-  REVIEW_PENDING:         '#E3B341',
-  READY_FOR_FILING:       '#3FB950',
-  FILED:                  '#238636',
-  ITR_V_PENDING:          '#D29922',
-  COMPLETED:              '#1A7F37',
+  DRAFT:        '#586069',
+  IN_PROGRESS:  '#D29922',
+  REVIEW:       '#F0883E',
+  FILED:        '#238636',
+  ACKNOWLEDGED: '#1A7F37',
+  CANCELLED:    '#f85149',
 };
 
 const ASSESSEE_LABELS: Record<string, string> = {
@@ -63,10 +55,11 @@ interface DashboardProps {
 export function Dashboard({ onNavigate }: DashboardProps) {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
 
   useEffect(() => {
     loadStats();
-  }, []);
+  }, [lastRefresh]);
 
   async function loadStats() {
     setLoading(true);
@@ -133,12 +126,21 @@ export function Dashboard({ onNavigate }: DashboardProps) {
             AY 2026-27 · {new Date().toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
           </div>
         </div>
-        <button
-          className="btn btn-primary"
-          onClick={() => onNavigate({ name: 'client-new' })}
-        >
-          + New Client
-        </button>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button
+            className="btn btn-secondary"
+            onClick={() => setLastRefresh(new Date())}
+            title="Refresh"
+          >
+            ↻ Refresh
+          </button>
+          <button
+            className="btn btn-primary"
+            onClick={() => onNavigate({ name: 'client-new' })}
+          >
+            + New Client
+          </button>
+        </div>
       </div>
 
       {/* Top Stat Cards */}
@@ -615,8 +617,12 @@ function ItrFormList({
 
 function DueDateBanner() {
   const today = new Date();
-  const dueDate = new Date('2024-07-31');
-  const daysLeft = Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+  // AY 2026-27 — non-audit individual due date: 31 July 2026
+  const nonAuditDue = new Date('2026-07-31');
+  // Audit cases: 31 Oct 2026
+  const auditDue = new Date('2026-10-31');
+
+  const daysLeft = Math.ceil((nonAuditDue.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
   const isOverdue = daysLeft < 0;
   const isUrgent = daysLeft >= 0 && daysLeft <= 30;
 
@@ -627,17 +633,17 @@ function DueDateBanner() {
     : 'var(--status-info)';
 
   const bg = isOverdue
-    ? 'var(--status-error-bg)'
+    ? 'rgba(248,81,73,0.08)'
     : isUrgent
-    ? 'var(--status-warning-bg)'
-    : 'var(--status-info-bg)';
+    ? 'rgba(210,153,34,0.08)'
+    : 'rgba(88,166,255,0.08)';
 
   return (
     <div
       style={{
         marginTop: '16px',
         background: bg,
-        border: `1px solid ${color}`,
+        border: `1px solid ${color}40`,
         borderRadius: '8px',
         padding: '12px 16px',
         display: 'flex',
@@ -646,17 +652,20 @@ function DueDateBanner() {
       }}
     >
       <span style={{ fontSize: '18px' }}>{isOverdue ? '🔴' : isUrgent ? '⚠️' : 'ℹ️'}</span>
-      <div>
+      <div style={{ flex: 1 }}>
         <span style={{ fontSize: '13px', fontWeight: '600', color }}>
           {isOverdue
-            ? `ITR Filing Due Date (AY 2026-27) has passed`
-            : `ITR Filing Due Date: 31 July 2024`}
+            ? 'ITR Due Date for AY 2026-27 (Non-Audit) has passed'
+            : `ITR Due Date: 31 Jul 2026 (Non-Audit)  ·  31 Oct 2026 (Audit)`}
         </span>
         <span style={{ fontSize: '12px', color: 'var(--text-muted)', marginLeft: '12px' }}>
           {isOverdue
-            ? `Overdue by ${Math.abs(daysLeft)} days — late fee u/s 234F applicable`
-            : `${daysLeft} days remaining for non-audit cases`}
+            ? `Overdue by ${Math.abs(daysLeft)} days — late fee u/s 234F up to ₹5,000 applicable`
+            : `${daysLeft} days remaining · FY 2025-26 · AY 2026-27`}
         </span>
+      </div>
+      <div style={{ fontSize: '11px', color: 'var(--text-muted)', textAlign: 'right', whiteSpace: 'nowrap' }}>
+        <div>Audit: {Math.ceil((auditDue.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))} days</div>
       </div>
     </div>
   );

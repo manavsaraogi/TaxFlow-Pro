@@ -11,37 +11,69 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
   const client = await prisma.client.findFirst({
     where: { id: Number(params.id), firmId: auth.firmId },
-    include: { bankAccounts: { where: { isActive: true } } },
+    include: {
+      bankAccounts: { where: { isActive: true } },
+      returns: {
+        orderBy: { createdAt: 'desc' },
+        include: { assessmentYear: true },
+      },
+    },
   });
 
   if (!client) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
   const data = {
-    id: String(client.id),
+    id: client.id,
     pan: client.pan,
+    fullName: client.fullName,
+    // legacy aliases for compatibility
     name: client.fullName,
     assesseeType: client.assesseeType,
+    dateOfBirth: client.dateOfBirth?.toISOString().split('T')[0] ?? null,
+    dateOfBirthOrIncorporation: client.dateOfBirth?.toISOString().split('T')[0] ?? null,
+    mobileNumber: client.mobileNumber,
     mobile: client.mobileNumber,
     email: client.email,
-    city: client.city,
-    state: client.stateCode,
-    residentialStatus: client.residentialStatus,
-    taxRegimePreference: client.taxRegimePreference,
-    dateOfBirthOrIncorporation: client.dateOfBirth?.toISOString().split('T')[0] ?? null,
+    address: client.address,
     addressLine1: client.address,
+    city: client.city,
+    stateCode: client.stateCode,
+    state: client.stateCode,
+    pinCode: client.pinCode ? String(client.pinCode) : null,
     pincode: client.pinCode ? String(client.pinCode) : null,
+    aadhaarNumber: client.aadhaarNumber,
+    residentialStatus: client.residentialStatus ?? 'RES',
+    employerCategory: client.employerCategory ?? 'OTH',
+    taxRegimePreference: client.taxRegimePreference,
     portalUsername: client.portalUsername,
-    activeReturnsCount: 0,
-    lastReturnAY: null,
+    hasPortalPassword: false,
+    isActive: client.isActive,
     createdAt: client.createdAt.toISOString(),
     updatedAt: client.updatedAt.toISOString(),
     bankAccounts: client.bankAccounts.map((b) => ({
-      id: String(b.id),
-      accountNumber: b.accountNumber,
-      ifsc: b.ifscCode,
+      id: b.id,
       bankName: b.bankName,
+      accountNumber: b.accountNumber,
+      ifscCode: b.ifscCode,
+      ifsc: b.ifscCode,
       accountType: b.accountType,
       isPrimary: b.isPrimary,
+    })),
+    returns: client.returns.map((r) => ({
+      id: r.id,
+      status: r.status,
+      formType: r.formType,
+      regime: r.regime,
+      grossTotalIncome: r.grossTotalIncome,
+      grossTaxLiability: r.grossTaxLiability,
+      refundDue: r.refundDue,
+      balTaxPayable: r.balTaxPayable,
+      filedAt: r.filedAt?.toISOString() ?? null,
+      acknowledgementNumber: r.acknowledgementNumber,
+      createdAt: r.createdAt.toISOString(),
+      assessmentYear: r.assessmentYear
+        ? { ayLabel: r.assessmentYear.ayLabel }
+        : null,
     })),
   };
 
@@ -60,20 +92,24 @@ export async function PUT(request: NextRequest, { params }: Params) {
 
   const body = await request.json();
 
+  const dob = body.dateOfBirth ?? body.dateOfBirthOrIncorporation;
+
   await prisma.client.update({
     where: { id: Number(params.id) },
     data: {
-      fullName: body.name ?? existing.fullName,
-      mobileNumber: body.mobile ?? existing.mobileNumber,
+      fullName: body.fullName ?? body.name ?? existing.fullName,
+      mobileNumber: body.mobileNumber ?? body.mobile ?? existing.mobileNumber,
       email: body.email ?? existing.email,
-      address: body.addressLine1 ?? existing.address,
+      address: body.address ?? body.addressLine1 ?? existing.address,
       city: body.city ?? existing.city,
-      stateCode: body.state ?? existing.stateCode,
-      pinCode: body.pincode ? Number(body.pincode) : existing.pinCode,
+      stateCode: body.stateCode ?? body.state ?? existing.stateCode,
+      pinCode: (body.pinCode ?? body.pincode) ? Number(body.pinCode ?? body.pincode) : existing.pinCode,
+      aadhaarNumber: body.aadhaarNumber ?? existing.aadhaarNumber,
       residentialStatus: body.residentialStatus ?? existing.residentialStatus,
+      employerCategory: body.employerCategory ?? existing.employerCategory,
       taxRegimePreference: body.taxRegimePreference ?? existing.taxRegimePreference,
       portalUsername: body.portalUsername ?? existing.portalUsername,
-      dateOfBirth: body.dateOfBirthOrIncorporation ? new Date(body.dateOfBirthOrIncorporation) : existing.dateOfBirth,
+      dateOfBirth: dob ? new Date(dob) : existing.dateOfBirth,
     },
   });
 
@@ -90,7 +126,6 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
   });
   if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-  // Soft delete
   await prisma.client.update({
     where: { id: Number(params.id) },
     data: { isActive: false },

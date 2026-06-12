@@ -20,12 +20,15 @@ type AssesseeType =
 type ResidentialStatus = 'RES' | 'NRI' | 'RNR';
 type TaxRegime = 'NEW' | 'OLD';
 
+type EmployerCategory = 'CGOV' | 'SGOV' | 'PSU' | 'PE' | 'PESG' | 'PEPS' | 'PEO' | 'OTH' | 'NA';
+
 interface ClientFormData {
   pan: string;
   fullName: string;
   assesseeType: AssesseeType;
   dateOfBirth: string;
   residentialStatus: ResidentialStatus;
+  employerCategory: EmployerCategory;
   mobileNumber: string;
   email: string;
   address: string;
@@ -110,12 +113,25 @@ const MOBILE_REGEX = /^[6-9]\d{9}$/;
 const AADHAAR_REGEX = /^\d{12}$/;
 const PINCODE_REGEX = /^\d{6}$/;
 
+const EMPLOYER_CATEGORIES: { value: EmployerCategory; label: string }[] = [
+  { value: 'OTH',  label: 'Others (Private Sector)' },
+  { value: 'CGOV', label: 'Central Government' },
+  { value: 'SGOV', label: 'State Government' },
+  { value: 'PSU',  label: 'Public Sector Undertaking (PSU)' },
+  { value: 'PE',   label: 'Pensioner — Central Govt.' },
+  { value: 'PESG', label: 'Pensioner — State Govt.' },
+  { value: 'PEPS', label: 'Pensioner — PSU' },
+  { value: 'PEO',  label: 'Pensioner — Others' },
+  { value: 'NA',   label: 'Not Applicable (Business/Profession/No Salary)' },
+];
+
 const EMPTY_FORM: ClientFormData = {
   pan: '',
   fullName: '',
   assesseeType: 'INDIVIDUAL',
   dateOfBirth: '',
   residentialStatus: 'RES',
+  employerCategory: 'OTH',
   mobileNumber: '',
   email: '',
   address: '',
@@ -174,15 +190,16 @@ export default function ClientForm({ clientId, onSuccess, onCancel }: ClientForm
         data = json.data;
         setForm({
           pan: data.pan ?? '',
-          fullName: data.fullName ?? '',
+          fullName: data.fullName ?? data.name ?? '',
           assesseeType: data.assesseeType ?? 'INDIVIDUAL',
-          dateOfBirth: data.dateOfBirth ? data.dateOfBirth.split('T')[0] : '',
+          dateOfBirth: (data.dateOfBirth ?? data.dateOfBirthOrIncorporation ?? '').split('T')[0],
           residentialStatus: data.residentialStatus ?? 'RES',
-          mobileNumber: data.mobileNumber ?? '',
+          employerCategory: data.employerCategory ?? 'OTH',
+          mobileNumber: data.mobileNumber ?? data.mobile ?? '',
           email: data.email ?? '',
-          address: data.address ?? '',
+          address: data.address ?? data.addressLine1 ?? '',
           city: data.city ?? '',
-          stateCode: data.stateCode ?? '11',
+          stateCode: data.stateCode ?? data.state ?? '11',
           pinCode: data.pinCode ? String(data.pinCode) : '',
           aadhaarNumber: data.aadhaarNumber ?? '',
           portalUsername: data.portalUsername ?? '',
@@ -235,6 +252,7 @@ export default function ClientForm({ clientId, onSuccess, onCancel }: ClientForm
         fullName: form.fullName,
         dateOfBirth: form.dateOfBirth || undefined,
         residentialStatus: form.residentialStatus,
+        employerCategory: form.employerCategory,
         mobileNumber: form.mobileNumber || undefined,
         email: form.email || undefined,
         address: form.address,
@@ -301,13 +319,57 @@ export default function ClientForm({ clientId, onSuccess, onCancel }: ClientForm
       }}
     >
       {/* Header */}
-      <div style={{ marginBottom: '1.5rem' }}>
-        <h2 style={{ fontSize: '1.2rem', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
-          {isEdit ? 'Edit Client' : 'New Client'}
-        </h2>
-        <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: '0.25rem' }}>
-          Fields marked * are required. Client data is used to generate ITR JSON.
-        </p>
+      <div style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div>
+          <h2 style={{ fontSize: '1.2rem', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
+            {isEdit ? 'Edit Client' : 'New Client'}
+          </h2>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: '0.25rem' }}>
+            Fields marked * are required. Client data is used to generate ITR JSON.
+          </p>
+        </div>
+        {!isEdit && (
+          <label style={{ cursor: 'pointer' }}>
+            <input
+              type="file"
+              accept=".json"
+              style={{ display: 'none' }}
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                try {
+                  const text = await file.text();
+                  const parsed = JSON.parse(text);
+                  const c = Array.isArray(parsed) ? parsed[0] : parsed;
+                  if (!c?.pan) { alert('JSON must contain a "pan" field'); return; }
+                  setForm((prev) => ({
+                    ...prev,
+                    pan: (c.pan ?? prev.pan).toUpperCase(),
+                    fullName: String(c.fullName || c.name || [c.firstName, c.middleName, c.lastName || c.surName].filter(Boolean).join(' ') || prev.fullName),
+                    assesseeType: c.assesseeType ?? prev.assesseeType,
+                    dateOfBirth: ((c.dateOfBirth ?? c.dob ?? '') as string).split('T')[0] || prev.dateOfBirth,
+                    residentialStatus: c.residentialStatus ?? prev.residentialStatus,
+                    mobileNumber: c.mobileNumber ?? c.mobile ?? prev.mobileNumber,
+                    email: c.email ?? prev.email,
+                    address: c.address ?? prev.address,
+                    city: c.city ?? prev.city,
+                    stateCode: c.stateCode ?? c.state ?? prev.stateCode,
+                    pinCode: String(c.pinCode ?? c.pincode ?? prev.pinCode),
+                    aadhaarNumber: c.aadhaarNumber ?? c.aadhaar ?? prev.aadhaarNumber,
+                    portalUsername: c.portalUsername ?? c.pan?.toUpperCase() ?? prev.portalUsername,
+                    portalPassword: c.portalPassword ?? c.password ?? prev.portalPassword,
+                  }));
+                } catch {
+                  alert('Invalid JSON file');
+                }
+                e.target.value = '';
+              }}
+            />
+            <span className="btn btn-secondary" style={{ fontSize: '0.75rem', padding: '0.4rem 0.75rem' }}>
+              📂 Import from JSON
+            </span>
+          </label>
+        )}
       </div>
 
       {feedback && (
@@ -393,6 +455,18 @@ export default function ClientForm({ clientId, onSuccess, onCancel }: ClientForm
             </select>
             <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 3 }}>
               Used in ITR FilingStatus → ResidentialStatus
+            </span>
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Employer Category</label>
+            <select name="employerCategory" className="form-select" value={form.employerCategory} onChange={handleChange}>
+              {EMPLOYER_CATEGORIES.map((c) => (
+                <option key={c.value} value={c.value}>{c.label}</option>
+              ))}
+            </select>
+            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 3 }}>
+              ITR PersonalInfo → EmployerCategory (CGOV/SGOV/PSU/OTH/NA)
             </span>
           </div>
 

@@ -61,7 +61,7 @@ interface ClientListProps {
   onNavigate: (page: AppPage) => void;
 }
 
-const CURRENT_AY = '2025-26';
+const CURRENT_AY = '2026-27';
 
 export function ClientList({ onNavigate }: ClientListProps) {
   const [clients, setClients] = useState<ClientData[]>([]);
@@ -109,12 +109,42 @@ export function ClientList({ onNavigate }: ClientListProps) {
             {clients.length} client{clients.length !== 1 ? 's' : ''} · AY {CURRENT_AY}
           </p>
         </div>
-        <button
-          className="btn btn-primary"
-          onClick={() => onNavigate({ name: 'client-new' })}
-        >
-          + New Client
-        </button>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <label style={{ cursor: 'pointer' }}>
+            <input
+              type="file"
+              accept=".json"
+              style={{ display: 'none' }}
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                try {
+                  const text = await file.text();
+                  const data = JSON.parse(text);
+                  const res = await fetch('/api/clients/import', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data),
+                  });
+                  const json = await res.json();
+                  const { created, updated, errors } = json.data ?? {};
+                  alert(`Import complete: ${created} created, ${updated} updated, ${errors} errors`);
+                  loadClients();
+                } catch (err: any) {
+                  alert('Import failed: ' + (err.message ?? 'Invalid JSON'));
+                }
+                e.target.value = '';
+              }}
+            />
+            <span className="btn btn-secondary">📂 Import JSON</span>
+          </label>
+          <button
+            className="btn btn-primary"
+            onClick={() => onNavigate({ name: 'client-new' })}
+          >
+            + New Client
+          </button>
+        </div>
       </div>
 
       {/* Filters */}

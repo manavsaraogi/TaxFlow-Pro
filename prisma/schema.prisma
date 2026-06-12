@@ -168,6 +168,7 @@ model Client {
   pinCode                 Int?
   aadhaarNumber           String?
   residentialStatus       String?      @default("RES")
+  employerCategory        String?      @default("OTH")
   portalUsername          String?
   taxRegimePreference     TaxRegime    @default(NEW)
   isActive                Boolean      @default(true)

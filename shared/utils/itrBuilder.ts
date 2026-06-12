@@ -240,15 +240,16 @@ function computeIncomeSummary(rd: ReturnData): IncomeSummary {
 
 function computeSlabTax(income: number, regime: 'OLD' | 'NEW'): number {
   if (regime === 'NEW') {
-    // New regime slabs AY 2025-26
-    if (income <= 300_000) return 0;
-    if (income <= 700_000) return (income - 300_000) * 0.05;
-    if (income <= 1_000_000) return 20_000 + (income - 700_000) * 0.10;
-    if (income <= 1_200_000) return 50_000 + (income - 1_000_000) * 0.15;
-    if (income <= 1_500_000) return 80_000 + (income - 1_200_000) * 0.20;
-    return 80_000 + 60_000 + (income - 1_500_000) * 0.30;
+    // New regime slabs AY 2026-27 (Finance Act 2025)
+    if (income <= 400_000) return 0;
+    if (income <= 800_000) return (income - 400_000) * 0.05;
+    if (income <= 1_200_000) return 20_000 + (income - 800_000) * 0.10;
+    if (income <= 1_600_000) return 60_000 + (income - 1_200_000) * 0.15;
+    if (income <= 2_000_000) return 120_000 + (income - 1_600_000) * 0.20;
+    if (income <= 2_400_000) return 200_000 + (income - 2_000_000) * 0.25;
+    return 300_000 + (income - 2_400_000) * 0.30;
   } else {
-    // Old regime slabs AY 2025-26 (individual below 60)
+    // Old regime slabs AY 2026-27 (individual below 60) — unchanged
     if (income <= 250_000) return 0;
     if (income <= 500_000) return (income - 250_000) * 0.05;
     if (income <= 1_000_000) return 12_500 + (income - 500_000) * 0.20;

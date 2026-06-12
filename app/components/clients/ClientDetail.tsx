@@ -269,7 +269,7 @@ export function ClientDetail({ clientId, onNavigate }: ClientDetailProps) {
       {activeTab === 'bank' && (
         <BankTab client={client} onAddBank={() => setShowBankModal(true)} onRefresh={loadClient} />
       )}
-      {activeTab === 'documents' && <DocumentsTab />}
+      {activeTab === 'documents' && <DocumentsTab clientId={client.id} returns={client.returns} />}
 
       {/* ── Modals ── */}
       {showNewReturnModal && (
@@ -521,14 +521,97 @@ function BankTab({ client, onAddBank, onRefresh }: { client: ClientData; onAddBa
   );
 }
 
-// ── Documents Tab ─────────────────────────────────────────────────────────────
+// ── Documents Tab (AIS / TIS / 26AS import) ───────────────────────────────────
 
-function DocumentsTab() {
+function DocumentsTab({ clientId, returns }: { clientId: number; returns?: ReturnData[] }) {
+  const [importType, setImportType] = useState<'AIS' | 'TIS' | '26AS'>('26AS');
+  const [returnId, setReturnId] = useState<string>('');
+  const [result, setResult] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+
+  async function handleFileImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImporting(true);
+    setResult(null);
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      const res = await fetch(`/api/clients/${clientId}/import-tax-data`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: importType, returnId: returnId ? Number(returnId) : undefined, data }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? 'Import failed');
+      setResult(JSON.stringify(json.data.summary, null, 2));
+    } catch (err: any) {
+      setResult('Error: ' + (err.message ?? 'Import failed'));
+    } finally {
+      setImporting(false);
+      e.target.value = '';
+    }
+  }
+
   return (
-    <div className="empty-state card" style={{ padding: '48px' }}>
-      <div className="empty-state-icon">📁</div>
-      <div className="empty-state-title">Document management</div>
-      <div className="empty-state-desc">Coming in Phase 3</div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      <div className="card">
+        <h3 style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 14px' }}>
+          Import Tax Data — AIS / TIS / 26AS
+        </h3>
+        <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '16px' }}>
+          Download JSON from the Income Tax portal → AIS / 26AS section, then upload here. TDS entries, challans and income summaries will be auto-filled into the selected return.
+        </p>
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '16px' }}>
+          {(['26AS', 'AIS', 'TIS'] as const).map((t) => (
+            <button
+              key={t} type="button"
+              onClick={() => setImportType(t)}
+              style={{
+                padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px',
+                border: `2px solid ${importType === t ? 'var(--brand-primary)' : 'var(--border-subtle)'}`,
+                background: importType === t ? 'rgba(212,160,23,0.08)' : 'var(--bg-elevated)',
+                color: importType === t ? 'var(--brand-text)' : 'var(--text-secondary)',
+                fontWeight: importType === t ? 600 : 400,
+              }}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+
+        {returns && returns.length > 0 && (
+          <div className="form-group" style={{ marginBottom: '16px' }}>
+            <label className="form-label">Link to Return (optional)</label>
+            <select className="form-select" value={returnId} onChange={(e) => setReturnId(e.target.value)}>
+              <option value="">— Summary only, no DB import —</option>
+              {returns.map((r) => (
+                <option key={r.id} value={r.id}>
+                  AY {r.assessmentYear?.ayLabel} · {r.formType} · {r.status}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        <label style={{ cursor: 'pointer', display: 'inline-block' }}>
+          <input type="file" accept=".json" style={{ display: 'none' }} onChange={handleFileImport} disabled={importing} />
+          <span className="btn btn-primary" style={{ opacity: importing ? 0.6 : 1 }}>
+            {importing ? '⏳ Importing…' : `📂 Upload ${importType} JSON`}
+          </span>
+        </label>
+
+        {result && (
+          <div style={{
+            marginTop: '16px', background: 'var(--bg-elevated)', borderRadius: '6px',
+            padding: '12px', fontSize: '12px', fontFamily: 'var(--font-mono)',
+            color: result.startsWith('Error') ? 'var(--status-error)' : 'var(--text-primary)',
+            whiteSpace: 'pre-wrap', maxHeight: '300px', overflowY: 'auto',
+          }}>
+            {result.startsWith('Error') ? result : `Import successful:\n${result}`}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -540,14 +623,9 @@ function NewReturnModal({ client, onClose, onCreated }: {
   onClose: () => void;
   onCreated: (returnId: number) => void;
 }) {
-  const now = new Date();
-  const year = now.getMonth() >= 3 ? now.getFullYear() + 1 : now.getFullYear();
-  const defaultAY = `${year - 1}-${String(year).slice(-2)}`;
-
-  const ayOptions = [0, 1, 2].map((offset) => {
-    const y = year - offset;
-    return `${y - 1}-${String(y).slice(-2)}`;
-  });
+  // AY 2026-27 is always shown as primary option (FY 2025-26)
+  const defaultAY = '2026-27';
+  const ayOptions = ['2026-27', '2025-26', '2024-25'];
 
   const [ayLabel, setAyLabel] = useState(defaultAY);
   const [formType, setFormType] = useState('ITR-1');
