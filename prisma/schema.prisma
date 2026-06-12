@@ -1,0 +1,641 @@
+// prisma/schema.prisma
+// TaxFlow Pro — AY 2025-26
+// PostgreSQL (Supabase)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum UserRole {
+  ADMIN
+  MANAGER
+  STAFF
+}
+
+enum AssesseeType {
+  INDIVIDUAL
+  HUF
+  DOMESTIC_COMPANY
+  FOREIGN_COMPANY
+  FIRM
+  LLP
+  AOP
+  BOI
+  AJP
+  OTHER
+}
+
+enum ReturnStatus {
+  DRAFT
+  IN_PROGRESS
+  REVIEW
+  FILED
+  ACKNOWLEDGED
+  CANCELLED
+}
+
+enum FilingType {
+  ORIGINAL
+  REVISED
+  BELATED
+  UPDATED
+}
+
+enum TaxRegime {
+  OLD
+  NEW
+}
+
+enum AccountType {
+  SAVINGS
+  CURRENT
+  NRO
+  NRE
+  FCNR
+  OD
+  CC
+}
+
+enum DocumentCategory {
+  FORM_16
+  FORM_16A
+  FORM_26AS
+  AIS
+  TIS
+  BANK_STATEMENT
+  INVESTMENT_PROOF
+  RENT_RECEIPT
+  LOAN_STATEMENT
+  OTHER
+}
+
+enum PropertyType {
+  SELF_OCCUPIED
+  LET_OUT
+  DEEMED_LET_OUT
+}
+
+enum NatureOfEmployment {
+  CGOV
+  SGOV
+  PSU
+  PE
+  PESG
+  PEPS
+  PEO
+  OTH
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FIRM & USERS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Firm {
+  id                 Int      @id @default(autoincrement())
+  name               String
+  registrationNumber String?
+  address            String?
+  phone              String?
+  email              String?
+  gstin              String?
+  swCreatedBy        String?
+  swVersionNo        String?  @default("1.0")
+  intermediaryCity   String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  users     FirmMember[]
+  clients   Client[]
+  auditLogs AuditLog[]
+}
+
+// Links Supabase auth users to firms with a role
+model FirmMember {
+  id          Int      @id @default(autoincrement())
+  firmId      Int
+  supabaseUid String   @unique // auth.users.id from Supabase
+  displayName String
+  role        UserRole @default(STAFF)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  firm      Firm       @relation(fields: [firmId], references: [id])
+  auditLogs AuditLog[]
+}
+
+model AuditLog {
+  id          Int      @id @default(autoincrement())
+  firmId      Int
+  memberId    Int?
+  action      String
+  entity      String
+  entityId    Int?
+  description String?
+  ipAddress   String?
+  createdAt   DateTime @default(now())
+
+  firm   Firm        @relation(fields: [firmId], references: [id])
+  member FirmMember? @relation(fields: [memberId], references: [id])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CLIENT MASTER
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Client {
+  id                      Int          @id @default(autoincrement())
+  firmId                  Int
+  pan                     String
+  assesseeType            AssesseeType
+  fullName                String
+  dateOfBirth             DateTime?
+  mobileNumber            String?
+  email                   String?
+  address                 String?
+  city                    String?
+  stateCode               String?
+  pinCode                 Int?
+  aadhaarNumber           String?
+  residentialStatus       String?      @default("RES")
+  portalUsername          String?
+  taxRegimePreference     TaxRegime    @default(NEW)
+  isActive                Boolean      @default(true)
+  createdAt               DateTime     @default(now())
+  updatedAt               DateTime     @updatedAt
+
+  firm            Firm             @relation(fields: [firmId], references: [id])
+  bankAccounts    BankAccount[]
+  assessmentYears AssessmentYear[]
+  returns         Return[]
+  documents       Document[]
+  portalLogs      PortalActionLog[]
+
+  @@unique([firmId, pan])
+}
+
+model BankAccount {
+  id            Int         @id @default(autoincrement())
+  clientId      Int
+  bankName      String
+  accountNumber String
+  ifscCode      String
+  accountType   AccountType @default(SAVINGS)
+  isPrimary     Boolean     @default(false)
+  isActive      Boolean     @default(true)
+  createdAt     DateTime    @default(now())
+
+  client Client @relation(fields: [clientId], references: [id])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ASSESSMENT YEAR & RETURN
+// ─────────────────────────────────────────────────────────────────────────────
+
+model AssessmentYear {
+  id         Int        @id @default(autoincrement())
+  clientId   Int
+  ayLabel    String
+  regime     TaxRegime  @default(NEW)
+  filingType FilingType @default(ORIGINAL)
+  createdAt  DateTime   @default(now())
+
+  client  Client   @relation(fields: [clientId], references: [id])
+  returns Return[]
+
+  @@unique([clientId, ayLabel])
+}
+
+model Return {
+  id                    Int          @id @default(autoincrement())
+  clientId              Int
+  assessmentYearId      Int
+  formType              String       @default("ITR-1")
+  status                ReturnStatus @default(DRAFT)
+  filingType            FilingType   @default(ORIGINAL)
+  filingSection         String?      @default("11")
+  regime                TaxRegime    @default(NEW)
+  filedAt               DateTime?
+  acknowledgementNumber String?
+  itrJson               String?
+  notes                 String?
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+
+  client         Client         @relation(fields: [clientId], references: [id])
+  assessmentYear AssessmentYear @relation(fields: [assessmentYearId], references: [id])
+
+  salarySchedule      SalarySchedule?
+  hpSchedule          HPSchedule[]
+  osSchedule          OSSchedule?
+  deductionSchedule   DeductionSchedule?
+  tdsEntries          TDSEntry[]
+  taxPayments         TaxPaymentEntry[]
+  ltcg112AEntries     LTCG112AEntry[]
+  presumptiveSchedule PresumptiveSchedule?
+  verification        ReturnVerification?
+
+  grossTotalIncome  Int? @default(0)
+  totalDeductions   Int? @default(0)
+  taxableIncome     Int? @default(0)
+  grossTaxLiability Int? @default(0)
+  totalTaxesPaid    Int? @default(0)
+  balTaxPayable     Int? @default(0)
+  refundDue         Int? @default(0)
+
+  documents         Document[]
+  validationResults ValidationResult[]
+  portalLogs        PortalActionLog[]
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SCHEDULE S — SALARY
+// ─────────────────────────────────────────────────────────────────────────────
+
+model SalarySchedule {
+  id       Int @id @default(autoincrement())
+  returnId Int @unique
+
+  totalGrossSalary        Int @default(0)
+  allwncExtentExemptUs10  Int @default(0)
+  netSalary               Int @default(0)
+  deductionUs16ia         Int @default(0)
+  entertainmentAlw16ii    Int @default(0)
+  professionalTaxUs16iii  Int @default(0)
+  totalDeductionUs16      Int @default(0)
+  incomeFromSalary        Int @default(0)
+  increliefus89A          Int @default(0)
+
+  hraDetailsJson   String?
+  allowancesJson   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  return    Return          @relation(fields: [returnId], references: [id])
+  employers EmployerEntry[]
+}
+
+model EmployerEntry {
+  id               Int @id @default(autoincrement())
+  salaryScheduleId Int
+  seqNo            Int @default(1)
+
+  nameOfEmployer         String
+  natureOfEmployment     NatureOfEmployment @default(OTH)
+  tanOfEmployer          String?
+  addrDetail             String?
+  city                   String?
+  stateCode              String?
+  pinCode                Int?
+
+  grossSalary             Int @default(0)
+  salary                  Int @default(0)
+  valueOfPerquisites      Int @default(0)
+  profitsinLieuOfSalary   Int @default(0)
+  incomeNotified89A       Int @default(0)
+  incomeNotifiedOther89A  Int @default(0)
+  incomeNotifiedPrYr89A   Int @default(0)
+
+  natureOfSalaryJson      String?
+  natureOfPerquisitesJson String?
+  natureOfProfitJson      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  salarySchedule SalarySchedule @relation(fields: [salaryScheduleId], references: [id])
+
+  @@unique([salaryScheduleId, seqNo])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SCHEDULE HP — HOUSE PROPERTY
+// ─────────────────────────────────────────────────────────────────────────────
+
+model HPSchedule {
+  id       Int @id @default(autoincrement())
+  returnId Int
+  seqNo    Int @default(1)
+
+  addrDetail            String?
+  city                  String?
+  stateCode             String?
+  countryCode           String?  @default("91")
+  pinCode               Int?
+
+  propertyOwner         String?
+  propertyOwnerOther    String?
+  propCoOwnedFlg        String   @default("NO")
+  asseseeShareProperty  Float?
+  ifLetOut              String   @default("S")
+
+  coOwnersJson      String?
+  tenantDetailsJson String?
+
+  annualLetableValue    Int?
+  rentNotRealized       Int?
+  localTaxes            Int?
+  totalUnrealizedAndTax Int?
+  balanceALV            Int?
+  annualOfPropOwned     Int?
+  thirtyPercentBalance  Int?
+  intOnBorwCap          Int?
+  totalDeduct           Int?
+  arrearsUnrealRentRcvd Int?
+  incomeOfHP            Int?
+
+  section24BJson     String?
+  totalInterestUs24B Int?
+  selfOccInterestOnLoan Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  return Return @relation(fields: [returnId], references: [id])
+
+  @@unique([returnId, seqNo])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SCHEDULE OS — OTHER SOURCES
+// ─────────────────────────────────────────────────────────────────────────────
+
+model OSSchedule {
+  id       Int @id @default(autoincrement())
+  returnId Int @unique
+
+  otherSourceItemsJson  String?
+  deductionUs57iia      Int @default(0)
+  incomeFromOtherSources Int @default(0)
+
+  exemptIncomeItemsJson String?
+  totalExemptIncome     Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  return Return @relation(fields: [returnId], references: [id])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SCHEDULE VI-A — DEDUCTIONS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model DeductionSchedule {
+  id       Int @id @default(autoincrement())
+  returnId Int @unique
+
+  section80C                Int @default(0)
+  section80CCC              Int @default(0)
+  section80CCDEmployeeOrSE  Int @default(0)
+  section80CCD1B            Int @default(0)
+  section80CCDEmployer      Int @default(0)
+  pranNumbersJson           String?
+  pensionContrib80CCCJson   String?
+
+  section80D              Int @default(0)
+  insuranceDetails80DJson String?
+  section80DD             Int @default(0)
+  disabilityType80DD      String?
+  disabilityNature80DD    String?
+  section80DDB            Int @default(0)
+  claimant80DDB           String?
+  specialDisease80DDB     String?
+  section80U              Int @default(0)
+  disabilityType80U       String?
+  disabilityNature80U     String?
+
+  section80E   Int @default(0)
+  section80EE  Int @default(0)
+  section80EEA Int @default(0)
+  section80EEB Int @default(0)
+
+  section80G   Int @default(0)
+  section80GGA Int @default(0)
+  section80GGC Int @default(0)
+  form10BAAckNum String?
+
+  section80GG  Int @default(0)
+  section80TTA Int @default(0)
+  section80TTB Int @default(0)
+  anyOthSec80CCH Int @default(0)
+
+  totalChapVIAUser    Int @default(0)
+  totalChapVIAAllowed Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  return Return @relation(fields: [returnId], references: [id])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TDS ENTRIES
+// ─────────────────────────────────────────────────────────────────────────────
+
+model TDSEntry {
+  id        Int    @id @default(autoincrement())
+  returnId  Int
+  entryType String
+
+  tanOfDeductor    String?
+  nameOfDeductor   String?
+  deductorAddress  String?
+
+  incomeChargeable Int?
+
+  tdsSection       String?
+  amtForTaxDeduct  Int?
+  deductedYear     String?
+  grossRentReceived Int?
+
+  panOfTenant    String?
+  aadhaarOfTenant String?
+  nameOfTenant   String?
+
+  tcsSection    String?
+  amtOnWhichTCS Int?
+
+  tdsDeducted  Int @default(0)
+  tdsClaimed   Int @default(0)
+  tcsCollected Int?
+  tcsClaimed   Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  return Return @relation(fields: [returnId], references: [id])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TAX PAYMENT CHALLANS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model TaxPaymentEntry {
+  id          Int    @id @default(autoincrement())
+  returnId    Int
+  paymentType String
+
+  bsrCode         String
+  dateOfDeposit   DateTime
+  challanSerialNo String
+  taxAmount       Int @default(0)
+  surchargeAmount Int @default(0)
+  educationCess   Int @default(0)
+  interestAmount  Int @default(0)
+  feeAmount       Int @default(0)
+  totalAmount     Int @default(0)
+  stateCode       String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  return Return @relation(fields: [returnId], references: [id])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LTCG 112A
+// ─────────────────────────────────────────────────────────────────────────────
+
+model LTCG112AEntry {
+  id       Int @id @default(autoincrement())
+  returnId Int
+
+  isin             String
+  shareOrUnitName  String
+  fmvAsOn31Jan2018 Int?
+  salesValue       Int @default(0)
+  purchaseCost     Int @default(0)
+  expenditure      Int @default(0)
+  gainLoss         Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  return Return @relation(fields: [returnId], references: [id])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PRESUMPTIVE INCOME
+// ─────────────────────────────────────────────────────────────────────────────
+
+model PresumptiveSchedule {
+  id       Int @id @default(autoincrement())
+  returnId Int @unique
+
+  totalIncome44AD  Int @default(0)
+  totalIncome44ADA Int @default(0)
+  totalIncome44AE  Int @default(0)
+  totalPresumptive Int @default(0)
+
+  business44ADJson      String?
+  profession44ADAJson   String?
+  goodsCarriage44AEJson String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  return Return @relation(fields: [returnId], references: [id])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// VERIFICATION
+// ─────────────────────────────────────────────────────────────────────────────
+
+model ReturnVerification {
+  id       Int @id @default(autoincrement())
+  returnId Int @unique
+
+  assesseeVerName  String
+  fatherName       String?
+  placeVerSign     String
+  dateVerSign      DateTime
+  capacity         String   @default("S")
+
+  everifyFlag      String?  @default("Y")
+  aadhaarOTPFlag   String?  @default("N")
+  bankAccountFlag  String?  @default("N")
+  dematAccountFlag String?  @default("N")
+
+  trpName           String?
+  trpIdentification String?
+  trpAddress        String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  return Return @relation(fields: [returnId], references: [id])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DOCUMENTS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Document {
+  id           Int              @id @default(autoincrement())
+  clientId     Int
+  returnId     Int?
+  category     DocumentCategory @default(OTHER)
+  originalName String
+  storedName   String
+  mimeType     String?
+  sizeBytes    Int?
+  notes        String?
+  uploadedAt   DateTime         @default(now())
+
+  client Client  @relation(fields: [clientId], references: [id])
+  return Return? @relation(fields: [returnId], references: [id])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// VALIDATION RESULTS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model ValidationResult {
+  id        Int      @id @default(autoincrement())
+  returnId  Int
+  field     String
+  message   String
+  severity  String   @default("ERROR")
+  createdAt DateTime @default(now())
+
+  return Return @relation(fields: [returnId], references: [id])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PORTAL ACTION LOG
+// ─────────────────────────────────────────────────────────────────────────────
+
+model PortalActionLog {
+  id       Int    @id @default(autoincrement())
+  clientId Int
+  returnId Int?
+  action   String
+  status   String   @default("SUCCESS")
+  notes    String?
+  createdAt DateTime @default(now())
+
+  client Client  @relation(fields: [clientId], references: [id])
+  return Return? @relation(fields: [returnId], references: [id])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// APP SETTINGS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model AppSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
