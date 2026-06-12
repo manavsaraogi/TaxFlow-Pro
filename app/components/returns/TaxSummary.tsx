@@ -1,20 +1,20 @@
-/**
+﻿/**
  * TaxSummary.tsx
  * Directory: renderer/app/components/returns/TaxSummary.tsx
  *
  * Full tax computation display:
- *  GTI → Deductions → Taxable Income → Tax → Surcharge → Cess
- *  → Rebate u/s 87A → Net Tax → Interest (234A/B/C) → Total Due
- *  → TDS/TCS/Advance Tax/SAT → Refund or Balance Payable
+ *  GTI â†’ Deductions â†’ Taxable Income â†’ Tax â†’ Surcharge â†’ Cess
+ *  â†’ Rebate u/s 87A â†’ Net Tax â†’ Interest (234A/B/C) â†’ Total Due
+ *  â†’ TDS/TCS/Advance Tax/SAT â†’ Refund or Balance Payable
  *
  * Rules:
  *  - Old regime: slabs + Chapter VI-A deductions
  *  - New regime: concessional slabs, no Chapter VI-A
- *  - Surcharge on income > ₹50L (graduated)
- *  - Rebate u/s 87A: ₹25,000 if taxable income ≤ ₹7,00,000 (new) / ₹5,00,000 (old)
+ *  - Surcharge on income > â‚¹50L (graduated)
+ *  - Rebate u/s 87A: â‚¹25,000 if taxable income â‰¤ â‚¹7,00,000 (new) / â‚¹5,00,000 (old)
  *  - Health & Education Cess: 4%
  *  - Lottery / special rate income taxed flat @ 30% u/s 115BB (excluded from slab)
- *  - Read-only computed view — no editable fields (all inputs come from other schedules)
+ *  - Read-only computed view â€” no editable fields (all inputs come from other schedules)
  *  - Refresh button to re-pull latest data via IPC
  */
 
@@ -23,7 +23,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import type { ReturnData, TaxRegime } from '@/shared/types/itr';
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 interface TaxInputs {
   // Income
@@ -33,7 +33,7 @@ interface TaxInputs {
   lotteryIncome: number;             // flat 30%
 
   // Deductions
-  standardDeduction: number;         // ₹75,000 under new; ₹50,000 old (from salary schedule)
+  standardDeduction: number;         // â‚¹75,000 under new; â‚¹50,000 old (from salary schedule)
   chapterVIADeductions: number;      // only old regime
   homeLoanInterest: number;          // from HP schedule
 
@@ -85,7 +85,7 @@ interface Props {
   returnData: ReturnData;
 }
 
-// ─── Tax Slabs ────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Tax Slabs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function computeOldRegimeTax(income: number): number {
   if (income <= 250_000) return 0;
@@ -122,9 +122,9 @@ function surchargeRate(income: number): number {
   return 0;
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-const fmt = (n: number) => '₹' + Math.abs(n).toLocaleString('en-IN');
+const fmt = (n: number) => 'â‚¹' + Math.abs(n).toLocaleString('en-IN');
 
 const Row = ({
   label,
@@ -171,7 +171,7 @@ const Row = ({
   </tr>
 );
 
-// ─── Mock IPC ─────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Mock IPC â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const ipc = {
   getTaxInputs: async (returnId: string): Promise<TaxInputs | null> => {
@@ -181,7 +181,7 @@ const ipc = {
   },
 };
 
-// ─── Computation engine ───────────────────────────────────────────────────────
+// â”€â”€â”€ Computation engine â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function computeTax(inp: TaxInputs): TaxComputation {
   const hpIncome = Math.max(inp.housePropertyIncome, -200_000); // HP loss cap
@@ -190,13 +190,13 @@ function computeTax(inp: TaxInputs): TaxComputation {
     inp.grossSalary - inp.standardDeduction + hpIncome + inp.otherSourcesIncome + inp.lotteryIncome
   );
 
-  const totalDeductions = inp.regime === 'old' ? inp.chapterVIADeductions : 0;
+  const totalDeductions = inp.regime?.toLowerCase() === 'old' ? inp.chapterVIADeductions : 0;
   const taxableIncome = Math.max(0, grossTotalIncome - totalDeductions);
   const lotteryIncome = inp.lotteryIncome;
   const normalTaxableIncome = Math.max(0, taxableIncome - lotteryIncome);
 
   const taxOnNormalIncome =
-    inp.regime === 'old'
+    inp.regime?.toLowerCase() === 'old'
       ? computeOldRegimeTax(normalTaxableIncome)
       : computeNewRegimeTax(normalTaxableIncome);
   const taxOnLottery = Math.floor(lotteryIncome * 0.30);
@@ -207,8 +207,8 @@ function computeTax(inp: TaxInputs): TaxComputation {
   const taxAfterSurcharge = grossTax + surcharge;
 
   // Rebate 87A
-  const rebateLimit = inp.regime === 'new' ? 700_000 : 500_000;
-  const rebateCap = inp.regime === 'new' ? 25_000 : 12_500;
+  const rebateLimit = inp.regime?.toLowerCase() === 'new' ? 700_000 : 500_000;
+  const rebateCap = inp.regime?.toLowerCase() === 'new' ? 25_000 : 12_500;
   const rebate87A = taxableIncome <= rebateLimit ? Math.min(taxAfterSurcharge, rebateCap) : 0;
   const taxAfterRebate = Math.max(0, taxAfterSurcharge - rebate87A);
 
@@ -234,7 +234,7 @@ function computeTax(inp: TaxInputs): TaxComputation {
   };
 }
 
-// ─── Default inputs (mock / fallback) ────────────────────────────────────────
+// â”€â”€â”€ Default inputs (mock / fallback) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function buildDefaultInputs(returnData: ReturnData): TaxInputs {
   return {
@@ -248,14 +248,14 @@ function buildDefaultInputs(returnData: ReturnData): TaxInputs {
     tdsTCS: (returnData as any)?.scheduleTDS?.grandTotal ?? 0,
     advanceTax: (returnData as any)?.taxPayments?.advanceTax ?? 0,
     selfAssessmentTax: (returnData as any)?.taxPayments?.selfAssessmentTax ?? 0,
-    regime: (returnData as any)?.regime ?? 'new',
+    regime: ((returnData as any)?.regime ?? 'NEW') as TaxRegime,
     assessmentYear: (returnData as any)?.assessmentYear ?? 'AY 2026-27',
     filingDate: new Date().toISOString().slice(0, 10),
     dueDate: '2026-07-31',
   };
 }
 
-// ─── Component ────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export default function TaxSummary({ returnId, returnData }: Props) {
   const [inputs, setInputs] = useState<TaxInputs>(() => buildDefaultInputs(returnData));
@@ -283,16 +283,16 @@ export default function TaxSummary({ returnId, returnData }: Props) {
   return (
     <div className="animate-in" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
-      {/* ── Header bar ──────────────────────────────────────────────────────── */}
+      {/* â”€â”€ Header bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h2 style={{ fontWeight: 700, fontSize: 18, margin: 0, color: 'var(--brand-text)' }}>
-            Tax Computation — {inputs.assessmentYear}
+            Tax Computation â€” {inputs.assessmentYear}
           </h2>
           <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '4px 0 0' }}>
             Regime:{' '}
             <span style={{ color: 'var(--brand-primary)', fontWeight: 600 }}>
-              {inputs.regime === 'new' ? 'New (Concessional)' : 'Old'}
+              {inputs.regime?.toLowerCase() === 'new' ? 'New (Concessional)' : 'Old'}
             </span>
             {lastRefresh && (
               <span style={{ marginLeft: 12 }}>
@@ -302,11 +302,11 @@ export default function TaxSummary({ returnId, returnData }: Props) {
           </p>
         </div>
         <button className="btn btn-secondary btn-sm" onClick={refresh} disabled={loading}>
-          {loading ? 'Refreshing…' : '↻ Refresh'}
+          {loading ? 'Refreshingâ€¦' : 'â†» Refresh'}
         </button>
       </div>
 
-      {/* ── Stat cards row ──────────────────────────────────────────────────── */}
+      {/* â”€â”€ Stat cards row â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
         {[
           { label: 'Gross Total Income', value: c.grossTotalIncome, color: 'var(--text-primary)' },
@@ -319,13 +319,13 @@ export default function TaxSummary({ returnId, returnData }: Props) {
               {s.label}
             </div>
             <div className="amount" style={{ fontSize: 20, fontWeight: 800, color: s.color }}>
-              ₹{s.value.toLocaleString('en-IN')}
+              â‚¹{s.value.toLocaleString('en-IN')}
             </div>
           </div>
         ))}
       </div>
 
-      {/* ── Full Computation ─────────────────────────────────────────────────── */}
+      {/* â”€â”€ Full Computation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <div className="card">
         <h3 style={{ fontWeight: 700, fontSize: 15, marginBottom: 16, color: 'var(--brand-text)' }}>
           Detailed Computation
@@ -334,42 +334,42 @@ export default function TaxSummary({ returnId, returnData }: Props) {
           <tbody>
             {/* Income */}
             <Row label="Gross Salary (after standard deduction)" value={Math.max(0, inputs.grossSalary - inputs.standardDeduction)}
-              sub={`Standard deduction: ₹${inputs.standardDeduction.toLocaleString('en-IN')}`} />
+              sub={`Standard deduction: â‚¹${inputs.standardDeduction.toLocaleString('en-IN')}`} />
             <Row label="Income from House Property" value={inputs.housePropertyIncome}
-              sub={inputs.housePropertyIncome < 0 ? 'Loss (capped at ₹2,00,000 set-off)' : undefined} />
+              sub={inputs.housePropertyIncome < 0 ? 'Loss (capped at â‚¹2,00,000 set-off)' : undefined} />
             <Row label="Income from Other Sources" value={inputs.otherSourcesIncome} />
             {c.lotteryIncome > 0 && (
               <Row label="Lottery / Winnings (u/s 115BB)" value={c.lotteryIncome}
-                sub="Taxed flat @ 30% — not included in slab" />
+                sub="Taxed flat @ 30% â€” not included in slab" />
             )}
             <Row label="Gross Total Income" value={c.grossTotalIncome} bold separator />
 
             {/* Deductions */}
-            {inputs.regime === 'old' && c.totalDeductions > 0 && (
+            {inputs.regime?.toLowerCase() === 'old' && c.totalDeductions > 0 && (
               <>
                 <Row label="Less: Deductions u/s Chapter VI-A" value={c.totalDeductions} deduction />
                 <Row label="Taxable Income" value={c.taxableIncome} bold separator />
               </>
             )}
-            {inputs.regime === 'new' && (
+            {inputs.regime?.toLowerCase() === 'new' && (
               <Row label="Taxable Income (no Chapter VI-A in new regime)" value={c.taxableIncome} bold separator />
             )}
 
             {/* Tax computation */}
             <Row label="Tax on Normal Income (slab)" value={c.taxOnNormalIncome}
-              sub={inputs.regime === 'new' ? 'New regime slabs' : 'Old regime slabs'} separator />
+              sub={inputs.regime?.toLowerCase() === 'new' ? 'New regime slabs' : 'Old regime slabs'} separator />
             {c.lotteryIncome > 0 && (
               <Row label="Tax on Lottery @ 30% (u/s 115BB)" value={c.taxOnLottery} />
             )}
             <Row label="Gross Tax" value={c.grossTax} bold />
             {c.surcharge > 0 && (
               <Row label={`Surcharge @ ${Math.round(surchargeRate(c.taxableIncome) * 100)}%`} value={c.surcharge}
-                sub="Applicable as income > ₹50 lakh" />
+                sub="Applicable as income > â‚¹50 lakh" />
             )}
             <Row label="Tax after Surcharge" value={c.taxAfterSurcharge} />
             {c.rebate87A > 0 && (
               <Row label="Less: Rebate u/s 87A" value={c.rebate87A} deduction
-                sub={`Income ≤ ₹${inputs.regime === 'new' ? '7,00,000' : '5,00,000'}`} />
+                sub={`Income â‰¤ â‚¹${inputs.regime?.toLowerCase() === 'new' ? '7,00,000' : '5,00,000'}`} />
             )}
             <Row label="Tax after Rebate" value={c.taxAfterRebate} />
             <Row label="Health & Education Cess @ 4%" value={c.cess} />
@@ -395,7 +395,7 @@ export default function TaxSummary({ returnId, returnData }: Props) {
             {/* Result */}
             <tr style={{ borderTop: '3px solid var(--brand-primary)' }}>
               <td style={{ paddingTop: 16, fontWeight: 800, fontSize: 16, color: isRefund ? '#4ade80' : '#f87171' }}>
-                {isRefund ? '🎉 Refund Due' : '⚠️ Balance Tax Payable'}
+                {isRefund ? 'ðŸŽ‰ Refund Due' : 'âš ï¸ Balance Tax Payable'}
               </td>
               <td
                 className="amount"
@@ -414,12 +414,13 @@ export default function TaxSummary({ returnId, returnData }: Props) {
         )}
       </div>
 
-      {/* ── Regime comparison nudge ───────────────────────────────────────────── */}
+      {/* â”€â”€ Regime comparison nudge â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {Math.abs(c.balancePayable) > 10_000 && (
         <div style={{ background: 'rgba(212,160,23,0.08)', border: '1px solid rgba(212,160,23,0.3)', borderRadius: 8, padding: '14px 18px', fontSize: 13, color: 'var(--text-muted)' }}>
-          <strong style={{ color: 'var(--brand-text)' }}>💡 Tip:</strong> Compare tax under both regimes using the Regime Comparison tool in Return Settings to ensure the client is on the optimal regime.
+          <strong style={{ color: 'var(--brand-text)' }}>ðŸ’¡ Tip:</strong> Compare tax under both regimes using the Regime Comparison tool in Return Settings to ensure the client is on the optimal regime.
         </div>
       )}
     </div>
   );
 }
+

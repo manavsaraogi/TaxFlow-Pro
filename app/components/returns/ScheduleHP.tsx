@@ -456,7 +456,7 @@ export default function ScheduleHPComponent({ returnId, returnData, onSaved, set
 
   // Hydrate
   useEffect(() => {
-    const s = returnData.scheduleHP as any;
+    const s = (returnData as any).scheduleHP;
     if (!s || !Array.isArray(s.properties) || s.properties.length === 0) return;
     setProperties(
       s.properties.map((p: any) => ({ id: crypto.randomUUID(), ...p }))
@@ -508,7 +508,7 @@ export default function ScheduleHPComponent({ returnId, returnData, onSaved, set
       if (!res.ok) { const j = await res.json(); throw new Error(j.error || 'Save failed'); }
       setLastSaved(new Date());
       setDirty(false);
-      onSaved({ ...returnData, scheduleHP: payload });
+      onSaved({ ...(returnData as any), scheduleHP: payload } as any);
     } catch (e: any) {
       setSaveErr(e?.message ?? 'Save failed');
     } finally {

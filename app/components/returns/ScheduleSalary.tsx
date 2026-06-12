@@ -379,7 +379,7 @@ export default function ScheduleSalaryComponent({ returnId, returnData, onSaved,
   // ── Hydrate from returnData on mount ──
   useEffect(() => {
     if (!returnData) return;
-    const s = returnData.scheduleSalary;
+    const s = (returnData as any).scheduleSalary;
     if (!s) return;
 
     // Map ScheduleSalary (itr.ts) → local form state
@@ -444,7 +444,7 @@ export default function ScheduleSalaryComponent({ returnId, returnData, onSaved,
       setLastSaved(new Date());
       setDirty(false);
       // Propagate updated returnData to parent for live recompute
-      onSaved({ ...returnData, scheduleSalary: payload });
+      onSaved({ ...(returnData as any), scheduleSalary: payload } as any);
     } catch (e: any) {
       setSaveErr(e?.message ?? 'Save failed');
     } finally {

@@ -9,6 +9,7 @@ const PAGE_TITLES: Record<AppPage['name'], { title: string; subtitle?: string }>
   'client-detail': { title: 'Client Detail', subtitle: 'View and manage client information' },
   'client-new':  { title: 'New Client',      subtitle: 'Add a new client to the master' },
   'client-edit': { title: 'Edit Client',     subtitle: 'Update client information' },
+  'return-detail': { title: 'Return Detail',  subtitle: 'Income tax return filing' },
   returns:       { title: 'Returns',         subtitle: 'Manage income tax returns' },
   settings:      { title: 'Settings',        subtitle: 'Application configuration' },
 };

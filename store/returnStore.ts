@@ -21,7 +21,6 @@ import {
   computeIncomeSummary,
   computeTaxLiability,
   applyDeductionCaps,
-  emptyReturnData,
 } from '@/shared/utils/itrBuilder';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -128,13 +127,10 @@ function emptyDirty(): DirtyMap {
 
 function buildReturnData(state: ReturnState): ReturnData {
   const meta = state.meta;
-  const base = emptyReturnData(
-    meta?.formType ?? 'ITR-1',
-    meta?.assessmentYear ?? '',
-    meta?.regime ?? 'NEW'
-  );
   return {
-    ...base,
+    formType: meta?.formType ?? 'ITR-1',
+    assessmentYear: meta?.assessmentYear ?? '',
+    regime: meta?.regime ?? 'NEW',
     filingSection: meta?.filingSection ?? '11',
     salary: state.salary,
     houseProperty: state.houseProperty,

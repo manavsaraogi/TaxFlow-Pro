@@ -66,7 +66,7 @@ interface ReturnShellProps {
   returnId: number;
   clientId: number;
   onBack: () => void;
-  onNavigate: (page: string) => void;
+  onNavigate: (page: import('@/app/components/layout/AppShell').AppPage) => void;
 }
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -442,15 +442,11 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate }: 
           <ScheduleSalary
             returnId={String(returnMeta.id)}
             returnData={returnData ?? {} as any}
-            formType={returnMeta.formType}
-            regime={returnMeta.regime}
-            readOnly={isFiledOrAcknowledged}
             onSaved={(rd: any) => {
               setReturnData(rd);
               const newSummary = computeIncomeSummary(rd);
-              const newTaxComp = computeTaxLiability(newSummary, rd.regime ?? returnMeta?.regime ?? 'NEW');
               setSummary(newSummary);
-              setTaxComp(newTaxComp);
+              setTaxComp(computeTaxLiability(newSummary, rd.regime ?? returnMeta?.regime ?? 'NEW'));
               onScheduleChange(newSummary);
             }}
             setDirty={setDirty}
@@ -461,14 +457,11 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate }: 
           <ScheduleHP
             returnId={String(returnMeta.id)}
             returnData={returnData ?? {} as any}
-            formType={returnMeta.formType}
-            readOnly={isFiledOrAcknowledged}
             onSaved={(rd: any) => {
               setReturnData(rd);
               const newSummary = computeIncomeSummary(rd);
-              const newTaxComp = computeTaxLiability(newSummary, rd.regime ?? returnMeta?.regime ?? 'NEW');
               setSummary(newSummary);
-              setTaxComp(newTaxComp);
+              setTaxComp(computeTaxLiability(newSummary, rd.regime ?? returnMeta?.regime ?? 'NEW'));
               onScheduleChange(newSummary);
             }}
             setDirty={setDirty}
@@ -479,14 +472,11 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate }: 
           <ScheduleOS
             returnId={String(returnMeta.id)}
             returnData={returnData ?? {} as any}
-            formType={returnMeta.formType}
-            readOnly={isFiledOrAcknowledged}
             onSaved={(rd: any) => {
               setReturnData(rd);
               const newSummary = computeIncomeSummary(rd);
-              const newTaxComp = computeTaxLiability(newSummary, rd.regime ?? returnMeta?.regime ?? 'NEW');
               setSummary(newSummary);
-              setTaxComp(newTaxComp);
+              setTaxComp(computeTaxLiability(newSummary, rd.regime ?? returnMeta?.regime ?? 'NEW'));
               onScheduleChange(newSummary);
             }}
             setDirty={setDirty}
@@ -497,17 +487,7 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate }: 
           <ScheduleDeductions
             returnId={String(returnMeta.id)}
             returnData={returnData ?? {} as any}
-            regime={returnMeta.regime}
-            grossTotalIncome={summary?.GrossTotalIncome ?? 0}
-            readOnly={isFiledOrAcknowledged}
-            onSaved={(rd: any) => {
-              setReturnData(rd);
-              const newSummary = computeIncomeSummary(rd);
-              const newTaxComp = computeTaxLiability(newSummary, rd.regime ?? returnMeta?.regime ?? 'NEW');
-              setSummary(newSummary);
-              setTaxComp(newTaxComp);
-              onScheduleChange(newSummary);
-            }}
+            onSaved={() => {}}
             setDirty={setDirty}
           />
         )}
@@ -516,15 +496,7 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate }: 
           <ScheduleTDS
             returnId={String(returnMeta.id)}
             returnData={returnData ?? {} as any}
-            readOnly={isFiledOrAcknowledged}
-            onSaved={(rd: any) => {
-              setReturnData(rd);
-              const newSummary = computeIncomeSummary(rd);
-              const newTaxComp = computeTaxLiability(newSummary, rd.regime ?? returnMeta?.regime ?? 'NEW');
-              setSummary(newSummary);
-              setTaxComp(newTaxComp);
-              onScheduleChange(newSummary);
-            }}
+            onSaved={() => {}}
             setDirty={setDirty}
           />
         )}
@@ -533,27 +505,15 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate }: 
           <ScheduleTaxPayments
             returnId={String(returnMeta.id)}
             returnData={returnData ?? {} as any}
-            readOnly={isFiledOrAcknowledged}
-            onSaved={(rd: any) => {
-              setReturnData(rd);
-              const newSummary = computeIncomeSummary(rd);
-              const newTaxComp = computeTaxLiability(newSummary, rd.regime ?? returnMeta?.regime ?? 'NEW');
-              setSummary(newSummary);
-              setTaxComp(newTaxComp);
-              onScheduleChange(newSummary);
-            }}
+            onSaved={() => {}}
             setDirty={setDirty}
           />
         )}
 
         {activeTab === 'tax_summary' && (
           <TaxSummary
-            returnId={returnMeta.id}
-            summary={summary}
-            taxComp={taxComp}
-            regime={returnMeta.regime}
-            formType={returnMeta.formType}
-            assessmentYear={returnMeta.assessmentYear}
+            returnId={String(returnMeta.id)}
+            returnData={returnData ?? {} as any}
           />
         )}
 

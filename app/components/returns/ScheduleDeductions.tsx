@@ -256,8 +256,8 @@ export default function ScheduleDeductions({ returnId, returnData, onSaved, setD
   const [loaded, setLoaded] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const regime: TaxRegime = (returnData as any)?.regime ?? 'old';
-  const isNewRegime = regime === 'new';
+  const regime: TaxRegime = (returnData as any)?.regime ?? 'OLD';
+  const isNewRegime = regime?.toLowerCase() === 'new';
 
   // ── Load ────────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -351,7 +351,7 @@ export default function ScheduleDeductions({ returnId, returnData, onSaved, setD
   // 80G computation
   const allowed80G = state.donations80G.reduce((sum, d) => {
     const eligible = d.withLimit
-      ? cap(d.amount, (returnData as any)?.totalIncome * 0.1 ?? d.amount) // 10% of GTI limit
+      ? cap(d.amount, ((returnData as any)?.totalIncome ?? 0) * 0.1 || d.amount) // 10% of GTI limit
       : d.amount;
     return sum + Math.floor((eligible * d.percentage) / 100);
   }, 0);

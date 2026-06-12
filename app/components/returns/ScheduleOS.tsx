@@ -307,7 +307,7 @@ export default function ScheduleOSComponent({ returnId, returnData, onSaved, set
 
   // ── Hydrate ──
   useEffect(() => {
-    const s = returnData.scheduleOS as any;
+    const s = (returnData as any).scheduleOS;
     if (!s) return;
     setState({
       savingsInterest: s.savingsInterest ?? 0,
@@ -361,7 +361,7 @@ export default function ScheduleOSComponent({ returnId, returnData, onSaved, set
       if (!res.ok) { const j = await res.json(); throw new Error(j.error || 'Save failed'); }
       setLastSaved(new Date());
       setDirty(false);
-      onSaved({ ...returnData, scheduleOS: payload });
+      onSaved({ ...(returnData as any), scheduleOS: payload } as any);
     } catch (e: any) {
       setSaveErr(e?.message ?? 'Save failed');
     } finally {
