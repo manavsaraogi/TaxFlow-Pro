@@ -281,17 +281,19 @@ async function fetchAIS(page, context, { assessmentYear, pan, dob }, captured, l
       const text = await res.text().catch(() => null);
       if (!text || text.length < 200) return;
       let json; try { json = JSON.parse(text); } catch { return; }
-      log('[ais-net] ' + url.replace('https://ais.insight.gov.in', '') + ' → ' + text.length + ' bytes');
-      // Capture actual AIS data
+      log('[ais-net] ' + url.replace('https://ais.insight.gov.in','').slice(0,80) + ' (' + text.length + 'b) keys=' + Object.keys(json).join(',').slice(0,60));
+
       if (!captured.ais && text.length > 5000 &&
-        /\/ais\/data\/|\/tds\/|annualInfo|SFTInfo|partA|partB/i.test(url) &&
-        !/auth|token|ticker|general-info\/user/i.test(url)) {
+        !/auth|token|ticker|general-info\/user|captcha|session/i.test(url)) {
         captured.ais = json;
-        log('✓ AIS data captured from API (' + text.length + ' bytes): ' + url);
-        // Log top-level structure so we can understand the format
+        log('✓ AIS data captured (' + text.length + ' bytes): ' + url);
+        // Deep structure log
         const topKeys = Object.keys(json);
-        log('AIS JSON top-level keys: ' + topKeys.join(', '));
-        if (json.data) log('AIS .data keys: ' + Object.keys(json.data).join(', '));
+        log('top-level keys: ' + topKeys.join(', '));
+        if (json.data) log('.data keys: ' + Object.keys(json.data).join(', '));
+        if (json.data?.aisTaxpayerData) log('.data.aisTaxpayerData keys: ' + Object.keys(json.data.aisTaxpayerData).join(', '));
+        if (json.aisInformation) log('.aisInformation length: ' + json.aisInformation.length);
+        if (Array.isArray(json)) log('root array length: ' + json.length);
       }
     } catch {}
   });

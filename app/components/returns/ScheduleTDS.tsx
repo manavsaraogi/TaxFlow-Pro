@@ -487,7 +487,7 @@ export default function ScheduleTDS({ returnId, clientId, returnData, onSaved, s
     let password = '';
     let dob = '';
     try {
-      const cr = await fetch(`/api/clients/${(returnData as any)?.clientId ?? (returnData as any)?.client?.id ?? ''}/portal-credentials`);
+      const cr = await fetch(`/api/clients/${clientId}/portal-credentials`);
       if (cr.ok) {
         const cj = await cr.json();
         pan = cj.data?.pan ?? pan;
@@ -619,11 +619,10 @@ export default function ScheduleTDS({ returnId, clientId, returnData, onSaved, s
         // Detect encrypted AIS Utility format (64-char hex prefix)
         if (/^[0-9a-f]{64}/i.test(text.trimStart())) {
           // Fetch client PAN + DOB to derive decryption key
-          const cid = (returnData as any)?.clientId ?? (returnData as any)?.client?.id ?? '';
           let pan = (returnData as any)?.client?.pan ?? '';
           let dob = '';
           try {
-            const cr = await fetch(`/api/clients/${cid}/portal-credentials`);
+            const cr = await fetch(`/api/clients/${clientId}/portal-credentials`);
             if (cr.ok) { const cj = await cr.json(); pan = cj.data?.pan ?? pan; dob = cj.data?.dob ?? ''; }
           } catch { /* proceed with available values */ }
           json = await decryptAISFile(text.trimStart(), pan, dob);
