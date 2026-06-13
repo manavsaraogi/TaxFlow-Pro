@@ -660,11 +660,6 @@ export default function ScheduleTDS({ returnId, clientId, returnData, onSaved, s
   const [agent26ASError, setAgent26ASError] = useState<string | null>(null);
   const agent26ASPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Local agent state — Prefill JSON
-  const [agentPrefillFetching, setAgentPrefillFetching] = useState(false);
-  const [agentPrefillLog, setAgentPrefillLog] = useState<string[]>([]);
-  const [agentPrefillError, setAgentPrefillError] = useState<string | null>(null);
-  const agentPrefillPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
 
   // ── Load ────────────────────────────────────────────────────────────────────
@@ -905,143 +900,6 @@ export default function ScheduleTDS({ returnId, clientId, returnData, onSaved, s
     } catch (e: any) {
       setAgent26ASFetching(false);
       setAgent26ASError(e.message ?? 'Failed to contact local agent');
-    }
-  }
-
-  // ── Fetch Prefill JSON from portal ─────────────────────────────────────────
-  async function fetchPrefillFromAgent() {
-    setAgentPrefillError(null);
-    setAgentPrefillLog([]);
-
-    let pan = (returnData as any)?.client?.pan ?? '';
-    let password = '';
-    try {
-      const cr = await fetch(`/api/clients/${clientId}/portal-credentials`);
-      if (cr.ok) {
-        const cj = await cr.json();
-        pan = cj.data?.pan ?? pan;
-        password = cj.data?.portalPassword ?? '';
-      }
-    } catch { /* ignore */ }
-
-    if (!password) {
-      setAgentPrefillError('No portal password stored for this client. Edit the client and add the portal password first.');
-      return;
-    }
-
-    setAgentPrefillFetching(true);
-    setAgentPrefillLog(['Starting prefill fetch...']);
-
-    const agentUrl = await findAgentUrl();
-    if (!agentUrl) { setAgentPrefillFetching(false); setAgentPrefillError('LOCAL_AGENT_NOT_RUNNING'); return; }
-
-    const ayLabel: string = (returnData as any)?.assessmentYear?.ayLabel ?? '2025-26';
-    const formType: string = (returnData as any)?.formType ?? 'ITR-1';
-
-    try {
-      const startRes = await fetch(`${agentUrl}/fetch-prefill`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pan, password, assessmentYear: ayLabel, formType, force: true }),
-      });
-      if (!startRes.ok) {
-        const j = await startRes.json().catch(() => ({}));
-        throw new Error(j.error ?? 'Agent failed to start prefill fetch');
-      }
-
-      agentPrefillPollRef.current = setInterval(async () => {
-        try {
-          const statusRes = await fetch(`${agentUrl}/status-prefill`);
-          const s = await statusRes.json();
-          if (s.log?.length) setAgentPrefillLog(s.log);
-
-          if (s.status === 'done') {
-            clearInterval(agentPrefillPollRef.current!);
-            setAgentPrefillFetching(false);
-            const prefill = s.result?.prefill;
-            if (!prefill) {
-              setAgentPrefillError('Prefill JSON not captured. The portal may require additional interaction.');
-              return;
-            }
-            // Import prefill JSON into the return
-            await applyPrefillJson(prefill);
-          } else if (s.status === 'error') {
-            clearInterval(agentPrefillPollRef.current!);
-            setAgentPrefillFetching(false);
-            setAgentPrefillError(s.error ?? 'Prefill fetch failed');
-          }
-        } catch { /* ignore poll errors */ }
-      }, 2000);
-
-    } catch (e: any) {
-      setAgentPrefillFetching(false);
-      setAgentPrefillError(e.message ?? 'Failed to contact local agent');
-    }
-  }
-
-  // Apply the prefill JSON returned by the IT portal to the return schedules
-  async function applyPrefillJson(prefill: any) {
-    setAgentPrefillLog(prev => [...prev, 'Applying prefill data to return...']);
-    let saved = 0;
-
-    try {
-      // The IT portal prefill JSON structure varies by form type, but generally has:
-      // ITR1 / ITR4: root.ITR.ITR1 or root.ITR1
-      const itr = prefill?.ITR?.ITR1 ?? prefill?.ITR?.ITR2 ?? prefill?.ITR?.ITR4 ?? prefill?.ITR1 ?? prefill?.ITR2 ?? prefill?.ITR4 ?? prefill;
-
-      // ── TDS Entries ─────────────────────────────────────────────────────────
-      // Look in TDSonSalaries, TDSonOthThanSal, TCSonGross
-      const tdsSalary: any[] = itr?.TDSonSalaries?.TDSonSalary ?? itr?.Schedule_TDS1?.TDSonSalaries ?? [];
-      const tdsOther: any[] = itr?.TDSonOthThanSalariesDtls?.TDSonOthThanSal ?? itr?.Schedule_TDS2?.TDSonOthThanSal ?? [];
-      const tcsList: any[] = itr?.TCSonGrossAmtDtls?.TCSonGrossAmt ?? itr?.Schedule_TCS?.TCSonGrossAmt ?? [];
-
-      const entries: any[] = [
-        ...tdsSalary.map((e: any) => ({
-          tan: e.TAN ?? e.TANofDeductor ?? '',
-          deductorName: e.NameofDeductor ?? e.EmployerName ?? '',
-          section: '192',
-          incomeAmount: Number(e.GrossSal ?? e.IncomeFromSal ?? 0),
-          tdsDeducted: Number(e.TotalTDSSal ?? e.TotalTDS ?? 0),
-          entryType: 'SALARY',
-        })),
-        ...tdsOther.map((e: any) => ({
-          tan: e.TAN ?? e.TANofDeductor ?? '',
-          deductorName: e.NameofDeductor ?? '',
-          section: e.SecCode ?? e.SectionCode ?? '',
-          incomeAmount: Number(e.AmtForTDS ?? e.GrossAmt ?? 0),
-          tdsDeducted: Number(e.TotalTDS ?? 0),
-          entryType: 'OTHER',
-        })),
-        ...tcsList.map((e: any) => ({
-          tan: e.TAN ?? '',
-          deductorName: e.NameOfCollector ?? '',
-          section: e.CollectorCode ?? '',
-          incomeAmount: Number(e.AmtOnWhichTCS ?? 0),
-          tdsDeducted: Number(e.TCSAmt ?? 0),
-          entryType: 'TCS',
-        })),
-      ].filter(e => e.tdsDeducted > 0 || e.incomeAmount > 0);
-
-      if (entries.length > 0) {
-        await fetch(`/api/returns/${returnId}/schedule/tds`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ entries }),
-        });
-        saved += entries.length;
-        setAgentPrefillLog(prev => [...prev, `✓ ${entries.length} TDS/TCS entries imported`]);
-      }
-
-      // ── Personal Info — Bank details, address ─────────────────────────────
-      // (future: could populate client profile)
-
-      setAgentPrefillLog(prev => [
-        ...prev,
-        `✓ Prefill applied — ${saved} items imported.`,
-        'Refresh the page to see updated data.',
-      ]);
-    } catch (e: any) {
-      setAgentPrefillLog(prev => [...prev, '⚠ Error applying prefill: ' + e.message]);
     }
   }
 
@@ -1486,7 +1344,7 @@ export default function ScheduleTDS({ returnId, clientId, returnData, onSaved, s
             {/* 26AS fetch button */}
             <button
               className="btn btn-secondary btn-sm"
-              disabled={agentFetching || agent26ASFetching || agentPrefillFetching}
+              disabled={agentFetching || agent26ASFetching}
               onClick={async () => {
                 setAgent26ASError(null);
                 const avail = await checkAgent();
@@ -1498,23 +1356,6 @@ export default function ScheduleTDS({ returnId, clientId, returnData, onSaved, s
               }}
             >
               {agent26ASFetching ? '⏳ Fetching 26AS…' : '📄 Fetch 26AS'}
-            </button>
-            {/* Prefill JSON fetch button — PAN + password only */}
-            <button
-              className="btn btn-secondary btn-sm"
-              disabled={agentFetching || agent26ASFetching || agentPrefillFetching}
-              title="Login with PAN & password and auto-import all prefilled data (TDS, income, etc.) from the IT portal"
-              onClick={async () => {
-                setAgentPrefillError(null);
-                const avail = await checkAgent();
-                if (!avail) {
-                  setAgentPrefillError('LOCAL_AGENT_NOT_RUNNING');
-                  return;
-                }
-                await fetchPrefillFromAgent();
-              }}
-            >
-              {agentPrefillFetching ? '⏳ Importing Prefill…' : '⬇ Import Prefill JSON'}
             </button>
           </div>
         </div>
@@ -1531,19 +1372,6 @@ export default function ScheduleTDS({ returnId, clientId, returnData, onSaved, s
           <div style={{ marginTop: 10, padding: '8px 12px', background: 'rgba(30,40,60,0.4)', borderRadius: 6, fontSize: 12, color: 'var(--text-muted)', fontFamily: 'monospace' }}>
             <div style={{ fontWeight: 700, marginBottom: 4, color: 'var(--text-primary)' }}>26AS Fetch Log</div>
             {agent26ASLog.map((l, i) => <div key={i}>▶ {l}</div>)}
-          </div>
-        )}
-        {/* Prefill log */}
-        {(agentPrefillFetching || agentPrefillLog.length > 0) && (
-          <div style={{ marginTop: 10, padding: '8px 12px', background: 'rgba(30,40,60,0.4)', borderRadius: 6, fontSize: 12, color: 'var(--text-muted)', fontFamily: 'monospace' }}>
-            <div style={{ fontWeight: 700, marginBottom: 4, color: 'var(--text-primary)' }}>Prefill Import Log</div>
-            {agentPrefillLog.map((l, i) => <div key={i}>▶ {l}</div>)}
-            {agentPrefillFetching && <div style={{ color: 'var(--brand-primary)', marginTop: 4 }}>● Follow any prompts in the browser window…</div>}
-          </div>
-        )}
-        {agentPrefillError && agentPrefillError !== 'LOCAL_AGENT_NOT_RUNNING' && (
-          <div style={{ marginTop: 8, padding: '8px 12px', background: 'rgba(220,38,38,0.1)', border: '1px solid rgba(220,38,38,0.3)', borderRadius: 6, fontSize: 12, color: '#f87171' }}>
-            {agentPrefillError}
           </div>
         )}
 
