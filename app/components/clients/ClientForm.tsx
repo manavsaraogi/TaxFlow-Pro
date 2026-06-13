@@ -264,13 +264,18 @@ export default function ClientForm({ clientId, onSuccess, onCancel }: ClientForm
         portalPassword: form.portalPassword || undefined,
       };
 
+      const safeJson = async (r: Response) => {
+        const text = await r.text();
+        try { return JSON.parse(text); } catch { return { error: `Server error (${r.status}): ${text.slice(0, 200)}` }; }
+      };
+
       if (isEdit) {
         const res = await fetch(`/api/clients/${clientId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         });
-        const json = await res.json().catch(() => ({ error: `Server error (${res.status})` }));
+        const json = await safeJson(res);
         if (!res.ok) throw new Error(json.error || 'Operation failed');
         result = { success: true, data: { id: clientId } };
       } else {
@@ -279,7 +284,7 @@ export default function ClientForm({ clientId, onSuccess, onCancel }: ClientForm
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         });
-        const json = await res.json().catch(() => ({ error: `Server error (${res.status})` }));
+        const json = await safeJson(res);
         if (!res.ok) throw new Error(json.error || 'Operation failed');
         result = { success: true, data: json.data };
       }
