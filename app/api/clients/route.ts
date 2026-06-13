@@ -44,28 +44,42 @@ export async function POST(request: NextRequest) {
   const auth = await getAuthContext();
   if (!auth) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const body = await request.json();
+  let body: any;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+  }
 
-  const client = await prisma.client.create({
-    data: {
-      firmId: auth.firmId,
-      pan: (body.pan as string).toUpperCase(),
-      assesseeType: body.assesseeType,
-      fullName: body.fullName ?? body.name,
-      dateOfBirth: (body.dateOfBirth ?? body.dateOfBirthOrIncorporation) ? new Date(body.dateOfBirth ?? body.dateOfBirthOrIncorporation) : null,
-      mobileNumber: body.mobileNumber ?? body.mobile ?? null,
-      email: body.email ?? null,
-      address: body.address ?? body.addressLine1 ?? null,
-      city: body.city ?? null,
-      stateCode: body.stateCode ?? body.state ?? null,
-      pinCode: (body.pinCode ?? body.pincode) ? Number(body.pinCode ?? body.pincode) : null,
-      aadhaarNumber: body.aadhaarNumber ?? null,
-      residentialStatus: body.residentialStatus ?? 'RES',
-      employerCategory: body.employerCategory ?? 'OTH',
-      taxRegimePreference: body.taxRegimePreference ?? 'NEW',
-      portalUsername: body.portalUsername ?? null,
-    },
-  });
+  let client;
+  try {
+    client = await prisma.client.create({
+      data: {
+        firmId: auth.firmId,
+        pan: (body.pan as string).toUpperCase(),
+        assesseeType: body.assesseeType,
+        fullName: body.fullName ?? body.name,
+        dateOfBirth: (body.dateOfBirth ?? body.dateOfBirthOrIncorporation) ? new Date(body.dateOfBirth ?? body.dateOfBirthOrIncorporation) : null,
+        mobileNumber: body.mobileNumber ?? body.mobile ?? null,
+        email: body.email ?? null,
+        address: body.address ?? body.addressLine1 ?? null,
+        city: body.city ?? null,
+        stateCode: body.stateCode ?? body.state ?? null,
+        pinCode: (body.pinCode ?? body.pincode) ? Number(body.pinCode ?? body.pincode) : null,
+        aadhaarNumber: body.aadhaarNumber ?? null,
+        residentialStatus: body.residentialStatus ?? 'RES',
+        employerCategory: body.employerCategory ?? 'OTH',
+        taxRegimePreference: body.taxRegimePreference ?? 'NEW',
+        portalUsername: body.portalUsername ?? null,
+      },
+    });
+  } catch (e: any) {
+    if (e?.code === 'P2002') {
+      return NextResponse.json({ error: 'A client with this PAN already exists.' }, { status: 409 });
+    }
+    console.error('[POST /api/clients]', e);
+    return NextResponse.json({ error: e?.message ?? 'Failed to create client' }, { status: 500 });
+  }
 
   return NextResponse.json({ data: { id: String(client.id) } }, { status: 201 });
 }

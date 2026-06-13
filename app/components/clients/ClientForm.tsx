@@ -270,7 +270,7 @@ export default function ClientForm({ clientId, onSuccess, onCancel }: ClientForm
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         });
-        const json = await res.json();
+        const json = await res.json().catch(() => ({ error: `Server error (${res.status})` }));
         if (!res.ok) throw new Error(json.error || 'Operation failed');
         result = { success: true, data: { id: clientId } };
       } else {
@@ -279,7 +279,7 @@ export default function ClientForm({ clientId, onSuccess, onCancel }: ClientForm
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         });
-        const json = await res.json();
+        const json = await res.json().catch(() => ({ error: `Server error (${res.status})` }));
         if (!res.ok) throw new Error(json.error || 'Operation failed');
         result = { success: true, data: json.data };
       }
