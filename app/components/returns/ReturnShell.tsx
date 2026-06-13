@@ -25,6 +25,8 @@ import ScheduleOS from './ScheduleOS';
 import ScheduleDeductions from './ScheduleDeductions';
 import ScheduleTDS from './ScheduleTDS';
 import ScheduleTaxPayments from './ScheduleTaxPayments';
+import ScheduleBP from './ScheduleBP';
+import ScheduleCG from './ScheduleCG';
 import TaxSummary from './TaxSummary';
 import Verification from './Verification';
 
@@ -46,6 +48,8 @@ interface ReturnMeta {
 
 type TabId =
   | 'salary'
+  | 'business_profession'
+  | 'capital_gains'
   | 'house_property'
   | 'other_sources'
   | 'deductions'
@@ -80,11 +84,25 @@ const ALL_TABS: Tab[] = [
     applicableForms: ['ITR-1', 'ITR-2', 'ITR-4'],
   },
   {
+    id: 'business_profession',
+    label: 'Business / Profession',
+    shortLabel: 'BP',
+    icon: '🏭',
+    applicableForms: ['ITR-4'],
+  },
+  {
     id: 'house_property',
     label: 'House Property',
     shortLabel: 'HP',
     icon: '🏠',
-    applicableForms: ['ITR-1', 'ITR-2'],
+    applicableForms: ['ITR-1', 'ITR-2', 'ITR-4'],
+  },
+  {
+    id: 'capital_gains',
+    label: 'Capital Gains',
+    shortLabel: 'CG',
+    icon: '📉',
+    applicableForms: ['ITR-2'],
   },
   {
     id: 'other_sources',
@@ -510,8 +528,38 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate }: 
           />
         )}
 
+        {activeTab === 'business_profession' && (
+          <ScheduleBP
+            returnId={String(returnMeta.id)}
+            returnData={returnData ?? {} as any}
+            onSaved={(rd: any) => {
+              setReturnData(rd);
+              const newSummary = computeIncomeSummary(rd);
+              setSummary(newSummary);
+              setTaxComp(computeTaxLiability(newSummary, rd.regime ?? returnMeta?.regime ?? 'NEW'));
+              onScheduleChange(newSummary);
+            }}
+            setDirty={setDirty}
+          />
+        )}
+
         {activeTab === 'house_property' && (
           <ScheduleHP
+            returnId={String(returnMeta.id)}
+            returnData={returnData ?? {} as any}
+            onSaved={(rd: any) => {
+              setReturnData(rd);
+              const newSummary = computeIncomeSummary(rd);
+              setSummary(newSummary);
+              setTaxComp(computeTaxLiability(newSummary, rd.regime ?? returnMeta?.regime ?? 'NEW'));
+              onScheduleChange(newSummary);
+            }}
+            setDirty={setDirty}
+          />
+        )}
+
+        {activeTab === 'capital_gains' && (
+          <ScheduleCG
             returnId={String(returnMeta.id)}
             returnData={returnData ?? {} as any}
             onSaved={(rd: any) => {
