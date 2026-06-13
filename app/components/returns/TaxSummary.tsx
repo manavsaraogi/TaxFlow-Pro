@@ -120,7 +120,7 @@ function surchargeRate(income: number): number {
 
 // â”€â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-const fmt = (n: number) => 'â‚¹' + Math.abs(n).toLocaleString('en-IN');
+const fmt = (n: number) => '₹' + Math.abs(n).toLocaleString('en-IN');
 
 const Row = ({
   label,
@@ -290,7 +290,7 @@ export default function TaxSummary({ returnId, returnData }: Props) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h2 style={{ fontWeight: 700, fontSize: 18, margin: 0, color: 'var(--brand-text)' }}>
-            Tax Computation â€” {inputs.assessmentYear}
+            Tax Computation — {inputs.assessmentYear}
           </h2>
           <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '4px 0 0' }}>
             Regime:{' '}
@@ -327,7 +327,7 @@ export default function TaxSummary({ returnId, returnData }: Props) {
               {s.label}
             </div>
             <div className="amount" style={{ fontSize: 20, fontWeight: 800, color: s.color }}>
-              â‚¹{s.value.toLocaleString('en-IN')}
+              ₹{s.value.toLocaleString('en-IN')}
             </div>
           </div>
         ))}
@@ -342,13 +342,13 @@ export default function TaxSummary({ returnId, returnData }: Props) {
           <tbody>
             {/* Income */}
             <Row label="Gross Salary (after standard deduction)" value={Math.max(0, inputs.grossSalary - inputs.standardDeduction)}
-              sub={`Standard deduction: â‚¹${inputs.standardDeduction.toLocaleString('en-IN')}`} />
+              sub={`Standard deduction: ₹${inputs.standardDeduction.toLocaleString('en-IN')}`} />
             <Row label="Income from House Property" value={inputs.housePropertyIncome}
-              sub={inputs.housePropertyIncome < 0 ? 'Loss (capped at â‚¹2,00,000 set-off)' : undefined} />
+              sub={inputs.housePropertyIncome < 0 ? 'Loss (capped at ₹2,00,000 set-off)' : undefined} />
             <Row label="Income from Other Sources" value={inputs.otherSourcesIncome} />
             {c.lotteryIncome > 0 && (
               <Row label="Lottery / Winnings (u/s 115BB)" value={c.lotteryIncome}
-                sub="Taxed flat @ 30% â€” not included in slab" />
+                sub=”Taxed flat @ 30% — not included in slab” />
             )}
             <Row label="Gross Total Income" value={c.grossTotalIncome} bold separator />
 
@@ -372,12 +372,12 @@ export default function TaxSummary({ returnId, returnData }: Props) {
             <Row label="Gross Tax" value={c.grossTax} bold />
             {c.surcharge > 0 && (
               <Row label={`Surcharge @ ${Math.round(surchargeRate(c.taxableIncome) * 100)}%`} value={c.surcharge}
-                sub="Applicable as income > â‚¹50 lakh" />
+                sub="Applicable as income > ₹50 lakh" />
             )}
             <Row label="Tax after Surcharge" value={c.taxAfterSurcharge} />
             {c.rebate87A > 0 && (
               <Row label="Less: Rebate u/s 87A" value={c.rebate87A} deduction
-                sub={`Income â‰¤ â‚¹${inputs.regime?.toLowerCase() === 'new' ? '7,00,000' : '5,00,000'}`} />
+                sub={`Income ≤ ₹${inputs.regime?.toLowerCase() === 'new' ? '7,00,000' : '5,00,000'}`} />
             )}
             <Row label="Tax after Rebate" value={c.taxAfterRebate} />
             <Row label="Health & Education Cess @ 4%" value={c.cess} />
@@ -403,7 +403,7 @@ export default function TaxSummary({ returnId, returnData }: Props) {
             {/* Result */}
             <tr style={{ borderTop: '3px solid var(--brand-primary)' }}>
               <td style={{ paddingTop: 16, fontWeight: 800, fontSize: 16, color: isRefund ? '#4ade80' : '#f87171' }}>
-                {isRefund ? 'ðŸŽ‰ Refund Due' : 'âš ï¸ Balance Tax Payable'}
+                {isRefund ? '🎉 Refund Due' : '⚠️ Balance Tax Payable'}
               </td>
               <td
                 className="amount"
@@ -425,7 +425,7 @@ export default function TaxSummary({ returnId, returnData }: Props) {
       {/* â”€â”€ Regime comparison nudge â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {Math.abs(c.balancePayable) > 10_000 && (
         <div style={{ background: 'rgba(212,160,23,0.08)', border: '1px solid rgba(212,160,23,0.3)', borderRadius: 8, padding: '14px 18px', fontSize: 13, color: 'var(--text-muted)' }}>
-          <strong style={{ color: 'var(--brand-text)' }}>ðŸ’¡ Tip:</strong> Compare tax under both regimes using the Regime Comparison tool in Return Settings to ensure the client is on the optimal regime.
+          <strong style={{ color: 'var(--brand-text)' }}>💡 Tip:</strong> Compare tax under both regimes using the Regime Comparison tool in Return Settings to ensure the client is on the optimal regime.
         </div>
       )}
     </div>

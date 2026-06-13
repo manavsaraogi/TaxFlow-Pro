@@ -467,7 +467,7 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate }: 
             title={tab.label}
           >
             <span style={{ marginRight: '6px' }}>{tab.icon}</span>
-            {tab.shortLabel}
+            {tab.label}
           </button>
         ))}
       </div>
