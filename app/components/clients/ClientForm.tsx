@@ -274,6 +274,12 @@ export default function ClientForm({ clientId, onSuccess, onCancel }: ClientForm
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [importPreview, setImportPreview] = useState<string | null>(null);
 
+  // Portal prefill fetch state
+  const [prefillFetching, setPrefillFetching] = useState(false);
+  const [prefillLog, setPrefillLog] = useState<string[]>([]);
+  const [prefillError, setPrefillError] = useState<string | null>(null);
+  const [prefillDone, setPrefillDone] = useState(false);
+
   // Load existing client in edit mode
   useEffect(() => {
     if (!isEdit) return;
@@ -327,6 +333,151 @@ export default function ClientForm({ clientId, onSuccess, onCancel }: ClientForm
     });
     if (errors[name]) setErrors((prev) => { const n = { ...prev }; delete n[name]; return n; });
   }, [errors, isEdit]);
+
+  // ── Portal prefill fetch (PAN + password → auto-fill form → auto-create) ──
+  async function findAgentUrl(): Promise<string | null> {
+    const candidates = [
+      'http://localhost:3001',
+      ...(typeof localStorage !== 'undefined'
+        ? [localStorage.getItem('taxflow_agent_url')].filter(Boolean) as string[]
+        : []),
+    ];
+    for (const url of candidates) {
+      try {
+        const res = await fetch(`${url}/health`, { signal: AbortSignal.timeout(2000) });
+        if (res.ok) return url;
+      } catch { /* try next */ }
+    }
+    return null;
+  }
+
+  async function handleFetchFromPortal() {
+    const pan = form.pan.trim().toUpperCase();
+    const password = form.portalPassword.trim();
+    if (!pan || !/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(pan)) {
+      setPrefillError('Enter a valid PAN first (format: AAAAA0000A).');
+      return;
+    }
+    if (!password) {
+      setPrefillError('Enter the portal password first.');
+      return;
+    }
+
+    setPrefillError(null);
+    setPrefillLog([]);
+    setPrefillDone(false);
+    setPrefillFetching(true);
+    setPrefillLog(['Connecting to portal agent…']);
+
+    const agentUrl = await findAgentUrl();
+    if (!agentUrl) {
+      setPrefillFetching(false);
+      setPrefillError('LOCAL_AGENT_NOT_RUNNING');
+      return;
+    }
+
+    setPrefillLog(prev => [...prev, 'Launching browser…']);
+
+    try {
+      const startRes = await fetch(`${agentUrl}/fetch-prefill`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pan, password, force: true }),
+      });
+      if (!startRes.ok) {
+        const j = await startRes.json().catch(() => ({}));
+        throw new Error(j.error ?? 'Agent failed to start');
+      }
+
+      // Poll until done
+      const pollInterval = setInterval(async () => {
+        try {
+          const statusRes = await fetch(`${agentUrl}/status-prefill`);
+          const s = await statusRes.json();
+          if (s.log?.length) setPrefillLog(s.log);
+
+          if (s.status === 'done') {
+            clearInterval(pollInterval);
+            setPrefillFetching(false);
+
+            const prefill = s.result?.prefill;
+            if (!prefill) {
+              setPrefillError('Prefill JSON not captured. Try again or use "Import from file".');
+              return;
+            }
+
+            // Apply prefill to form
+            const { _preview, ...mapped } = parsePrefillJson(prefill);
+            setForm(prev => ({
+              ...prev,
+              ...mapped,
+              pan: mapped.pan || prev.pan,
+              portalUsername: mapped.pan || prev.pan,
+              portalPassword: prev.portalPassword, // keep password as entered
+            }));
+            setImportPreview(_preview ?? null);
+            setPrefillDone(true);
+            setPrefillLog(prev => [...prev, '✓ Details imported! Creating client…']);
+
+            // Auto-submit to create the client
+            await autoCreateClient(mapped, password);
+
+          } else if (s.status === 'error') {
+            clearInterval(pollInterval);
+            setPrefillFetching(false);
+            setPrefillError(s.error ?? 'Portal fetch failed');
+          }
+        } catch { /* ignore poll errors */ }
+      }, 2000);
+
+    } catch (e: any) {
+      setPrefillFetching(false);
+      setPrefillError(e.message ?? 'Failed to contact local agent');
+    }
+  }
+
+  async function autoCreateClient(mapped: Partial<ClientFormData>, password: string) {
+    const pan = (mapped.pan || form.pan).toUpperCase();
+    const fullName = mapped.fullName || form.fullName;
+    const dateOfBirth = mapped.dateOfBirth || form.dateOfBirth;
+    const address = mapped.address || form.address || 'To be updated';
+    const city = mapped.city || form.city || 'To be updated';
+
+    const payload = {
+      pan,
+      assesseeType: mapped.assesseeType ?? form.assesseeType,
+      fullName,
+      dateOfBirth: dateOfBirth || undefined,
+      residentialStatus: mapped.residentialStatus ?? form.residentialStatus,
+      employerCategory: form.employerCategory,
+      mobileNumber: mapped.mobileNumber || form.mobileNumber || undefined,
+      email: mapped.email || form.email || undefined,
+      address,
+      city,
+      stateCode: mapped.stateCode || form.stateCode,
+      pinCode: (mapped.pinCode || form.pinCode) ? parseInt(mapped.pinCode || form.pinCode) : undefined,
+      aadhaarNumber: mapped.aadhaarNumber || form.aadhaarNumber || undefined,
+      portalUsername: pan,
+      portalPassword: password,
+    };
+
+    try {
+      const res = await fetch('/api/clients', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setPrefillError('Data imported but client creation failed: ' + (json.error ?? res.statusText));
+        return;
+      }
+      setPrefillLog(prev => [...prev, `✓ Client created: ${fullName} (${pan})`]);
+      setTimeout(() => onSuccess(json.data?.id ?? 0), 1000);
+    } catch (e: any) {
+      setPrefillError('Data imported but client creation failed: ' + e.message);
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -430,35 +581,39 @@ export default function ClientForm({ clientId, onSuccess, onCancel }: ClientForm
             Fields marked * are required. Client data is used to generate ITR JSON.
           </p>
         </div>
-        <label style={{ cursor: 'pointer' }}>
-            <input
-              type="file"
-              accept=".json"
-              style={{ display: 'none' }}
-              onChange={async (e) => {
-                const file = e.target.files?.[0];
-                if (!file) return;
-                try {
-                  const text = await file.text();
-                  const parsed = JSON.parse(text);
-                  const { _preview, ...mapped } = parsePrefillJson(parsed);
-                  if (!mapped.pan && !mapped.fullName) {
-                    setFeedback({ type: 'error', message: 'Could not read ITR prefill data from this file. Make sure it is the JSON downloaded from the IT portal (e-File → Import Prefilled XML).' });
-                    return;
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {!isEdit && (
+            <label style={{ cursor: 'pointer' }} title="Upload prefill JSON file downloaded from IT portal">
+              <input
+                type="file"
+                accept=".json"
+                style={{ display: 'none' }}
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  try {
+                    const text = await file.text();
+                    const parsed = JSON.parse(text);
+                    const { _preview, ...mapped } = parsePrefillJson(parsed);
+                    if (!mapped.pan && !mapped.fullName) {
+                      setFeedback({ type: 'error', message: 'Could not read ITR prefill data from this file.' });
+                      return;
+                    }
+                    setForm((prev) => ({ ...prev, ...mapped }));
+                    setImportPreview(_preview ?? null);
+                    setTimeout(() => setImportPreview(null), 6000);
+                  } catch {
+                    setFeedback({ type: 'error', message: 'Invalid JSON file — could not parse.' });
                   }
-                  setForm((prev) => ({ ...prev, ...mapped }));
-                  setImportPreview(_preview ?? null);
-                  setTimeout(() => setImportPreview(null), 6000);
-                } catch {
-                  setFeedback({ type: 'error', message: 'Invalid JSON file — could not parse.' });
-                }
-                e.target.value = '';
-              }}
-            />
-            <span className="btn btn-secondary" style={{ fontSize: '0.75rem', padding: '0.4rem 0.75rem' }}>
-              Import Prefill JSON
-            </span>
-          </label>
+                  e.target.value = '';
+                }}
+              />
+              <span className="btn btn-secondary" style={{ fontSize: '0.75rem', padding: '0.4rem 0.75rem' }}>
+                📂 Import from File
+              </span>
+            </label>
+          )}
+        </div>
       </div>
 
       {importPreview && (
@@ -714,6 +869,66 @@ export default function ClientForm({ clientId, onSuccess, onCancel }: ClientForm
               {errors.portalPassword && <span className="form-error">{errors.portalPassword}</span>}
             </div>
           </div>
+
+          {/* ── Portal fetch button (new client only) ── */}
+          {!isEdit && (
+            <div style={{ marginTop: 12, borderTop: '1px solid var(--border-subtle)', paddingTop: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  disabled={prefillFetching}
+                  onClick={handleFetchFromPortal}
+                  style={{ fontSize: '0.8rem' }}
+                >
+                  {prefillFetching
+                    ? <><span className="spinner" style={{ width: 12, height: 12 }} /> Fetching from Portal…</>
+                    : '⬇ Import from Portal & Create Client'}
+                </button>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                  Enter PAN + password above, then click — logs in, fetches all details, creates the client automatically.
+                </span>
+              </div>
+
+              {/* Live log */}
+              {prefillLog.length > 0 && (
+                <div style={{
+                  marginTop: 10, padding: '8px 12px',
+                  background: 'rgba(30,40,60,0.4)', borderRadius: 6,
+                  fontSize: 11, color: 'var(--text-muted)', fontFamily: 'monospace', lineHeight: 1.8,
+                }}>
+                  {prefillLog.map((l, i) => <div key={i}>▶ {l}</div>)}
+                  {prefillFetching && (
+                    <div style={{ color: 'var(--brand-primary)', marginTop: 4 }}>
+                      ● Browser window is open — follow any portal prompts (OTP, captcha)…
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Error */}
+              {prefillError && prefillError !== 'LOCAL_AGENT_NOT_RUNNING' && (
+                <div style={{
+                  marginTop: 8, padding: '8px 12px', borderRadius: 6, fontSize: 12,
+                  background: 'rgba(220,38,38,0.1)', border: '1px solid rgba(220,38,38,0.3)', color: '#f87171',
+                }}>
+                  {prefillError}
+                </div>
+              )}
+              {prefillError === 'LOCAL_AGENT_NOT_RUNNING' && (
+                <div style={{
+                  marginTop: 8, padding: '10px 14px', borderRadius: 6, fontSize: 12, lineHeight: 1.9,
+                  background: 'rgba(210,153,34,0.1)', border: '1px solid rgba(210,153,34,0.3)',
+                }}>
+                  <strong style={{ color: 'var(--status-warning)' }}>Portal Agent not running.</strong><br />
+                  Run <code style={{ background: 'rgba(0,0,0,0.3)', padding: '1px 5px', borderRadius: 3 }}>
+                    local-portal-agent\start.bat
+                  </code> on this PC first, then try again.{' '}
+                  Or use <strong>📂 Import from File</strong> with a prefill JSON downloaded from the IT portal.
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* ── Actions ── */}
