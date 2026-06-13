@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthContext } from '@/lib/api-auth';
 import { prisma } from '@/lib/prisma';
+import { encryptPassword } from '@/lib/portal-encrypt';
 
 // GET /api/clients — list all clients for the firm
 export async function GET() {
@@ -52,6 +53,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
     }
 
+    // Encrypt portal password if provided
+    let portalPasswordEnc: string | null = null;
+    if (body.portalPassword) {
+      try {
+        portalPasswordEnc = encryptPassword(body.portalPassword);
+      } catch {
+        // Encryption key not set — store without password (non-fatal)
+      }
+    }
+
     let client;
     try {
       client = await prisma.client.create({
@@ -81,6 +92,14 @@ export async function POST(request: NextRequest) {
       const msg = e?.message ?? 'Failed to create client';
       console.error('[POST /api/clients] prisma error:', msg, e?.code);
       return NextResponse.json({ error: msg }, { status: 500 });
+    }
+
+    // Store encrypted password via raw query (column not in generated Prisma client yet)
+    if (portalPasswordEnc) {
+      await prisma.$executeRaw`
+        UPDATE "Client" SET "portalPasswordEnc" = ${portalPasswordEnc}
+        WHERE id = ${client.id}
+      `;
     }
 
     return NextResponse.json({ data: { id: String(client.id) } }, { status: 201 });

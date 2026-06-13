@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthContext } from '@/lib/api-auth';
 import { prisma } from '@/lib/prisma';
+import { encryptPassword } from '@/lib/portal-encrypt';
 
 type Params = { params: { id: string } };
 
@@ -46,7 +47,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
     employerCategory: client.employerCategory ?? 'OTH',
     taxRegimePreference: client.taxRegimePreference,
     portalUsername: client.portalUsername,
-    hasPortalPassword: false,
+    hasPortalPassword: !!(client as any).portalPasswordEnc,
     isActive: client.isActive,
     createdAt: client.createdAt.toISOString(),
     updatedAt: client.updatedAt.toISOString(),
@@ -91,7 +92,6 @@ export async function PUT(request: NextRequest, { params }: Params) {
   if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
   const body = await request.json();
-
   const dob = body.dateOfBirth ?? body.dateOfBirthOrIncorporation;
 
   await prisma.client.update({
@@ -112,6 +112,18 @@ export async function PUT(request: NextRequest, { params }: Params) {
       dateOfBirth: dob ? new Date(dob) : existing.dateOfBirth,
     },
   });
+
+  // Update encrypted portal password if provided
+  if (body.portalPassword) {
+    try {
+      const enc = encryptPassword(body.portalPassword);
+      await prisma.$executeRaw`
+        UPDATE "Client" SET "portalPasswordEnc" = ${enc} WHERE id = ${Number(params.id)}
+      `;
+    } catch {
+      // Non-fatal — encryption key may not be set
+    }
+  }
 
   return NextResponse.json({ data: { success: true } });
 }

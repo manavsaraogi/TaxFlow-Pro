@@ -170,6 +170,7 @@ model Client {
   residentialStatus       String?      @default("RES")
   employerCategory        String?      @default("OTH")
   portalUsername          String?
+  portalPasswordEnc       String?
   taxRegimePreference     TaxRegime    @default(NEW)
   isActive                Boolean      @default(true)
   createdAt               DateTime     @default(now())

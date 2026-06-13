@@ -570,6 +570,7 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate }: 
         {activeTab === 'tds' && (
           <ScheduleTDS
             returnId={String(returnMeta.id)}
+            clientId={clientId}
             returnData={returnData ?? {} as any}
             onSaved={() => {}}
             setDirty={setDirty}
