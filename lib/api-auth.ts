@@ -27,17 +27,22 @@ export async function getAuthContext(): Promise<AuthContext | null> {
   }
 
   // Fallback: look up from DB (covers the case where metadata hasn't propagated yet)
-  const member = await prisma.firmMember.findUnique({
-    where: { supabaseUid: user.id },
-    include: { firm: true },
-  });
+  try {
+    const member = await prisma.firmMember.findUnique({
+      where: { supabaseUid: user.id },
+      include: { firm: true },
+    });
 
-  if (!member) return null;
+    if (!member) return null;
 
-  return {
-    supabaseUid: user.id,
-    firmId: member.firmId,
-    displayName: member.displayName,
-    role: member.role,
-  };
+    return {
+      supabaseUid: user.id,
+      firmId: member.firmId,
+      displayName: member.displayName,
+      role: member.role,
+    };
+  } catch (e) {
+    console.error('[getAuthContext] DB fallback failed:', e);
+    return null;
+  }
 }
