@@ -323,12 +323,10 @@ export default function ScheduleTDS({ returnId, clientId, returnData, onSaved, s
   const [showImportPanel, setShowImportPanel] = useState(false);
   const [mismatchLoading, setMismatchLoading] = useState(false);
 
-  // Portal auto-fetch state (OTP flow)
-  const [fetchStep, setFetchStep] = useState<'idle' | 'loading' | 'otp' | 'verifying' | 'done'>('idle');
+  // Portal auto-fetch state
+  const [fetchLoading, setFetchLoading] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
-  const [otpValue, setOtpValue] = useState('');
-  const [sessionToken, setSessionToken] = useState('');
-  const [showFetchModal, setShowFetchModal] = useState(false);
+  const [fetchSuccess, setFetchSuccess] = useState<string | null>(null);
 
   // ── Load ────────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -382,73 +380,35 @@ export default function ScheduleTDS({ returnId, clientId, returnData, onSaved, s
     }
   }
 
-  async function initiatePortalFetch() {
+  async function fetchFromPortal() {
     if (!clientId) { setFetchError('Client ID not available'); return; }
-    setFetchStep('loading');
+    setFetchLoading(true);
     setFetchError(null);
-    setShowFetchModal(true);
+    setFetchSuccess(null);
     try {
       const res = await fetch('/api/portal/fetch-ais', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clientId: Number(clientId), returnId: Number(returnId), step: 'initiate' }),
+        body: JSON.stringify({ clientId: Number(clientId), returnId: Number(returnId) }),
       });
       const json = await res.json();
       if (!res.ok) {
         setFetchError(json.error ?? 'Portal fetch failed');
-        setFetchStep('idle');
         return;
       }
-      if (json.status === 'OTP_REQUIRED') {
-        setSessionToken(json.sessionToken);
-        setFetchStep('otp');
-      } else if (json.status === 'SUCCESS') {
-        await handleFetchSuccess(json);
-      }
+      // Reload portal data and mismatches
+      const [portal, mm] = await Promise.all([
+        ipc.getPortalData(returnId),
+        ipc.getMismatches(returnId),
+      ]);
+      if (portal) setPortalData(portal);
+      setMismatches(mm);
+      setFetchSuccess(`Fetched ${json.imported?.tdsCount ?? 0} TDS + ${json.imported?.tcsCount ?? 0} TCS entries from portal.`);
     } catch (e: any) {
       setFetchError(e.message ?? 'Network error');
-      setFetchStep('idle');
+    } finally {
+      setFetchLoading(false);
     }
-  }
-
-  async function submitOTP() {
-    if (!otpValue.trim()) { setFetchError('Enter the OTP'); return; }
-    setFetchStep('verifying');
-    setFetchError(null);
-    try {
-      const res = await fetch('/api/portal/fetch-ais', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          clientId: Number(clientId),
-          returnId: Number(returnId),
-          step: 'verify_otp',
-          otp: otpValue.trim(),
-          sessionToken,
-        }),
-      });
-      const json = await res.json();
-      if (!res.ok) {
-        setFetchError(json.error ?? 'OTP verification failed');
-        setFetchStep('otp');
-        return;
-      }
-      await handleFetchSuccess(json);
-    } catch (e: any) {
-      setFetchError(e.message ?? 'Network error');
-      setFetchStep('otp');
-    }
-  }
-
-  async function handleFetchSuccess(json: any) {
-    setFetchStep('done');
-    // Reload portal data and mismatches
-    const [portal, mm] = await Promise.all([
-      ipc.getPortalData(returnId),
-      ipc.getMismatches(returnId),
-    ]);
-    if (portal) setPortalData(portal);
-    setMismatches(mm);
   }
 
   async function refreshMismatches() {
@@ -606,11 +566,11 @@ export default function ScheduleTDS({ returnId, clientId, returnData, onSaved, s
             {/* Auto-fetch via portal login */}
             <button
               className="btn btn-primary btn-sm"
-              onClick={initiatePortalFetch}
-              disabled={fetchStep === 'loading' || fetchStep === 'verifying'}
+              onClick={fetchFromPortal}
+              disabled={fetchLoading}
               title="Login to IT portal with client credentials and fetch AIS data automatically"
             >
-              {fetchStep === 'loading' ? '⏳ Connecting…' : portalData ? '↺ Re-fetch from Portal' : '⬇ Fetch from Portal'}
+              {fetchLoading ? '⏳ Fetching…' : portalData ? '↺ Re-fetch from Portal' : '⬇ Fetch from Portal'}
             </button>
             {/* Manual file upload fallback */}
             <label style={{ cursor: 'pointer' }}>
@@ -623,107 +583,17 @@ export default function ScheduleTDS({ returnId, clientId, returnData, onSaved, s
           </div>
         </div>
 
-        {importError && (
+        {(fetchError || importError) && (
           <div style={{ marginTop: 10, padding: '8px 12px', background: 'rgba(248,81,73,0.1)', border: '1px solid rgba(248,81,73,0.3)', borderRadius: 6, fontSize: 12, color: '#f85149' }}>
-            {importError}
+            {fetchError ?? importError}
+          </div>
+        )}
+        {fetchSuccess && (
+          <div style={{ marginTop: 10, padding: '8px 12px', background: 'rgba(63,185,80,0.1)', border: '1px solid rgba(63,185,80,0.3)', borderRadius: 6, fontSize: 12, color: 'var(--status-success)' }}>
+            {fetchSuccess}
           </div>
         )}
       </div>
-
-      {/* ── OTP Modal ─────────────────────────────────────────────────────────── */}
-      {showFetchModal && (
-        <div style={{
-          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1000,
-          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
-        }}>
-          <div className="card" style={{ width: '100%', maxWidth: 420, padding: 24 }}>
-            <h3 style={{ fontWeight: 700, fontSize: 16, color: 'var(--text-primary)', marginBottom: 4 }}>
-              Fetch from Income Tax Portal
-            </h3>
-
-            {fetchStep === 'loading' && (
-              <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--text-muted)' }}>
-                <div className="spinner" style={{ margin: '0 auto 12px' }} />
-                <div>Connecting to incometax.gov.in…</div>
-                <div style={{ fontSize: 12, marginTop: 6 }}>Sending OTP to client's registered mobile/email</div>
-              </div>
-            )}
-
-            {fetchStep === 'otp' && (
-              <div>
-                <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16, lineHeight: 1.6 }}>
-                  The IT portal has sent an OTP to the client's registered mobile number / email.
-                  Enter it below to complete login and fetch the AIS data.
-                </p>
-                <div className="form-group" style={{ marginBottom: 16 }}>
-                  <label className="form-label">OTP (6 digits)</label>
-                  <input
-                    className="form-input pan-field"
-                    placeholder="Enter OTP"
-                    value={otpValue}
-                    maxLength={8}
-                    autoFocus
-                    onChange={(e) => setOtpValue(e.target.value.replace(/\D/g, ''))}
-                    onKeyDown={(e) => e.key === 'Enter' && submitOTP()}
-                    style={{ fontSize: 20, letterSpacing: 8, textAlign: 'center' }}
-                  />
-                </div>
-                {fetchError && (
-                  <div style={{ padding: '8px 12px', background: 'rgba(248,81,73,0.1)', border: '1px solid rgba(248,81,73,0.3)', borderRadius: 6, fontSize: 12, color: '#f85149', marginBottom: 12 }}>
-                    {fetchError}
-                  </div>
-                )}
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button className="btn btn-primary" style={{ flex: 1 }} onClick={submitOTP}>
-                    Verify OTP →
-                  </button>
-                  <button className="btn btn-secondary" onClick={() => { setShowFetchModal(false); setFetchStep('idle'); setOtpValue(''); setFetchError(null); }}>
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {fetchStep === 'verifying' && (
-              <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--text-muted)' }}>
-                <div className="spinner" style={{ margin: '0 auto 12px' }} />
-                <div>Verifying OTP and downloading AIS data…</div>
-              </div>
-            )}
-
-            {fetchStep === 'done' && (
-              <div style={{ textAlign: 'center', padding: '16px 0' }}>
-                <div style={{ fontSize: 32, marginBottom: 12 }}>✅</div>
-                <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: 6 }}>
-                  AIS data fetched successfully!
-                </div>
-                {portalData && (
-                  <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>
-                    {portalData.tdsEntries.length} TDS entries · {portalData.tcsEntries.length} TCS entries imported
-                  </div>
-                )}
-                <button className="btn btn-primary" onClick={() => { setShowFetchModal(false); setFetchStep('idle'); setOtpValue(''); }}>
-                  Close
-                </button>
-              </div>
-            )}
-
-            {fetchStep === 'idle' && fetchError && (
-              <div>
-                <div style={{ padding: '12px', background: 'rgba(248,81,73,0.1)', border: '1px solid rgba(248,81,73,0.3)', borderRadius: 6, fontSize: 13, color: '#f85149', marginBottom: 16 }}>
-                  {fetchError}
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16, lineHeight: 1.6 }}>
-                  If automatic fetch is blocked by the portal, please download the AIS JSON manually from incometax.gov.in and use the Upload File button.
-                </div>
-                <button className="btn btn-secondary" style={{ width: '100%' }} onClick={() => { setShowFetchModal(false); setFetchStep('idle'); setFetchError(null); }}>
-                  Close
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
 
       {/* ── Mismatch Panel ────────────────────────────────────────────────────── */}
       {mismatches.length > 0 && (
