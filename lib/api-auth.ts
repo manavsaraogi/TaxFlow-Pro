@@ -14,23 +14,10 @@ export async function getAuthContext(): Promise<AuthContext | null> {
 
   if (error || !user) return null;
 
-  // Try metadata first (fast path, no DB hit)
-  const metaFirmId = user.user_metadata?.firm_id as number | undefined;
-
-  if (metaFirmId) {
-    return {
-      supabaseUid: user.id,
-      firmId: metaFirmId,
-      displayName: user.user_metadata?.display_name ?? user.email ?? '',
-      role: user.user_metadata?.role ?? 'STAFF',
-    };
-  }
-
-  // Fallback: look up from DB (covers the case where metadata hasn't propagated yet)
+  // Always look up from DB — JWT metadata is unreliable across sessions
   try {
     const member = await prisma.firmMember.findUnique({
       where: { supabaseUid: user.id },
-      include: { firm: true },
     });
 
     if (!member) return null;
@@ -42,7 +29,7 @@ export async function getAuthContext(): Promise<AuthContext | null> {
       role: member.role,
     };
   } catch (e) {
-    console.error('[getAuthContext] DB fallback failed:', e);
+    console.error('[getAuthContext] DB lookup failed:', e);
     return null;
   }
 }
