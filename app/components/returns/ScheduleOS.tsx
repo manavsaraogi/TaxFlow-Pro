@@ -304,6 +304,8 @@ export default function ScheduleOSComponent({ returnId, returnData, onSaved, set
   const [saveErr, setSaveErr] = useState('');
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [aisImporting, setAisImporting] = useState(false);
+  const [aisImportMsg, setAisImportMsg] = useState<string | null>(null);
 
   // ── Hydrate ──
   useEffect(() => {
@@ -410,6 +412,78 @@ export default function ScheduleOSComponent({ returnId, returnData, onSaved, set
   const removeOther = (id: string) =>
     update({ otherEntries: state.otherEntries.filter((o) => o.id !== id) });
 
+  // Import dividends, FD interest, savings interest from AIS/26AS portalData
+  async function importFromPortal() {
+    setAisImporting(true);
+    setAisImportMsg(null);
+    try {
+      const res = await fetch(`/api/returns/${returnId}/portal-data`);
+      if (!res.ok) { setAisImportMsg('No portal data found. Import AIS/26AS from the TDS tab first.'); return; }
+      const { data: portal } = await res.json();
+      if (!portal) { setAisImportMsg('No AIS/26AS data found. Import it from the TDS tab first.'); return; }
+
+      const newFDs: FDEntry[] = [];
+      const newDivs: DividendEntry[] = [];
+      let newSavings = state.savingsInterest;
+
+      // SFT FD entries (Part B2 SFT-016(TD))
+      if (Array.isArray(portal.sftFDEntries)) {
+        for (const f of portal.sftFDEntries) {
+          if (!state.fdEntries.some(e => e.bankName === f.bankName)) {
+            newFDs.push({ id: crypto.randomUUID(), bankName: f.bankName, interestAmount: f.interestAmount, tdsDeducted: 0 });
+          }
+        }
+      }
+      // Savings bank interest (SFT-016(SB))
+      if (portal.sftSavingsInterest > 0 && state.savingsInterest === 0) {
+        newSavings = portal.sftSavingsInterest;
+      }
+      // SFT dividends (SFT-015)
+      if (Array.isArray(portal.sftDividends)) {
+        for (const d of portal.sftDividends) {
+          if (!state.dividendEntries.some(e => e.companyName === d.companyName)) {
+            newDivs.push({ id: crypto.randomUUID(), companyName: d.companyName, amount: d.amount });
+          }
+        }
+      }
+      // 26AS section-based: 194A = FD interest, 194/194K = dividend
+      if (Array.isArray(portal.tdsEntries)) {
+        for (const e of portal.tdsEntries) {
+          const sec = (e.section ?? '').replace(/\s/g, '');
+          if (/^194A/i.test(sec) && !state.fdEntries.some(f => f.bankName === e.name) && !newFDs.some(f => f.bankName === e.name)) {
+            newFDs.push({ id: crypto.randomUUID(), bankName: e.name, interestAmount: e.incomeAmount ?? 0, tdsDeducted: e.tdsDeducted ?? 0 });
+          } else if (/^194(K|LBA|LBB|LBC)?$|^194$/i.test(sec) && !state.dividendEntries.some(d => d.companyName === e.name) && !newDivs.some(d => d.companyName === e.name)) {
+            newDivs.push({ id: crypto.randomUUID(), companyName: e.name, amount: e.incomeAmount ?? 0 });
+          }
+        }
+      }
+
+      if (newFDs.length === 0 && newDivs.length === 0 && newSavings === state.savingsInterest) {
+        setAisImportMsg('No new interest or dividend data found in the imported AIS/26AS.');
+        return;
+      }
+
+      const next: OSFormState = {
+        ...state,
+        savingsInterest: newSavings,
+        fdEntries: [...state.fdEntries, ...newFDs],
+        dividendEntries: [...state.dividendEntries, ...newDivs],
+      };
+      setState(next);
+      scheduleAutoSave(next);
+
+      const parts = [];
+      if (newFDs.length) parts.push(`${newFDs.length} FD/interest entries`);
+      if (newDivs.length) parts.push(`${newDivs.length} dividend entries`);
+      if (newSavings !== state.savingsInterest) parts.push(`savings interest ₹${newSavings.toLocaleString('en-IN')}`);
+      setAisImportMsg(`Imported: ${parts.join(', ')}.`);
+    } catch (e: any) {
+      setAisImportMsg(e.message ?? 'Failed to import portal data');
+    } finally {
+      setAisImporting(false);
+    }
+  }
+
   const summary = computeSummary(state);
   const fpDeduction = computeFamilyPensionDeduction(state.familyPensionReceived);
 
@@ -429,11 +503,34 @@ export default function ScheduleOSComponent({ returnId, returnData, onSaved, set
             </span>
           )}
           {saveErr && <span className="save-indicator error">{saveErr}</span>}
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={importFromPortal}
+            disabled={aisImporting}
+            title="Import FD interest, dividends and savings interest from imported AIS / 26AS data"
+          >
+            {aisImporting ? '⏳ Importing…' : '⬇ Import from AIS / 26AS'}
+          </button>
           <button className="btn btn-primary btn-sm" onClick={() => save(state)} disabled={saving}>
             {saving ? 'Saving…' : 'Save'}
           </button>
         </div>
       </div>
+
+      {aisImportMsg && (
+        <div style={{
+          padding: '10px 14px',
+          borderRadius: 8,
+          fontSize: 13,
+          background: aisImportMsg.startsWith('No') || aisImportMsg.startsWith('Failed')
+            ? 'rgba(248,113,113,0.1)' : 'rgba(74,222,128,0.1)',
+          color: aisImportMsg.startsWith('No') || aisImportMsg.startsWith('Failed')
+            ? '#f87171' : '#4ade80',
+          border: '1px solid currentColor',
+        }}>
+          {aisImportMsg}
+        </div>
+      )}
 
       {/* Summary stat cards */}
       <div className="os-stats">

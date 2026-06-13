@@ -148,11 +148,54 @@ const EMPTY_STATE: TDSState = {
 // ─── IPC ──────────────────────────────────────────────────────────────────────
 
 const ipc = {
-  upsertTDS: async (returnId: string, data: unknown) => {
+  upsertTDS: async (returnId: string, data: TDSState) => {
+    const entries = [
+      ...data.salarySources.map(e => ({
+        entryType: 'SALARY',
+        nameOfDeductor: e.employerName,
+        tanOfDeductor: e.employerTAN,
+        incomeChargeable: e.grossSalary,
+        tdsDeducted: e.tdsDeducted,
+        tdsClaimed: e.tdsDeducted,
+      })),
+      ...data.otherSources.map(e => ({
+        entryType: 'OTHER',
+        nameOfDeductor: e.deductorName,
+        tanOfDeductor: e.deductorTAN,
+        tdsSection: e.incomeType,
+        incomeChargeable: e.incomeCredited,
+        tdsDeducted: e.tdsDeducted,
+        tdsClaimed: e.tdsDeducted,
+      })),
+      ...data.propertySources.map(e => ({
+        entryType: 'PROPERTY',
+        nameOfDeductor: e.buyerName,
+        panOfTenant: e.buyerPAN,
+        amtForTaxDeduct: e.considerationAmount,
+        tdsDeducted: e.tdsDeducted,
+        tdsClaimed: e.tdsDeducted,
+      })),
+      ...data.rentSources.map(e => ({
+        entryType: 'RENT',
+        nameOfTenant: e.tenantName,
+        panOfTenant: e.tenantPAN,
+        grossRentReceived: e.rentPaid,
+        tdsDeducted: e.tdsDeducted,
+        tdsClaimed: e.tdsDeducted,
+      })),
+      ...data.tcsSources.map(e => ({
+        entryType: 'TCS',
+        nameOfDeductor: e.collectorName,
+        tanOfDeductor: e.collectorTAN,
+        amtOnWhichTCS: e.amountPaid,
+        tcsCollected: e.tcsCollected,
+        tcsClaimed: e.tcsCollected,
+      })),
+    ];
     const res = await fetch(`/api/returns/${returnId}/schedule/tds`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
+      body: JSON.stringify({ entries }),
     });
     if (!res.ok) { const j = await res.json(); throw new Error(j.error || 'Save failed'); }
     return { ok: true };
