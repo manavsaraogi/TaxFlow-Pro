@@ -67,10 +67,17 @@ export async function PUT(request: NextRequest, { params }: Params) {
       break;
     }
     case 'otherSources': {
+      // body is the ScheduleOS payload: { savingsInterest, fdInterest, dividends, totalOSIncome, deductionU57, _fdEntries, ... }
+      // Serialize entire payload into otherSourceItemsJson for round-trip fidelity
+      const osData = {
+        otherSourceItemsJson: JSON.stringify(body),
+        deductionUs57iia: Number(body.deductionU57 ?? 0),
+        incomeFromOtherSources: Number(body.totalOSIncome ?? 0),
+      };
       await prisma.oSSchedule.upsert({
         where: { returnId },
-        create: { returnId, ...sanitizeSchedule(body) },
-        update: sanitizeSchedule(body),
+        create: { returnId, ...osData },
+        update: osData,
       });
       break;
     }
@@ -120,19 +127,37 @@ export async function PUT(request: NextRequest, { params }: Params) {
       break;
     }
     case 'taxPayments': {
+      // Accepts either { entries: [...] } (AIS import) or { advanceTax: [...], selfAssessmentTax: [...] } (component save)
+      const challanFromEntry = (e: Record<string, unknown>, type: string) => ({
+        returnId,
+        paymentType: (e.paymentType as string) ?? type,
+        bsrCode: (e.bsrCode as string) ?? '',
+        dateOfDeposit: e.dateOfDeposit ? new Date(e.dateOfDeposit as string) : new Date(),
+        challanSerialNo: (e.challanSerialNo ?? e.challanSerial ?? '') as string,
+        taxAmount: Number(e.taxAmount ?? 0),
+        surchargeAmount: Number(e.surcharge ?? e.surchargeAmount ?? 0),
+        educationCess: Number(e.educationCess ?? 0),
+        interestAmount: Number(e.interestPaid ?? e.interestAmount ?? 0),
+        feeAmount: Number(e.penaltyPaid ?? e.feeAmount ?? 0),
+        totalAmount: Number(e.totalAmount ?? 0),
+      });
+
       await prisma.taxPaymentEntry.deleteMany({ where: { returnId } });
-      if (Array.isArray(body.entries) && body.entries.length > 0) {
-        await prisma.taxPaymentEntry.createMany({
-          data: body.entries.map((e: Record<string, unknown>) => ({
-            returnId,
-            paymentType: e.paymentType as string,
-            bsrCode: e.bsrCode as string,
-            dateOfDeposit: new Date(e.dateOfDeposit as string),
-            challanSerialNo: e.challanSerialNo as string,
-            taxAmount: Number(e.taxAmount ?? 0),
-            totalAmount: Number(e.totalAmount ?? 0),
-          })),
-        });
+
+      const allEntries: Record<string, unknown>[] = [];
+      if (Array.isArray(body.entries)) {
+        allEntries.push(...body.entries.map((e: Record<string, unknown>) => challanFromEntry(e, 'ADVANCE')));
+      } else {
+        if (Array.isArray(body.advanceTax)) {
+          allEntries.push(...body.advanceTax.map((e: Record<string, unknown>) => challanFromEntry(e, 'ADVANCE')));
+        }
+        if (Array.isArray(body.selfAssessmentTax)) {
+          allEntries.push(...body.selfAssessmentTax.map((e: Record<string, unknown>) => challanFromEntry(e, 'SAT')));
+        }
+      }
+
+      if (allEntries.length > 0) {
+        await prisma.taxPaymentEntry.createMany({ data: allEntries as any });
       }
       break;
     }

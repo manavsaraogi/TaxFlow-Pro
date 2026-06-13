@@ -464,9 +464,10 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate }: 
             className={`tab-item${activeTab === tab.id ? ' active' : ''}`}
             onClick={() => setActiveTab(tab.id)}
             style={{ whiteSpace: 'nowrap' }}
+            title={tab.label}
           >
             <span style={{ marginRight: '6px' }}>{tab.icon}</span>
-            {tab.label}
+            {tab.shortLabel}
           </button>
         ))}
       </div>

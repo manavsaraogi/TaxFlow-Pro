@@ -307,7 +307,13 @@ export default function ScheduleOSComponent({ returnId, returnData, onSaved, set
 
   // ── Hydrate ──
   useEffect(() => {
-    const s = (returnData as any).scheduleOS;
+    // returnData from API has osSchedule (Prisma model) with otherSourceItemsJson
+    // After save, onSaved injects scheduleOS directly for immediate round-trip
+    const raw = (returnData as any);
+    let s: any = raw.scheduleOS ?? null;
+    if (!s && raw.osSchedule?.otherSourceItemsJson) {
+      try { s = JSON.parse(raw.osSchedule.otherSourceItemsJson); } catch { s = null; }
+    }
     if (!s) return;
     setState({
       savingsInterest: s.savingsInterest ?? 0,

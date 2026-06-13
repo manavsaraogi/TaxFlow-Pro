@@ -1,24 +1,4 @@
-﻿/**
- * TaxSummary.tsx
- * Directory: renderer/app/components/returns/TaxSummary.tsx
- *
- * Full tax computation display:
- *  GTI â†’ Deductions â†’ Taxable Income â†’ Tax â†’ Surcharge â†’ Cess
- *  â†’ Rebate u/s 87A â†’ Net Tax â†’ Interest (234A/B/C) â†’ Total Due
- *  â†’ TDS/TCS/Advance Tax/SAT â†’ Refund or Balance Payable
- *
- * Rules:
- *  - Old regime: slabs + Chapter VI-A deductions
- *  - New regime: concessional slabs, no Chapter VI-A
- *  - Surcharge on income > â‚¹50L (graduated)
- *  - Rebate u/s 87A: â‚¹25,000 if taxable income â‰¤ â‚¹7,00,000 (new) / â‚¹5,00,000 (old)
- *  - Health & Education Cess: 4%
- *  - Lottery / special rate income taxed flat @ 30% u/s 115BB (excluded from slab)
- *  - Read-only computed view â€” no editable fields (all inputs come from other schedules)
- *  - Refresh button to re-pull latest data via IPC
- */
-
-'use client';
+﻿'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
 import type { ReturnData, TaxRegime } from '@/shared/types/itr';
@@ -83,6 +63,22 @@ interface TaxComputation {
 interface Props {
   returnId: string;
   returnData: ReturnData;
+}
+
+async function downloadComputationPDF(returnId: string) {
+  const res = await fetch(`/api/returns/${returnId}/computation-pdf`);
+  if (!res.ok) throw new Error('Failed to generate PDF');
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  const cd = res.headers.get('Content-Disposition') ?? '';
+  const match = cd.match(/filename="([^"]+)"/);
+  a.download = match ? match[1] : `TaxComputation.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
 
 // â”€â”€â”€ Tax Slabs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -230,20 +226,30 @@ function computeTax(inp: TaxInputs): TaxComputation {
 
 // â”€â”€â”€ Default inputs (mock / fallback) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-function buildDefaultInputs(returnData: ReturnData): TaxInputs {
+function buildDefaultInputs(rd: any): TaxInputs {
+  // rd is the raw Prisma API response (data from GET /api/returns/[id])
+  const tdsEntries: any[] = rd?.tdsEntries ?? [];
+  const taxPayments: any[] = rd?.taxPayments ?? [];
+  const hpSchedule: any[] = rd?.hpSchedule ?? [];
+
+  const tdsTCS = tdsEntries.reduce((s: number, e: any) => s + (e.tdsDeducted ?? 0) + (e.tcsCollected ?? 0), 0);
+  const advanceTax = taxPayments.filter((p: any) => p.paymentType === 'ADVANCE').reduce((s: number, p: any) => s + (p.totalAmount ?? 0), 0);
+  const selfAssessmentTax = taxPayments.filter((p: any) => p.paymentType !== 'ADVANCE').reduce((s: number, p: any) => s + (p.totalAmount ?? 0), 0);
+  const hpIncome = hpSchedule.reduce((s: number, hp: any) => s + (hp.incomeOfHP ?? 0), 0);
+
   return {
-    grossSalary: (returnData as any)?.scheduleSalary?.grossSalary ?? 0,
-    housePropertyIncome: (returnData as any)?.scheduleHP?.netAnnualValue ?? 0,
-    otherSourcesIncome: (returnData as any)?.scheduleOS?.totalOtherIncome ?? 0,
-    lotteryIncome: (returnData as any)?.scheduleOS?.lotteryIncome ?? 0,
-    standardDeduction: (returnData as any)?.scheduleSalary?.standardDeduction ?? 75_000,
-    chapterVIADeductions: (returnData as any)?.deductions?.total ?? 0,
-    homeLoanInterest: (returnData as any)?.scheduleHP?.homeLoanInterest ?? 0,
-    tdsTCS: (returnData as any)?.scheduleTDS?.grandTotal ?? 0,
-    advanceTax: (returnData as any)?.taxPayments?.advanceTax ?? 0,
-    selfAssessmentTax: (returnData as any)?.taxPayments?.selfAssessmentTax ?? 0,
-    regime: ((returnData as any)?.regime ?? 'NEW') as TaxRegime,
-    assessmentYear: (returnData as any)?.assessmentYear ?? 'AY 2026-27',
+    grossSalary: rd?.salarySchedule?.totalGrossSalary ?? 0,
+    housePropertyIncome: hpIncome,
+    otherSourcesIncome: rd?.osSchedule?.incomeFromOtherSources ?? 0,
+    lotteryIncome: 0,
+    standardDeduction: rd?.salarySchedule?.deductionUs16ia ?? 75_000,
+    chapterVIADeductions: rd?.deductionSchedule?.totalChapVIAAllowed ?? 0,
+    homeLoanInterest: 0,
+    tdsTCS,
+    advanceTax,
+    selfAssessmentTax,
+    regime: (rd?.assessmentYear?.regime ?? 'NEW') as TaxRegime,
+    assessmentYear: rd?.assessmentYear?.ayLabel ?? 'AY 2026-27',
     filingDate: new Date().toISOString().slice(0, 10),
     dueDate: '2026-07-31',
   };
@@ -254,6 +260,7 @@ function buildDefaultInputs(returnData: ReturnData): TaxInputs {
 export default function TaxSummary({ returnId, returnData }: Props) {
   const [inputs, setInputs] = useState<TaxInputs>(() => buildDefaultInputs(returnData));
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
+  const [downloadingPDF, setDownloadingPDF] = useState(false);
 
   const refresh = useCallback(() => {
     setInputs(buildDefaultInputs(returnData));
@@ -261,6 +268,17 @@ export default function TaxSummary({ returnId, returnData }: Props) {
   }, [returnData]);
 
   useEffect(() => { refresh(); }, [refresh]);
+
+  const handleDownloadPDF = useCallback(async () => {
+    setDownloadingPDF(true);
+    try {
+      await downloadComputationPDF(returnId);
+    } catch {
+      alert('Failed to generate PDF. Please try again.');
+    } finally {
+      setDownloadingPDF(false);
+    }
+  }, [returnId]);
 
   const c = computeTax(inputs);
   const isRefund = c.balancePayable < 0;
@@ -286,9 +304,14 @@ export default function TaxSummary({ returnId, returnData }: Props) {
             )}
           </p>
         </div>
-        <button className="btn btn-secondary btn-sm" onClick={refresh}>
-          ↻ Refresh
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn-secondary btn-sm" onClick={handleDownloadPDF} disabled={downloadingPDF}>
+            {downloadingPDF ? '⏳ Generating…' : '⬇ Computation Sheet PDF'}
+          </button>
+          <button className="btn btn-secondary btn-sm" onClick={refresh}>
+            ↻ Refresh
+          </button>
+        </div>
       </div>
 
       {/* â”€â”€ Stat cards row â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}

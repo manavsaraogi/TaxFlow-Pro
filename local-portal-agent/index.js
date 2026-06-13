@@ -2,7 +2,7 @@
 
 const express = require('express');
 const cors = require('cors');
-const { fetchPortalData, fetch26AS } = require('./portal');
+const { fetchPortalData, fetch26AS, fetchPrefillJson } = require('./portal');
 
 const app = express();
 const PORT = 3001;
@@ -12,6 +12,7 @@ app.use(express.json());
 
 let currentJob = null;
 let current26ASJob = null;
+let currentPrefillJob = null;
 
 function isJobBlocking(job) {
   if (!job) return false;
@@ -96,6 +97,40 @@ app.post('/fetch-26as', async (req, res) => {
 app.get('/status-26as', (_req, res) => {
   if (!current26ASJob) return res.json({ status: 'idle' });
   res.json({ status: current26ASJob.status, log: current26ASJob.log, result: current26ASJob.status === 'done' ? current26ASJob.result : null, error: current26ASJob.error });
+});
+
+app.post('/fetch-prefill', async (req, res) => {
+  const { pan, password, assessmentYear, formType, force } = req.body ?? {};
+
+  if (!pan || !password) {
+    return res.status(400).json({ error: 'pan and password are required' });
+  }
+
+  if (isJobBlocking(currentPrefillJob) && !force) {
+    return res.status(429).json({ error: 'A prefill fetch is already in progress. Please wait.' });
+  }
+
+  currentPrefillJob = null;
+  currentPrefillJob = { status: 'running', log: [], result: null, error: null, _startedAt: Date.now() };
+  const jobRef = currentPrefillJob;
+
+  fetchPrefillJson({
+    pan, password, assessmentYear: assessmentYear || '2025-26', formType: formType || 'ITR-1',
+    onStatus: (msg) => { console.log('[prefill]', msg); jobRef.log.push(msg); },
+  }).then((data) => {
+    jobRef.status = 'done'; jobRef.result = data;
+    setTimeout(() => { if (currentPrefillJob === jobRef) currentPrefillJob = null; }, 120000);
+  }).catch((err) => {
+    jobRef.status = 'error'; jobRef.error = err.message;
+    setTimeout(() => { if (currentPrefillJob === jobRef) currentPrefillJob = null; }, 5000);
+  });
+
+  res.json({ started: true, message: 'Browser opened for prefill fetch. Follow any portal prompts.' });
+});
+
+app.get('/status-prefill', (_req, res) => {
+  if (!currentPrefillJob) return res.json({ status: 'idle' });
+  res.json({ status: currentPrefillJob.status, log: currentPrefillJob.log, result: currentPrefillJob.status === 'done' ? currentPrefillJob.result : null, error: currentPrefillJob.error });
 });
 
 const server = app.listen(PORT, '0.0.0.0', () => {

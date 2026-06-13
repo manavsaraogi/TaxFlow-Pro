@@ -21,6 +21,13 @@ interface ParsedPortalData {
   pan?: string;
   tdsEntries: PortalTDSEntry[];
   tcsEntries: Array<{ tan?: string; name: string; amount: number; tcsCollected: number }>;
+  // SFT data from AIS Part B2
+  sftDividends?: Array<{ companyName: string; amount: number }>;
+  sftSavingsInterest?: number;
+  sftFDEntries?: Array<{ bankName: string; interestAmount: number }>;
+  sftCapitalGains?: AISCapitalGain[];
+  // Challans from AIS Part B3
+  challans?: AISChallan[];
 }
 
 interface MismatchItem {
@@ -32,6 +39,24 @@ interface MismatchItem {
   portalValue?: number;
   itrValue?: number;
   message: string;
+}
+
+interface AISCapitalGain {
+  securityName: string;
+  assetType: string;
+  salesConsideration: number;
+  costOfAcquisition: number;
+  fmvValue: number;
+  transferDate?: string;
+}
+
+interface AISChallan {
+  paymentType: string;
+  bsrCode: string;
+  dateOfDeposit: string;
+  challanSerialNo: string;
+  taxAmount: number;
+  totalAmount: number;
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -189,39 +214,153 @@ function parseAISJson(raw: any): ParsedPortalData {
   const entries: PortalTDSEntry[] = [];
   const tcsEntries: ParsedPortalData['tcsEntries'] = [];
 
-  // ── AIS Utility v14+ format (partB.sections[0] = TDS/TCS section) ─────────
-  // Structure: { partA: { columnData: [PAN,...,DOB,...] }, partB: { sections: [...] } }
+  // ── AIS Utility v14+ format (partB.sections) ──────────────────────────────
+  // sections[0] sectionKey=tdsTcs (Part B1 — TDS/TCS)
+  // sections[1] sectionKey=sft    (Part B2 — SFT financial transactions)
+  // sections[2] sectionKey=paymentOfTaxes (Part B3 — challans paid)
   if (raw?.partB?.sections && raw?.partA?.columnData) {
     const pan: string = raw.partA.columnData[0] ?? '';
-    const tdsSections: any[] = raw.partB.sections.filter(
-      (s: any) => /part b1|tax deducted|tax collected/i.test(s.title ?? '')
-    );
-    for (const section of tdsSections) {
-      for (const el of (section.elements ?? [])) {
-        const tan: string  = el.infoSrcId ?? '';
-        const name: string = el.l1Src === 'AIS_TDS_TCS' ? (el.title ?? 'Unknown') : (el.title ?? 'Unknown');
-        const labels: string[] = (el.l1?.columnLabel ?? []).map((c: any) => c.field as string);
-        const isTCS = /TCS|tax collected/i.test(section.title ?? '');
-        const infoCode: string = el.l1?.columnLabel?.find((c: any) => c.infoCode)?.infoCode ?? '';
-        // infoCode is like "TDS-194A" → section = "194A"
-        const section_code = infoCode.replace(/^TDS-/i, '').replace(/^TCS-/i, '');
+    const parseAmt = (v: string) => parseFloat((v ?? '0').replace(/,/g, '')) || 0;
+    const sftDividends: Array<{ companyName: string; amount: number }> = [];
+    const sftFDMap = new Map<string, number>();
+    let sftSavingsInterest = 0;
+    const sftCapitalGains: AISCapitalGain[] = [];
+    const challans: AISChallan[] = [];
 
-        for (const row of (el.l1?.columnData ?? [])) {
-          const rowObj: Record<string, string> = {};
-          labels.forEach((f, i) => { rowObj[f] = row[i] ?? ''; });
-          const parseAmt = (v: string) => parseFloat((v ?? '0').replace(/,/g, '')) || 0;
-          const gross = parseAmt(rowObj.amtPaid);
-          const tax   = parseAmt(rowObj.amountDeducted);
-          if (isTCS) {
-            tcsEntries.push({ tan, name, amount: gross, tcsCollected: tax });
-          } else {
-            entries.push({ tan, name, section: section_code, incomeAmount: gross, tdsDeducted: tax, entryType: el.title ?? 'OTHER' });
+    for (const section of (raw.partB.sections ?? [])) {
+      const sKey: string = (section.sectionKey ?? '') + ' ' + (section.title ?? '');
+
+      // ── Part B1: TDS / TCS (active rows only) ──────────────────────────
+      if (/tdsTcs|part b1|tax deducted|tax collected/i.test(sKey)) {
+        for (const el of (section.elements ?? [])) {
+          const tan: string = el.infoSrcId ?? '';
+          const name: string = el.title ?? 'Unknown';
+          const labels: string[] = (el.l1?.columnLabel ?? []).map((c: any) => c.field as string);
+          const statusIdx = labels.indexOf('status');
+          const isTCS = /TCS|tax collected/i.test(sKey);
+          const infoCode: string = el.infoCode ?? el.l1?.columnLabel?.find((c: any) => c.infoCode)?.infoCode ?? '';
+          const section_code = infoCode.replace(/^TDS-/i, '').replace(/^TCS-/i, '');
+
+          for (const row of (el.l1?.columnData ?? [])) {
+            if (statusIdx >= 0 && row[statusIdx] !== 'Active') continue;
+            const rowObj: Record<string, string> = {};
+            labels.forEach((f, i) => { rowObj[f] = row[i] ?? ''; });
+            const gross = parseAmt(rowObj.amtPaid);
+            const tax   = parseAmt(rowObj.amountDeducted);
+            if (isTCS) {
+              tcsEntries.push({ tan, name, amount: gross, tcsCollected: tax });
+            } else {
+              entries.push({ tan, name, section: section_code, incomeAmount: gross, tdsDeducted: tax, entryType: el.title ?? 'OTHER' });
+            }
+          }
+        }
+      }
+
+      // ── Part B2: SFT (active rows only) ────────────────────────────────
+      if (/sft|part b2/i.test(sKey)) {
+        for (const el of (section.elements ?? [])) {
+          const infoCode: string = el.infoCode ?? el.l1?.columnLabel?.find((c: any) => c.infoCode)?.infoCode ?? '';
+          const labels: string[] = (el.l1?.columnLabel ?? []).map((c: any) => c.field as string);
+          const statusIdx = labels.indexOf('status');
+          const amtIdx   = labels.indexOf('amtPaid');
+
+          if (infoCode === 'SFT-015') {
+            // Dividend — aggregate active l1 rows per element (one element = one company)
+            let activeTotal = 0;
+            for (const row of (el.l1?.columnData ?? [])) {
+              if (statusIdx >= 0 && row[statusIdx] !== 'Active') continue;
+              activeTotal += parseAmt(amtIdx >= 0 ? row[amtIdx] : row[2]);
+            }
+            if (activeTotal > 0) {
+              // Get company name: try l2 first, then element title
+              let companyName = el.infoSrcName ?? '';
+              if (!companyName) {
+                const l2Labels = (el.l2?.columnLabel ?? []).map((c: any) => c.field as string);
+                const l2NameIdx = l2Labels.indexOf('reportingEntityName');
+                const l2Row = el.l2?.columnData?.[0];
+                if (l2Row) companyName = String(l2Row[l2NameIdx >= 0 ? l2NameIdx : 3] ?? '');
+              }
+              if (!companyName) companyName = el.title ?? 'Unknown Company';
+              sftDividends.push({ companyName, amount: activeTotal });
+            }
+
+          } else if (infoCode === 'SFT-016(SB)') {
+            // Savings bank interest
+            for (const row of (el.l1?.columnData ?? [])) {
+              if (statusIdx >= 0 && row[statusIdx] !== 'Active') continue;
+              sftSavingsInterest += parseAmt(amtIdx >= 0 ? row[amtIdx] : row[4]);
+            }
+
+          } else if (infoCode === 'SFT-016(TD)') {
+            // FD / Term deposit interest — group by bank (element = one bank)
+            const bankName = el.infoSrcName ?? el.title ?? 'Unknown Bank';
+            let bankInterest = 0;
+            for (const row of (el.l1?.columnData ?? [])) {
+              if (statusIdx >= 0 && row[statusIdx] !== 'Active') continue;
+              bankInterest += parseAmt(amtIdx >= 0 ? row[amtIdx] : row[4]);
+            }
+            if (bankInterest > 0) {
+              sftFDMap.set(bankName, (sftFDMap.get(bankName) ?? 0) + bankInterest);
+            }
+
+          } else if (/SFT-17|SFT-018|SFT-19/.test(infoCode)) {
+            // Sale of securities — capital gains
+            const salesIdx    = labels.indexOf('salesConsideration');
+            const costIdx     = labels.indexOf('costOfAcquisition');
+            const fmvIdx      = labels.indexOf('fmvValue');
+            const assetTypeIdx = labels.indexOf('assetType');
+            const secNameIdx  = labels.indexOf('securityName');
+            const dateIdx     = labels.indexOf('transferDate');
+
+            for (const row of (el.l1?.columnData ?? [])) {
+              if (statusIdx >= 0 && row[statusIdx] !== 'Active') continue;
+              sftCapitalGains.push({
+                securityName:      secNameIdx >= 0 ? (row[secNameIdx] ?? el.title ?? '') : (el.title ?? ''),
+                assetType:         assetTypeIdx >= 0 ? (row[assetTypeIdx] ?? '') : '',
+                salesConsideration: salesIdx >= 0 ? parseAmt(row[salesIdx]) : 0,
+                costOfAcquisition: costIdx >= 0 ? parseAmt(row[costIdx]) : 0,
+                fmvValue:          fmvIdx >= 0 ? parseAmt(row[fmvIdx]) : 0,
+                transferDate:      dateIdx >= 0 ? row[dateIdx] : undefined,
+              });
+            }
+          }
+        }
+      }
+
+      // ── Part B3: Challans paid ──────────────────────────────────────────
+      if (/paymentOfTaxes|part b3|payment of taxes/i.test(sKey)) {
+        for (const el of (section.elements ?? [])) {
+          const labels: string[] = (el.l1?.columnLabel ?? []).map((c: any) => c.field as string);
+          const statusIdx = labels.indexOf('status');
+          for (const row of (el.l1?.columnData ?? [])) {
+            if (statusIdx >= 0 && row[statusIdx] !== 'Active') continue;
+            const rowObj: Record<string, string> = {};
+            labels.forEach((f, i) => { rowObj[f] = row[i] ?? ''; });
+            challans.push({
+              paymentType: rowObj.paymentType ?? el.title ?? 'ADVANCE',
+              bsrCode:        rowObj.bsrCode ?? rowObj.bsr ?? '',
+              dateOfDeposit:  rowObj.dateOfDeposit ?? rowObj.paymentDate ?? '',
+              challanSerialNo: rowObj.challanSerialNo ?? rowObj.challanNo ?? '',
+              taxAmount:  parseAmt(rowObj.taxAmount),
+              totalAmount: parseAmt(rowObj.totalAmount ?? rowObj.amtPaid),
+            });
           }
         }
       }
     }
-    if (entries.length || tcsEntries.length) {
-      return { source: 'AIS', importedAt: new Date().toISOString(), pan, tdsEntries: entries, tcsEntries };
+
+    const sftFDEntries = Array.from(sftFDMap.entries()).map(([bankName, interestAmount]) => ({ bankName, interestAmount }));
+    const hasData = entries.length || tcsEntries.length || sftDividends.length || sftFDEntries.length || sftSavingsInterest > 0 || sftCapitalGains.length || challans.length;
+    if (hasData) {
+      return {
+        source: 'AIS', importedAt: new Date().toISOString(), pan,
+        tdsEntries: entries, tcsEntries,
+        ...(sftDividends.length ? { sftDividends } : {}),
+        ...(sftSavingsInterest > 0 ? { sftSavingsInterest } : {}),
+        ...(sftFDEntries.length ? { sftFDEntries } : {}),
+        ...(sftCapitalGains.length ? { sftCapitalGains } : {}),
+        ...(challans.length ? { challans } : {}),
+      };
     }
   }
 
@@ -521,6 +660,12 @@ export default function ScheduleTDS({ returnId, clientId, returnData, onSaved, s
   const [agent26ASError, setAgent26ASError] = useState<string | null>(null);
   const agent26ASPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Local agent state — Prefill JSON
+  const [agentPrefillFetching, setAgentPrefillFetching] = useState(false);
+  const [agentPrefillLog, setAgentPrefillLog] = useState<string[]>([]);
+  const [agentPrefillError, setAgentPrefillError] = useState<string | null>(null);
+  const agentPrefillPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
 
   // ── Load ────────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -641,9 +786,22 @@ export default function ScheduleTDS({ returnId, clientId, returnData, onSaved, s
             if (parsed) {
               await ipc.savePortalData(returnId, parsed);
               setPortalData(parsed);
+              await populateOSFromPortal(parsed.tdsEntries);
+              await populateOSFromAIS(parsed);
+              if (parsed.challans?.length) await populateChallansFromAIS(parsed.challans);
               const mm = await ipc.getMismatches(returnId);
               setMismatches(mm);
-              setAgentLog(prev => [...prev, `Done! ${parsed!.tdsEntries.length} TDS + ${parsed!.tcsEntries.length} TCS entries imported.`]);
+              const divCount = (parsed.sftDividends?.length ?? 0) + parsed.tdsEntries.filter(e => /^194(K|LBA)?$|^194$/.test(e.section ?? '')).length;
+              const fdCount  = (parsed.sftFDEntries?.length ?? 0) + parsed.tdsEntries.filter(e => /^194A/.test(e.section ?? '')).length;
+              setAgentLog(prev => [
+                ...prev,
+                `Done! ${parsed!.tdsEntries.length} TDS + ${parsed!.tcsEntries.length} TCS entries imported.`,
+                ...(fdCount  > 0 ? [`↳ ${fdCount} FD/interest entries added to Other Sources`]  : []),
+                ...(divCount > 0 ? [`↳ ${divCount} dividend entries added to Other Sources`] : []),
+                ...(parsed.sftSavingsInterest ? [`↳ Savings bank interest ₹${parsed.sftSavingsInterest.toLocaleString('en-IN')} added to Other Sources`] : []),
+                ...(parsed.sftCapitalGains?.length ? [`↳ ${parsed.sftCapitalGains.length} capital gain transactions found (see below)`] : []),
+                ...(parsed.challans?.length ? [`↳ ${parsed.challans.length} challan(s) imported to Tax Payments`] : []),
+              ]);
             } else {
               setAgentError('Portal data fetched but no TDS/TCS entries found. Please upload the AIS JSON file manually.');
             }
@@ -747,6 +905,143 @@ export default function ScheduleTDS({ returnId, clientId, returnData, onSaved, s
     } catch (e: any) {
       setAgent26ASFetching(false);
       setAgent26ASError(e.message ?? 'Failed to contact local agent');
+    }
+  }
+
+  // ── Fetch Prefill JSON from portal ─────────────────────────────────────────
+  async function fetchPrefillFromAgent() {
+    setAgentPrefillError(null);
+    setAgentPrefillLog([]);
+
+    let pan = (returnData as any)?.client?.pan ?? '';
+    let password = '';
+    try {
+      const cr = await fetch(`/api/clients/${clientId}/portal-credentials`);
+      if (cr.ok) {
+        const cj = await cr.json();
+        pan = cj.data?.pan ?? pan;
+        password = cj.data?.portalPassword ?? '';
+      }
+    } catch { /* ignore */ }
+
+    if (!password) {
+      setAgentPrefillError('No portal password stored for this client. Edit the client and add the portal password first.');
+      return;
+    }
+
+    setAgentPrefillFetching(true);
+    setAgentPrefillLog(['Starting prefill fetch...']);
+
+    const agentUrl = await findAgentUrl();
+    if (!agentUrl) { setAgentPrefillFetching(false); setAgentPrefillError('LOCAL_AGENT_NOT_RUNNING'); return; }
+
+    const ayLabel: string = (returnData as any)?.assessmentYear?.ayLabel ?? '2025-26';
+    const formType: string = (returnData as any)?.formType ?? 'ITR-1';
+
+    try {
+      const startRes = await fetch(`${agentUrl}/fetch-prefill`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pan, password, assessmentYear: ayLabel, formType, force: true }),
+      });
+      if (!startRes.ok) {
+        const j = await startRes.json().catch(() => ({}));
+        throw new Error(j.error ?? 'Agent failed to start prefill fetch');
+      }
+
+      agentPrefillPollRef.current = setInterval(async () => {
+        try {
+          const statusRes = await fetch(`${agentUrl}/status-prefill`);
+          const s = await statusRes.json();
+          if (s.log?.length) setAgentPrefillLog(s.log);
+
+          if (s.status === 'done') {
+            clearInterval(agentPrefillPollRef.current!);
+            setAgentPrefillFetching(false);
+            const prefill = s.result?.prefill;
+            if (!prefill) {
+              setAgentPrefillError('Prefill JSON not captured. The portal may require additional interaction.');
+              return;
+            }
+            // Import prefill JSON into the return
+            await applyPrefillJson(prefill);
+          } else if (s.status === 'error') {
+            clearInterval(agentPrefillPollRef.current!);
+            setAgentPrefillFetching(false);
+            setAgentPrefillError(s.error ?? 'Prefill fetch failed');
+          }
+        } catch { /* ignore poll errors */ }
+      }, 2000);
+
+    } catch (e: any) {
+      setAgentPrefillFetching(false);
+      setAgentPrefillError(e.message ?? 'Failed to contact local agent');
+    }
+  }
+
+  // Apply the prefill JSON returned by the IT portal to the return schedules
+  async function applyPrefillJson(prefill: any) {
+    setAgentPrefillLog(prev => [...prev, 'Applying prefill data to return...']);
+    let saved = 0;
+
+    try {
+      // The IT portal prefill JSON structure varies by form type, but generally has:
+      // ITR1 / ITR4: root.ITR.ITR1 or root.ITR1
+      const itr = prefill?.ITR?.ITR1 ?? prefill?.ITR?.ITR2 ?? prefill?.ITR?.ITR4 ?? prefill?.ITR1 ?? prefill?.ITR2 ?? prefill?.ITR4 ?? prefill;
+
+      // ── TDS Entries ─────────────────────────────────────────────────────────
+      // Look in TDSonSalaries, TDSonOthThanSal, TCSonGross
+      const tdsSalary: any[] = itr?.TDSonSalaries?.TDSonSalary ?? itr?.Schedule_TDS1?.TDSonSalaries ?? [];
+      const tdsOther: any[] = itr?.TDSonOthThanSalariesDtls?.TDSonOthThanSal ?? itr?.Schedule_TDS2?.TDSonOthThanSal ?? [];
+      const tcsList: any[] = itr?.TCSonGrossAmtDtls?.TCSonGrossAmt ?? itr?.Schedule_TCS?.TCSonGrossAmt ?? [];
+
+      const entries: any[] = [
+        ...tdsSalary.map((e: any) => ({
+          tan: e.TAN ?? e.TANofDeductor ?? '',
+          deductorName: e.NameofDeductor ?? e.EmployerName ?? '',
+          section: '192',
+          incomeAmount: Number(e.GrossSal ?? e.IncomeFromSal ?? 0),
+          tdsDeducted: Number(e.TotalTDSSal ?? e.TotalTDS ?? 0),
+          entryType: 'SALARY',
+        })),
+        ...tdsOther.map((e: any) => ({
+          tan: e.TAN ?? e.TANofDeductor ?? '',
+          deductorName: e.NameofDeductor ?? '',
+          section: e.SecCode ?? e.SectionCode ?? '',
+          incomeAmount: Number(e.AmtForTDS ?? e.GrossAmt ?? 0),
+          tdsDeducted: Number(e.TotalTDS ?? 0),
+          entryType: 'OTHER',
+        })),
+        ...tcsList.map((e: any) => ({
+          tan: e.TAN ?? '',
+          deductorName: e.NameOfCollector ?? '',
+          section: e.CollectorCode ?? '',
+          incomeAmount: Number(e.AmtOnWhichTCS ?? 0),
+          tdsDeducted: Number(e.TCSAmt ?? 0),
+          entryType: 'TCS',
+        })),
+      ].filter(e => e.tdsDeducted > 0 || e.incomeAmount > 0);
+
+      if (entries.length > 0) {
+        await fetch(`/api/returns/${returnId}/schedule/tds`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ entries }),
+        });
+        saved += entries.length;
+        setAgentPrefillLog(prev => [...prev, `✓ ${entries.length} TDS/TCS entries imported`]);
+      }
+
+      // ── Personal Info — Bank details, address ─────────────────────────────
+      // (future: could populate client profile)
+
+      setAgentPrefillLog(prev => [
+        ...prev,
+        `✓ Prefill applied — ${saved} items imported.`,
+        'Refresh the page to see updated data.',
+      ]);
+    } catch (e: any) {
+      setAgentPrefillLog(prev => [...prev, '⚠ Error applying prefill: ' + e.message]);
     }
   }
 
@@ -960,8 +1255,13 @@ export default function ScheduleTDS({ returnId, clientId, returnData, onSaved, s
 
     if (newDividends.length === 0 && newFDEntries.length === 0) return;
 
-    // Read existing ScheduleOS and merge
-    const existing = (returnData as any)?.scheduleOS;
+    // Read existing ScheduleOS and merge (handles both Prisma JSON and post-save direct formats)
+    const rawOS = (returnData as any)?.osSchedule;
+    let existing: any = (returnData as any)?.scheduleOS ?? null;
+    if (!existing && rawOS?.otherSourceItemsJson) {
+      try { existing = JSON.parse(rawOS.otherSourceItemsJson); } catch { existing = {}; }
+    }
+    existing = existing ?? {};
     const existingFD: Array<{ bankName: string; interestAmount: number; tdsDeducted: number }> =
       Array.isArray(existing?._fdEntries) ? existing._fdEntries : [];
     const existingDiv: Array<{ companyName: string; amount: number }> =
@@ -979,11 +1279,18 @@ export default function ScheduleTDS({ returnId, clientId, returnData, onSaved, s
 
     const fdInterest = mergedFD.reduce((s, f) => s + f.interestAmount, 0);
     const dividends = mergedDiv.reduce((s, d) => s + d.amount, 0);
+    const savingsInterest = existing?.savingsInterest ?? 0;
+    const otherIncome = existing?.otherIncome ?? 0;
+    const familyPension = existing?.familyPension ?? 0;
+    const lotteryWinnings = existing?.lotteryWinnings ?? 0;
+    const deductionU57 = existing?.deductionU57 ?? 0;
+    const totalOSIncome = fdInterest + dividends + savingsInterest + otherIncome + familyPension + lotteryWinnings - deductionU57;
 
     const payload = {
       ...(existing ?? {}),
       fdInterest,
       dividends,
+      totalOSIncome,
       _fdEntries: mergedFD,
       _dividendEntries: mergedDiv,
     };
@@ -992,6 +1299,78 @@ export default function ScheduleTDS({ returnId, clientId, returnData, onSaved, s
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
+    });
+  }
+
+  // Merge SFT-sourced dividends, savings interest, and FD entries into ScheduleOS
+  async function populateOSFromAIS(parsed: ParsedPortalData) {
+    if (!parsed.sftDividends?.length && !parsed.sftFDEntries?.length && parsed.sftSavingsInterest === undefined) return;
+
+    const rawOS = (returnData as any)?.osSchedule;
+    let existing: any = (returnData as any)?.scheduleOS ?? null;
+    if (!existing && rawOS?.otherSourceItemsJson) {
+      try { existing = JSON.parse(rawOS.otherSourceItemsJson); } catch { existing = {}; }
+    }
+    existing = existing ?? {};
+    const existingFD: Array<{ bankName: string; interestAmount: number; tdsDeducted: number }> =
+      Array.isArray(existing?._fdEntries) ? existing._fdEntries : [];
+    const existingDiv: Array<{ companyName: string; amount: number }> =
+      Array.isArray(existing?._dividendEntries) ? existing._dividendEntries : [];
+
+    const newDivs = parsed.sftDividends ?? [];
+    const newFDs  = (parsed.sftFDEntries ?? []).map(f => ({ ...f, tdsDeducted: 0 }));
+
+    const mergedFD = [
+      ...existingFD.filter(f => !newFDs.some(n => n.bankName === f.bankName)),
+      ...newFDs,
+    ];
+    const mergedDiv = [
+      ...existingDiv.filter(d => !newDivs.some(n => n.companyName === d.companyName)),
+      ...newDivs,
+    ];
+
+    const fdInterest = mergedFD.reduce((s, f) => s + f.interestAmount, 0);
+    const dividends  = mergedDiv.reduce((s, d) => s + d.amount, 0);
+    const savingsInterest = parsed.sftSavingsInterest ?? (existing?.savingsInterest ?? 0);
+    const otherIncome = existing?.otherIncome ?? 0;
+    const familyPension = existing?.familyPension ?? 0;
+    const lotteryWinnings = existing?.lotteryWinnings ?? 0;
+    const deductionU57 = existing?.deductionU57 ?? 0;
+    const totalOSIncome = fdInterest + dividends + savingsInterest + otherIncome + familyPension + lotteryWinnings - deductionU57;
+
+    const payload = {
+      ...(existing ?? {}),
+      fdInterest,
+      dividends,
+      savingsInterest,
+      totalOSIncome,
+      _fdEntries:       mergedFD,
+      _dividendEntries: mergedDiv,
+    };
+
+    await fetch(`/api/returns/${returnId}/schedule/otherSources`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  }
+
+  // Import challans from AIS Part B3 into Tax Payments
+  async function populateChallansFromAIS(challans: AISChallan[]) {
+    if (!challans.length) return;
+    await fetch(`/api/returns/${returnId}/schedule/taxPayments`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        entries: challans.map(c => ({
+          paymentType:    /advance|300/i.test(c.paymentType) ? 'ADVANCE' : 'SAT',
+          bsrCode:        c.bsrCode,
+          dateOfDeposit:  c.dateOfDeposit || new Date().toISOString().slice(0, 10),
+          challanSerialNo: c.challanSerialNo,
+          taxAmount:      c.taxAmount,
+          totalAmount:    c.totalAmount,
+        })),
+      }),
     });
   }
 
@@ -1107,7 +1486,7 @@ export default function ScheduleTDS({ returnId, clientId, returnData, onSaved, s
             {/* 26AS fetch button */}
             <button
               className="btn btn-secondary btn-sm"
-              disabled={agentFetching || agent26ASFetching}
+              disabled={agentFetching || agent26ASFetching || agentPrefillFetching}
               onClick={async () => {
                 setAgent26ASError(null);
                 const avail = await checkAgent();
@@ -1119,6 +1498,23 @@ export default function ScheduleTDS({ returnId, clientId, returnData, onSaved, s
               }}
             >
               {agent26ASFetching ? '⏳ Fetching 26AS…' : '📄 Fetch 26AS'}
+            </button>
+            {/* Prefill JSON fetch button — PAN + password only */}
+            <button
+              className="btn btn-secondary btn-sm"
+              disabled={agentFetching || agent26ASFetching || agentPrefillFetching}
+              title="Login with PAN & password and auto-import all prefilled data (TDS, income, etc.) from the IT portal"
+              onClick={async () => {
+                setAgentPrefillError(null);
+                const avail = await checkAgent();
+                if (!avail) {
+                  setAgentPrefillError('LOCAL_AGENT_NOT_RUNNING');
+                  return;
+                }
+                await fetchPrefillFromAgent();
+              }}
+            >
+              {agentPrefillFetching ? '⏳ Importing Prefill…' : '⬇ Import Prefill JSON'}
             </button>
           </div>
         </div>
@@ -1135,6 +1531,19 @@ export default function ScheduleTDS({ returnId, clientId, returnData, onSaved, s
           <div style={{ marginTop: 10, padding: '8px 12px', background: 'rgba(30,40,60,0.4)', borderRadius: 6, fontSize: 12, color: 'var(--text-muted)', fontFamily: 'monospace' }}>
             <div style={{ fontWeight: 700, marginBottom: 4, color: 'var(--text-primary)' }}>26AS Fetch Log</div>
             {agent26ASLog.map((l, i) => <div key={i}>▶ {l}</div>)}
+          </div>
+        )}
+        {/* Prefill log */}
+        {(agentPrefillFetching || agentPrefillLog.length > 0) && (
+          <div style={{ marginTop: 10, padding: '8px 12px', background: 'rgba(30,40,60,0.4)', borderRadius: 6, fontSize: 12, color: 'var(--text-muted)', fontFamily: 'monospace' }}>
+            <div style={{ fontWeight: 700, marginBottom: 4, color: 'var(--text-primary)' }}>Prefill Import Log</div>
+            {agentPrefillLog.map((l, i) => <div key={i}>▶ {l}</div>)}
+            {agentPrefillFetching && <div style={{ color: 'var(--brand-primary)', marginTop: 4 }}>● Follow any prompts in the browser window…</div>}
+          </div>
+        )}
+        {agentPrefillError && agentPrefillError !== 'LOCAL_AGENT_NOT_RUNNING' && (
+          <div style={{ marginTop: 8, padding: '8px 12px', background: 'rgba(220,38,38,0.1)', border: '1px solid rgba(220,38,38,0.3)', borderRadius: 6, fontSize: 12, color: '#f87171' }}>
+            {agentPrefillError}
           </div>
         )}
 
@@ -1184,6 +1593,40 @@ export default function ScheduleTDS({ returnId, clientId, returnData, onSaved, s
           </div>
         )}
       </div>
+
+      {/* ── Capital Gains from AIS ───────────────────────────────────────────── */}
+      {portalData?.sftCapitalGains && portalData.sftCapitalGains.length > 0 && (
+        <div className="card" style={{ borderColor: 'rgba(147,112,219,0.4)' }}>
+          <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)', marginBottom: 8 }}>
+            📊 Capital Gains from AIS ({portalData.sftCapitalGains.length} transactions)
+          </div>
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10 }}>
+            The following equity/security sale transactions were reported in your AIS. Please review and enter them in the Capital Gains schedule (not yet supported for auto-import).
+          </p>
+          <table className="data-table" style={{ width: '100%', fontSize: 12 }}>
+            <thead>
+              <tr>
+                <th>Security</th>
+                <th>Type</th>
+                <th>Transfer Date</th>
+                <th style={{ textAlign: 'right' }}>Sale Consideration</th>
+                <th style={{ textAlign: 'right' }}>Cost / FMV</th>
+              </tr>
+            </thead>
+            <tbody>
+              {portalData.sftCapitalGains.map((cg, i) => (
+                <tr key={i}>
+                  <td>{cg.securityName}</td>
+                  <td><span style={{ fontSize: 11, padding: '2px 6px', borderRadius: 4, background: cg.assetType.toLowerCase().includes('long') ? 'rgba(74,222,128,0.1)' : 'rgba(248,81,73,0.1)', color: cg.assetType.toLowerCase().includes('long') ? '#4ade80' : '#f85149' }}>{cg.assetType}</span></td>
+                  <td>{cg.transferDate ?? '—'}</td>
+                  <td style={{ textAlign: 'right' }} className="amount">₹{cg.salesConsideration.toLocaleString('en-IN')}</td>
+                  <td style={{ textAlign: 'right' }} className="amount">₹{(cg.costOfAcquisition || cg.fmvValue).toLocaleString('en-IN')}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* ── Mismatch Panel ────────────────────────────────────────────────────── */}
       {mismatches.length > 0 && (
