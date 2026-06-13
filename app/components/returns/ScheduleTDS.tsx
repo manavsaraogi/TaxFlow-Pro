@@ -188,46 +188,130 @@ function parseAISJson(raw: any): ParsedPortalData {
   const entries: PortalTDSEntry[] = [];
   const tcsEntries: ParsedPortalData['tcsEntries'] = [];
 
-  // Try various AIS JSON formats from incometax.gov.in
-  const tdsArr =
-    raw?.taxData?.tds ??
-    raw?.aisData?.tdsDetails ??
-    raw?.tdsDetails ??
-    raw?.tdsSummary ??
-    raw?.TDS_DETAILS ??
-    [];
+  // ── AIS Utility v14+ format (partB.sections[0] = TDS/TCS section) ─────────
+  // Structure: { partA: { columnData: [PAN,...,DOB,...] }, partB: { sections: [...] } }
+  if (raw?.partB?.sections && raw?.partA?.columnData) {
+    const pan: string = raw.partA.columnData[0] ?? '';
+    const tdsSections: any[] = raw.partB.sections.filter(
+      (s: any) => /part b1|tax deducted|tax collected/i.test(s.title ?? '')
+    );
+    for (const section of tdsSections) {
+      for (const el of (section.elements ?? [])) {
+        const tan: string  = el.infoSrcId ?? '';
+        const name: string = el.l1Src === 'AIS_TDS_TCS' ? (el.title ?? 'Unknown') : (el.title ?? 'Unknown');
+        const labels: string[] = (el.l1?.columnLabel ?? []).map((c: any) => c.field as string);
+        const isTCS = /TCS|tax collected/i.test(section.title ?? '');
+        const infoCode: string = el.l1?.columnLabel?.find((c: any) => c.infoCode)?.infoCode ?? '';
+        // infoCode is like "TDS-194A" → section = "194A"
+        const section_code = infoCode.replace(/^TDS-/i, '').replace(/^TCS-/i, '');
 
-  for (const t of tdsArr) {
-    entries.push({
-      tan: t.tan ?? t.TAN ?? t.deductorTAN ?? '',
-      name: t.payerName ?? t.deductorName ?? t.PAYER_NAME ?? t.name ?? 'Unknown',
-      section: t.section ?? t.sectionCode ?? t.SECTION ?? '',
-      incomeAmount: Number(t.grossAmount ?? t.amountCredited ?? t.AMOUNT_CREDITED ?? t.amount ?? 0),
-      tdsDeducted: Number(t.taxDeducted ?? t.TDS ?? t.TAX_DEDUCTED ?? t.tds ?? 0),
-      entryType: t.type ?? t.category ?? 'OTHER',
-    });
+        for (const row of (el.l1?.columnData ?? [])) {
+          const rowObj: Record<string, string> = {};
+          labels.forEach((f, i) => { rowObj[f] = row[i] ?? ''; });
+          const parseAmt = (v: string) => parseFloat((v ?? '0').replace(/,/g, '')) || 0;
+          const gross = parseAmt(rowObj.amtPaid);
+          const tax   = parseAmt(rowObj.amountDeducted);
+          if (isTCS) {
+            tcsEntries.push({ tan, name, amount: gross, tcsCollected: tax });
+          } else {
+            entries.push({ tan, name, section: section_code, incomeAmount: gross, tdsDeducted: tax, entryType: el.title ?? 'OTHER' });
+          }
+        }
+      }
+    }
+    if (entries.length || tcsEntries.length) {
+      return { source: 'AIS', importedAt: new Date().toISOString(), pan, tdsEntries: entries, tcsEntries };
+    }
   }
 
-  const tcsArr =
-    raw?.taxData?.tcs ??
-    raw?.aisData?.tcsDetails ??
-    raw?.tcsDetails ??
-    raw?.TCS_DETAILS ??
-    [];
+  // ── IT Portal AIS API format (from ais.insight.gov.in API response) ──────
+  // Structure: { data: { aisTaxpayerData: { aisInformation: [...] } } }
+  // Each aisInformation entry has informationCategory + transactionDetails[]
+  const aisTaxpayerData =
+    raw?.data?.aisTaxpayerData ??
+    raw?.aisTaxpayerData ??
+    null;
 
-  for (const t of tcsArr) {
-    tcsEntries.push({
-      tan: t.tan ?? t.TAN ?? t.collectorTAN ?? '',
-      name: t.collectorName ?? t.payerName ?? t.name ?? 'Unknown',
-      amount: Number(t.amount ?? t.grossAmount ?? 0),
-      tcsCollected: Number(t.taxCollected ?? t.TCS ?? t.tcs ?? 0),
-    });
+  if (aisTaxpayerData) {
+    const infoList: any[] = aisTaxpayerData.aisInformation ?? [];
+    for (const info of infoList) {
+      const cat: string = info.informationCategory ?? '';
+      const isTDS = /TDS|tax deducted/i.test(cat);
+      const isTCS = /TCS|tax collected/i.test(cat);
+      const txns: any[] = info.transactionDetails ?? info.aisTransactionDetails ?? [];
+
+      for (const t of txns) {
+        const tan = t.deductorTAN ?? t.collectorTAN ?? t.tan ?? '';
+        const name = t.deductorName ?? t.collectorName ?? t.payerName ?? t.name ?? info.informationType ?? 'Unknown';
+        const section = t.sectionCode ?? t.section ?? info.informationType ?? '';
+        const gross = Number(t.transactionAmount ?? t.grossAmount ?? t.amount ?? 0);
+        const tax = Number(t.taxDeducted ?? t.taxCollected ?? t.tdsAmount ?? 0);
+
+        if (isTCS) {
+          tcsEntries.push({ tan, name, amount: gross, tcsCollected: tax });
+        } else if (isTDS || tax > 0) {
+          entries.push({ tan, name, section, incomeAmount: gross, tdsDeducted: tax, entryType: cat || 'OTHER' });
+        }
+      }
+    }
   }
 
-  // Handle flat array format: [{ section, deductorTAN, deductorName, ... }]
+  // ── Flat aisInformation array at root (some API versions) ─────────────────
+  if (entries.length === 0) {
+    const infoList: any[] = raw?.aisInformation ?? raw?.ais_information ?? [];
+    for (const info of infoList) {
+      const txns: any[] = info.transactionDetails ?? info.aisTransactionDetails ?? [];
+      for (const t of txns) {
+        const tax = Number(t.taxDeducted ?? t.taxCollected ?? 0);
+        if (tax > 0 || t.deductorTAN) {
+          entries.push({
+            tan: t.deductorTAN ?? t.tan ?? '',
+            name: t.deductorName ?? info.informationType ?? 'Unknown',
+            section: t.sectionCode ?? info.informationType ?? '',
+            incomeAmount: Number(t.transactionAmount ?? t.grossAmount ?? 0),
+            tdsDeducted: tax,
+            entryType: info.informationCategory ?? 'OTHER',
+          });
+        }
+      }
+    }
+  }
+
+  // ── Legacy / guessed formats ───────────────────────────────────────────────
+  if (entries.length === 0) {
+    const tdsArr =
+      raw?.taxData?.tds ??
+      raw?.aisData?.tdsDetails ??
+      raw?.tdsDetails ??
+      raw?.tdsSummary ??
+      raw?.TDS_DETAILS ??
+      [];
+    for (const t of tdsArr) {
+      entries.push({
+        tan: t.tan ?? t.TAN ?? t.deductorTAN ?? '',
+        name: t.payerName ?? t.deductorName ?? t.name ?? 'Unknown',
+        section: t.section ?? t.sectionCode ?? '',
+        incomeAmount: Number(t.grossAmount ?? t.amountCredited ?? t.amount ?? 0),
+        tdsDeducted: Number(t.taxDeducted ?? t.TDS ?? t.tds ?? 0),
+        entryType: t.type ?? t.category ?? 'OTHER',
+      });
+    }
+    const tcsArr =
+      raw?.taxData?.tcs ?? raw?.aisData?.tcsDetails ?? raw?.tcsDetails ?? raw?.TCS_DETAILS ?? [];
+    for (const t of tcsArr) {
+      tcsEntries.push({
+        tan: t.tan ?? t.collectorTAN ?? '',
+        name: t.collectorName ?? t.payerName ?? t.name ?? 'Unknown',
+        amount: Number(t.amount ?? t.grossAmount ?? 0),
+        tcsCollected: Number(t.taxCollected ?? t.TCS ?? t.tcs ?? 0),
+      });
+    }
+  }
+
+  // ── Flat array at root ─────────────────────────────────────────────────────
   if (entries.length === 0 && Array.isArray(raw)) {
     for (const t of raw) {
-      if (t.taxDeducted !== undefined || t.tds !== undefined) {
+      if (t.taxDeducted !== undefined || t.tds !== undefined || t.deductorTAN) {
         entries.push({
           tan: t.tan ?? t.deductorTAN ?? '',
           name: t.deductorName ?? t.payerName ?? t.name ?? 'Unknown',
@@ -239,13 +323,11 @@ function parseAISJson(raw: any): ParsedPortalData {
     }
   }
 
-  return {
-    source: 'AIS',
-    importedAt: new Date().toISOString(),
-    pan: raw?.payerInfo?.pan ?? raw?.pan ?? raw?.PAN ?? '',
-    tdsEntries: entries,
-    tcsEntries,
-  };
+  const pan =
+    raw?.data?.aisTaxpayerData?.taxpayerInfo?.pan ??
+    raw?.payerInfo?.pan ?? raw?.pan ?? raw?.PAN ?? '';
+
+  return { source: 'AIS', importedAt: new Date().toISOString(), pan, tdsEntries: entries, tcsEntries };
 }
 
 function parse26ASText(text: string): ParsedPortalData {
@@ -349,6 +431,13 @@ export default function ScheduleTDS({ returnId, clientId, returnData, onSaved, s
   const [showImportPanel, setShowImportPanel] = useState(false);
   const [mismatchLoading, setMismatchLoading] = useState(false);
 
+  // Local agent state
+  const [agentAvailable, setAgentAvailable] = useState<boolean | null>(null); // null = not checked yet
+  const [agentFetching, setAgentFetching] = useState(false);
+  const [agentLog, setAgentLog] = useState<string[]>([]);
+  const [agentError, setAgentError] = useState<string | null>(null);
+  const agentPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
 
   // ── Load ────────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -365,7 +454,159 @@ export default function ScheduleTDS({ returnId, clientId, returnData, onSaved, s
     });
   }, [returnId]);
 
+  // ── Local agent helpers ─────────────────────────────────────────────────────
+
+  // Finds the agent URL — tries localhost first, then any saved office IP
+  async function findAgentUrl(): Promise<string | null> {
+    const candidates = [
+      'http://localhost:3001',
+      ...(typeof localStorage !== 'undefined'
+        ? [localStorage.getItem('taxflow_agent_url')].filter(Boolean) as string[]
+        : []),
+    ];
+    for (const url of candidates) {
+      try {
+        const res = await fetch(`${url}/health`, { signal: AbortSignal.timeout(2000) });
+        if (res.ok) return url;
+      } catch { /* try next */ }
+    }
+    return null;
+  }
+
+  async function checkAgent(): Promise<boolean> {
+    const url = await findAgentUrl();
+    setAgentAvailable(!!url);
+    return !!url;
+  }
+
+  async function fetchFromAgent() {
+    setAgentError(null);
+    setAgentLog([]);
+    // Get pan + password for this client from the API
+    let pan = (returnData as any)?.client?.pan ?? '';
+    let password = '';
+    let dob = '';
+    try {
+      const cr = await fetch(`/api/clients/${(returnData as any)?.clientId ?? (returnData as any)?.client?.id ?? ''}/portal-credentials`);
+      if (cr.ok) {
+        const cj = await cr.json();
+        pan = cj.data?.pan ?? pan;
+        password = cj.data?.portalPassword ?? '';
+        dob = cj.data?.dob ?? '';
+      }
+    } catch { /* ignore */ }
+
+    if (!password) {
+      setAgentError('No portal password stored for this client. Edit the client and add the portal password first.');
+      return;
+    }
+    if (!dob) {
+      setAgentError('Date of Birth not set for this client. Edit the client and save the Date of Birth (needed to decrypt the AIS file).');
+      return;
+    }
+
+    setAgentFetching(true);
+    setAgentLog(['Starting portal agent...']);
+
+    const agentUrl = await findAgentUrl();
+    if (!agentUrl) { setAgentFetching(false); setAgentError('LOCAL_AGENT_NOT_RUNNING'); return; }
+
+    // Derive assessment year from return data (e.g. "2025-26")
+    const ayLabel: string = (returnData as any)?.assessmentYear?.label ?? '2025-26';
+
+    try {
+      const startRes = await fetch(`${agentUrl}/fetch-portal-data`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pan, password, dob, assessmentYear: ayLabel, force: true }),
+      });
+      if (!startRes.ok) {
+        const j = await startRes.json().catch(() => ({}));
+        throw new Error(j.error ?? 'Agent failed to start');
+      }
+
+      // Poll for status
+      agentPollRef.current = setInterval(async () => {
+        try {
+          const statusRes = await fetch(`${agentUrl}/status`);
+          const s = await statusRes.json();
+          if (s.log?.length) setAgentLog(s.log);
+
+          if (s.status === 'done') {
+            clearInterval(agentPollRef.current!);
+            setAgentFetching(false);
+            const data = s.result;
+
+            let parsed: ParsedPortalData | null = null;
+
+            // Try AIS JSON first
+            if (data?.ais) {
+              const p = parseAISJson(data.ais);
+              if (p.tdsEntries.length || p.tcsEntries.length) parsed = p;
+            }
+            // Fall back to 26AS (may be raw text or JSON)
+            if (!parsed && data?.form26AS) {
+              if (data.form26AS.raw) {
+                const p = parse26ASText(data.form26AS.raw);
+                if (p.tdsEntries.length || p.tcsEntries.length) parsed = p;
+              } else {
+                const p = parseAISJson(data.form26AS);
+                if (p.tdsEntries.length || p.tcsEntries.length) parsed = p;
+              }
+            }
+
+            if (parsed) {
+              await ipc.savePortalData(returnId, parsed);
+              setPortalData(parsed);
+              const mm = await ipc.getMismatches(returnId);
+              setMismatches(mm);
+              setAgentLog(prev => [...prev, `Done! ${parsed!.tdsEntries.length} TDS + ${parsed!.tcsEntries.length} TCS entries imported.`]);
+            } else {
+              setAgentError('Portal data fetched but no TDS/TCS entries found. Please upload the AIS JSON file manually.');
+            }
+          } else if (s.status === 'error') {
+            clearInterval(agentPollRef.current!);
+            setAgentFetching(false);
+            setAgentError(s.error ?? 'Portal fetch failed');
+          }
+        } catch { /* ignore poll errors */ }
+      }, 2000);
+
+    } catch (e: any) {
+      setAgentFetching(false);
+      setAgentError(e.message ?? 'Failed to contact local agent');
+    }
+  }
+
   // ── Portal helpers ──────────────────────────────────────────────────────────
+  // Decrypt an AIS Utility v14+ encrypted file in the browser.
+  // Format: [32-hex IV][32-hex Salt][Base64 AES-256-CBC ciphertext]
+  // Password = pan.toLowerCase() + "GQ39%*g" + dob_DDMMYYYY
+  // Key = PBKDF2-SHA256(password, salt, 1000 iterations, 32 bytes)
+  async function decryptAISFile(content: string, pan: string, dob: string): Promise<any> {
+    const trimmed = content.trim();
+    if (!/^[0-9a-f]{64}/i.test(trimmed)) throw new Error('Not an encrypted AIS Utility file');
+
+    function hexToBytes(hex: string) {
+      const arr = new Uint8Array(hex.length / 2);
+      for (let i = 0; i < arr.length; i++) arr[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+      return arr;
+    }
+
+    const iv       = hexToBytes(trimmed.slice(0, 32));
+    const salt     = hexToBytes(trimmed.slice(32, 64));
+    const encBytes = Uint8Array.from(atob(trimmed.slice(64)), c => c.charCodeAt(0));
+    const AIS_ID   = 'GQ39%*g';
+
+    const password = pan.toLowerCase() + AIS_ID + dob;
+    const pwBytes  = new TextEncoder().encode(password);
+    const baseKey  = await crypto.subtle.importKey('raw', pwBytes, 'PBKDF2', false, ['deriveBits']);
+    const keyBits  = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations: 1000, hash: 'SHA-256' }, baseKey, 256);
+    const aesKey   = await crypto.subtle.importKey('raw', keyBits, { name: 'AES-CBC' }, false, ['decrypt']);
+    const plain    = await crypto.subtle.decrypt({ name: 'AES-CBC', iv }, aesKey, encBytes);
+    return JSON.parse(new TextDecoder().decode(plain).trim());
+  }
+
   async function handleFileImport(file: File) {
     setImportLoading(true);
     setImportError(null);
@@ -374,7 +615,21 @@ export default function ScheduleTDS({ returnId, clientId, returnData, onSaved, s
       let parsed: ParsedPortalData;
 
       if (file.name.endsWith('.json') || file.type === 'application/json') {
-        const json = JSON.parse(text);
+        let json: any;
+        // Detect encrypted AIS Utility format (64-char hex prefix)
+        if (/^[0-9a-f]{64}/i.test(text.trimStart())) {
+          // Fetch client PAN + DOB to derive decryption key
+          const cid = (returnData as any)?.clientId ?? (returnData as any)?.client?.id ?? '';
+          let pan = (returnData as any)?.client?.pan ?? '';
+          let dob = '';
+          try {
+            const cr = await fetch(`/api/clients/${cid}/portal-credentials`);
+            if (cr.ok) { const cj = await cr.json(); pan = cj.data?.pan ?? pan; dob = cj.data?.dob ?? ''; }
+          } catch { /* proceed with available values */ }
+          json = await decryptAISFile(text.trimStart(), pan, dob);
+        } else {
+          json = JSON.parse(text);
+        }
         parsed = parseAISJson(json);
       } else {
         parsed = parse26ASText(text);
@@ -527,7 +782,7 @@ export default function ScheduleTDS({ returnId, clientId, returnData, onSaved, s
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
           <div>
             <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)', marginBottom: 2 }}>
-              26AS / AIS — Income Tax Portal
+              26AS / AIS / TIS — Income Tax Portal
             </div>
             {portalData ? (
               <div style={{ fontSize: 12, color: 'var(--status-success)' }}>
@@ -536,8 +791,7 @@ export default function ScheduleTDS({ returnId, clientId, returnData, onSaved, s
               </div>
             ) : (
               <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                Fetch AIS / 26AS automatically using the client's portal credentials.
-                OTP will be required (sent to client's registered mobile).
+                Fetch automatically using portal credentials, or upload AIS JSON / 26AS file.
               </div>
             )}
           </div>
@@ -552,24 +806,72 @@ export default function ScheduleTDS({ returnId, clientId, returnData, onSaved, s
                 </button>
               </>
             )}
-              <label style={{ cursor: 'pointer' }}>
+            {/* Auto fetch button — uses local agent */}
+            <button
+              className="btn btn-primary btn-sm"
+              disabled={agentFetching}
+              onClick={async () => {
+                setAgentError(null);
+                const avail = await checkAgent();
+                if (!avail) {
+                  setAgentError('LOCAL_AGENT_NOT_RUNNING');
+                  return;
+                }
+                await fetchFromAgent();
+              }}
+            >
+              {agentFetching ? '⏳ Fetching…' : '🔄 Fetch from Portal'}
+            </button>
+            {/* Manual file upload fallback */}
+            <label style={{ cursor: 'pointer' }}>
               <input type="file" accept=".json,.txt,.csv" style={{ display: 'none' }}
                 onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileImport(f); e.target.value = ''; }} />
-              <span className="btn btn-primary btn-sm">
-                {importLoading ? '⏳ Importing…' : portalData ? '↺ Re-import AIS / 26AS' : '⬇ Import AIS / 26AS'}
+              <span className="btn btn-secondary btn-sm">
+                {importLoading ? '⏳ Importing…' : '⬆ Upload AIS / 26AS'}
               </span>
             </label>
           </div>
         </div>
 
+        {/* Agent log while fetching */}
+        {agentFetching && agentLog.length > 0 && (
+          <div style={{ marginTop: 10, padding: '8px 12px', background: 'rgba(30,40,60,0.4)', borderRadius: 6, fontSize: 12, color: 'var(--text-muted)', fontFamily: 'monospace' }}>
+            {agentLog.map((l, i) => <div key={i}>▶ {l}</div>)}
+          </div>
+        )}
+
+        {/* Error states */}
+        {agentError === 'LOCAL_AGENT_NOT_RUNNING' && (
+          <div style={{ marginTop: 10, padding: '10px 14px', background: 'rgba(210,153,34,0.1)', border: '1px solid rgba(210,153,34,0.3)', borderRadius: 6, fontSize: 12, lineHeight: 1.9 }}>
+            <strong style={{ color: 'var(--status-warning)' }}>Portal Agent not found on this computer.</strong><br />
+            <strong>Option 1 — Install on this PC (one-time):</strong><br />
+            Run <code style={{ background: 'rgba(0,0,0,0.3)', padding: '2px 6px', borderRadius: 3 }}>local-portal-agent\install-startup.bat</code> — agent will auto-start every login.<br />
+            <strong>Option 2 — Use office PC running the agent:</strong><br />
+            Enter the IP of the PC that has the agent running:&nbsp;
+            <input
+              type="text" placeholder="e.g. 192.168.1.10:3001"
+              style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 3, color: 'var(--text-primary)', padding: '2px 6px', width: 160 }}
+              onBlur={e => {
+                const val = e.target.value.trim();
+                if (val) {
+                  const url = val.startsWith('http') ? val : `http://${val}`;
+                  localStorage.setItem('taxflow_agent_url', url);
+                  setAgentError(null);
+                }
+              }}
+            />&nbsp;
+            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>(press Tab to save)</span><br />
+            <strong>Option 3:</strong> Upload AIS JSON manually using the Upload button above.
+          </div>
+        )}
+        {agentError && agentError !== 'LOCAL_AGENT_NOT_RUNNING' && (
+          <div style={{ marginTop: 10, padding: '8px 12px', background: 'rgba(248,81,73,0.1)', border: '1px solid rgba(248,81,73,0.3)', borderRadius: 6, fontSize: 12, color: '#f85149' }}>
+            {agentError}
+          </div>
+        )}
         {importError && (
           <div style={{ marginTop: 10, padding: '8px 12px', background: 'rgba(248,81,73,0.1)', border: '1px solid rgba(248,81,73,0.3)', borderRadius: 6, fontSize: 12, color: '#f85149' }}>
             {importError}
-          </div>
-        )}
-        {!portalData && (
-          <div style={{ marginTop: 10, fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.6 }}>
-            Login to <strong>incometax.gov.in</strong> → e-File → View AIS → Download JSON, then upload above.
           </div>
         )}
       </div>

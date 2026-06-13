@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthContext } from '@/lib/api-auth';
 import { prisma } from '@/lib/prisma';
+import { NatureOfEmployment } from '@prisma/client';
 
 type Params = { params: { id: string; key: string } };
 
@@ -20,11 +21,49 @@ export async function PUT(request: NextRequest, { params }: Params) {
 
   switch (params.key) {
     case 'salary': {
-      await prisma.salarySchedule.upsert({
+      const employers: Record<string, unknown>[] = Array.isArray(body.employers) ? body.employers : [];
+      const stdDeduction = Number(body.standardDeduction ?? 50000);
+      const entAlw = Number(body.entertainmentAllowance ?? 0);
+      const profTax = Number(body.professionalTax ?? 0);
+      const totalDeduct = stdDeduction + entAlw + profTax;
+
+      const salaryData = {
+        totalGrossSalary: Number(body.grossSalary ?? 0),
+        allwncExtentExemptUs10: Number(body.allowancesExempt10 ?? 0),
+        netSalary: Number(body.netSalary ?? 0),
+        deductionUs16ia: stdDeduction,
+        entertainmentAlw16ii: entAlw,
+        professionalTaxUs16iii: profTax,
+        totalDeductionUs16: totalDeduct,
+        incomeFromSalary: Number(body.incomeFromSalary ?? body.netSalary ?? 0),
+        increliefus89A: Number(body.increliefus89A ?? 0),
+        hraDetailsJson: body.hraInputs ? JSON.stringify(body.hraInputs) : null,
+        allowancesJson: JSON.stringify({ useComputedHra: body.useComputedHra ?? false, section16: body.section16 ?? {} }),
+      };
+
+      const salarySchedule = await prisma.salarySchedule.upsert({
         where: { returnId },
-        create: { returnId, ...sanitizeSchedule(body) },
-        update: sanitizeSchedule(body),
+        create: { returnId, ...salaryData },
+        update: salaryData,
       });
+
+      // Replace employer entries
+      await prisma.employerEntry.deleteMany({ where: { salaryScheduleId: salarySchedule.id } });
+      if (employers.length > 0) {
+        await prisma.employerEntry.createMany({
+          data: employers.map((e, i) => ({
+            salaryScheduleId: salarySchedule.id,
+            seqNo: i + 1,
+            nameOfEmployer: String(e.employerName ?? ''),
+            natureOfEmployment: mapEmployerCategory(String(e.employerCategory ?? 'others')) as NatureOfEmployment,
+            tanOfEmployer: e.tan ? String(e.tan) : null,
+            grossSalary: Number(e.grossSalary ?? 0),
+            salary: Number(e.grossSalary ?? 0),
+            valueOfPerquisites: Number(e.perquisites ?? 0),
+            profitsinLieuOfSalary: Number(e.profitInLieuOfSalary ?? 0) + Number(e.retirementBenefits ?? 0),
+          })),
+        });
+      }
       break;
     }
     case 'otherSources': {
@@ -131,4 +170,14 @@ function sanitizeSchedule(obj: Record<string, unknown>): Record<string, unknown>
   // Remove id, returnId, createdAt, updatedAt from incoming data to avoid conflicts
   const { id: _id, returnId: _rid, createdAt: _ca, updatedAt: _ua, ...rest } = obj;
   return rest;
+}
+
+function mapEmployerCategory(cat: string): string {
+  const map: Record<string, string> = {
+    govt: 'CGOV',
+    psu: 'PSU',
+    others: 'OTH',
+    pensioners: 'PE',
+  };
+  return map[cat] ?? 'OTH';
 }

@@ -46,6 +46,13 @@ function emptyEmployer(): EmployerEntry {
   };
 }
 
+function reverseMapEmployerCategory(nat: string): EmployerEntry['employerCategory'] {
+  if (nat === 'CGOV' || nat === 'SGOV') return 'govt';
+  if (nat === 'PSU') return 'psu';
+  if (nat === 'PE' || nat === 'PESG' || nat === 'PEPS' || nat === 'PEO') return 'pensioners';
+  return 'others';
+}
+
 // Deduction u/s 16
 interface Section16 {
   standardDeduction: number;      // fixed ₹75,000 for AY 2026-27
@@ -379,20 +386,46 @@ export default function ScheduleSalaryComponent({ returnId, returnData, onSaved,
   // ── Hydrate from returnData on mount ──
   useEffect(() => {
     if (!returnData) return;
-    const s = (returnData as any).scheduleSalary;
+    // DB relation is named `salarySchedule`; legacy code used `scheduleSalary`
+    const s = (returnData as any).salarySchedule ?? (returnData as any).scheduleSalary;
     if (!s) return;
 
-    // Map ScheduleSalary (itr.ts) → local form state
-    // We store raw employer arrays; adapt field names as needed
-    const employers: EmployerEntry[] = Array.isArray((s as any).employers)
-      ? (s as any).employers.map((e: any) => ({ id: crypto.randomUUID(), ...e }))
+    // Parse JSON fields stored by the API
+    let hraInputs = defaultState().hraInputs;
+    let section16 = defaultState().section16;
+    let useComputedHra = true;
+    try {
+      if (s.hraDetailsJson) hraInputs = JSON.parse(s.hraDetailsJson);
+      if (s.allowancesJson) {
+        const aj = JSON.parse(s.allowancesJson);
+        if (aj.section16) section16 = aj.section16;
+        if (aj.useComputedHra !== undefined) useComputedHra = aj.useComputedHra;
+      }
+    } catch { /* use defaults */ }
+
+    // DB employers have different field names; map them back
+    const dbEmployers: any[] = Array.isArray(s.employers) ? s.employers : [];
+    const employers: EmployerEntry[] = dbEmployers.length
+      ? dbEmployers.map((e: any) => ({
+          id: crypto.randomUUID(),
+          employerName: e.nameOfEmployer ?? '',
+          tan: e.tanOfEmployer ?? '',
+          employerCategory: reverseMapEmployerCategory(e.natureOfEmployment),
+          grossSalary: e.grossSalary ?? 0,
+          allowancesExemptU10: 0,
+          hraReceived: 0,
+          hraExempt: 0,
+          perquisites: e.valueOfPerquisites ?? 0,
+          profitInLieuOfSalary: e.profitsinLieuOfSalary ?? 0,
+          retirementBenefits: 0,
+        }))
       : [emptyEmployer()];
 
     setState({
       employers: employers.length ? employers : [emptyEmployer()],
-      section16: (s as any).section16 ?? defaultState().section16,
-      hraInputs: (s as any).hraInputs ?? defaultState().hraInputs,
-      useComputedHra: (s as any).useComputedHra ?? true,
+      section16,
+      hraInputs,
+      useComputedHra,
     });
   }, [returnId]);
 

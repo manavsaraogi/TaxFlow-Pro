@@ -1,0 +1,16 @@
+{
+  "name": "taxflow-portal-agent",
+  "version": "1.0.0",
+  "description": "Local agent for fetching AIS/26AS/TIS from Income Tax Portal",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "install-browser": "npx playwright install chromium"
+  },
+  "dependencies": {
+    "adm-zip": "^0.5.17",
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "playwright": "^1.44.0"
+  }
+}

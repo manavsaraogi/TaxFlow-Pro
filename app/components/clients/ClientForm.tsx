@@ -108,6 +108,102 @@ const STATE_CODES: { value: string; label: string }[] = [
   { value: '99', label: 'Foreign / Outside India' },
 ];
 
+// ─── Prefill JSON parser ──────────────────────────────────────────────────────
+
+function parsePrefillJson(raw: unknown): Partial<ClientFormData> & { _preview?: string } {
+  const out: Partial<ClientFormData> = {};
+  let notes: string[] = [];
+
+  // Unwrap nested ITR structure: ITR → ITR1/ITR2/ITR3/ITR4 → payload
+  //   or  Form_ITR1 / Form_ITR2 at top level
+  //   or  personalInfo at top level (flat export)
+  let obj: any = raw;
+  if (obj?.ITR) obj = obj.ITR;
+  // pick first key that looks like ITR type
+  const itrKey = Object.keys(obj).find(k => /^(ITR[1-9U]|Form_ITR)/i.test(k));
+  if (itrKey) obj = obj[itrKey];
+
+  // PersonalInfo (camelCase or PascalCase)
+  const pi: any = obj?.PersonalInfo ?? obj?.personalInfo ?? obj;
+
+  // ── PAN ──────────────────────────────────────────────────────────────────────
+  const pan = (pi?.PAN ?? pi?.pan ?? pi?.Pan ?? '').toUpperCase();
+  if (/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(pan)) { out.pan = pan; notes.push(`PAN: ${pan}`); }
+
+  // ── Name ─────────────────────────────────────────────────────────────────────
+  const nameObj = pi?.AssesseeName ?? pi?.assesseeName ?? pi?.name ?? {};
+  const firstName = nameObj?.FirstName ?? nameObj?.firstName ?? '';
+  const middleName = nameObj?.MiddleName ?? nameObj?.middleName ?? '';
+  const surName = nameObj?.SurName ?? nameObj?.surName ?? nameObj?.lastName ?? '';
+  const fullName = [firstName, middleName, surName].filter(Boolean).join(' ').trim()
+    || (typeof pi?.Name === 'string' ? pi.Name : '')
+    || (typeof pi?.name === 'string' ? pi.name : '')
+    || (typeof pi?.fullName === 'string' ? pi.fullName : '');
+  if (fullName) { out.fullName = fullName; notes.push(`Name: ${fullName}`); }
+
+  // ── DOB ──────────────────────────────────────────────────────────────────────
+  // Portal format: "DD/MM/YYYY" or "YYYY-MM-DD"
+  const dobRaw: string = pi?.DOB ?? pi?.dob ?? pi?.DateOfBirth ?? pi?.dateOfBirth ?? '';
+  if (dobRaw) {
+    let iso = '';
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(dobRaw)) {
+      const [d, m, y] = dobRaw.split('/');
+      iso = `${y}-${m}-${d}`;
+    } else if (/^\d{4}-\d{2}-\d{2}/.test(dobRaw)) {
+      iso = dobRaw.slice(0, 10);
+    }
+    if (iso) { out.dateOfBirth = iso; notes.push(`DOB: ${dobRaw}`); }
+  }
+
+  // ── Gender / Assessee type ────────────────────────────────────────────────────
+  const status: string = (pi?.Status ?? pi?.status ?? '').toUpperCase();
+  const atMap: Record<string, AssesseeType> = {
+    I: 'INDIVIDUAL', H: 'HUF', F: 'FIRM', C: 'DOMESTIC_COMPANY', B: 'BOI', A: 'AOP', J: 'AJP',
+  };
+  if (atMap[status]) { out.assesseeType = atMap[status]; notes.push(`Type: ${atMap[status]}`); }
+
+  // ── Residential status ────────────────────────────────────────────────────────
+  const res: string = (pi?.ResidentialStatus ?? pi?.residentialStatus ?? '').toUpperCase();
+  if (res === 'RES' || res === 'RESIDENT') { out.residentialStatus = 'RES'; }
+  else if (res === 'NRI') { out.residentialStatus = 'NRI'; }
+  else if (res === 'RNR') { out.residentialStatus = 'RNR'; }
+
+  // ── Address ───────────────────────────────────────────────────────────────────
+  const addr: any = pi?.Address ?? pi?.address ?? {};
+  const addrParts = [
+    addr?.ResidenceNo ?? addr?.residenceNo ?? addr?.FlatDoorBlockNo ?? addr?.flatDoorBlockNo ?? '',
+    addr?.ResidenceName ?? addr?.residenceName ?? addr?.NameBuildingVillageRoad ?? '',
+    addr?.RoadOrStreet ?? addr?.roadOrStreet ?? addr?.LocalityOrArea ?? addr?.localityOrArea ?? '',
+  ].filter(Boolean);
+  const addrStr = (pi?.address && typeof pi.address === 'string') ? pi.address : addrParts.join(', ');
+  if (addrStr) { out.address = addrStr; notes.push(`Address: ${addrStr.slice(0, 50)}`); }
+
+  const city = addr?.CityOrTownOrDistrict ?? addr?.cityOrTownOrDistrict ?? addr?.city ?? pi?.city ?? '';
+  if (city) { out.city = city; notes.push(`City: ${city}`); }
+
+  const pin = String(addr?.PinCode ?? addr?.pinCode ?? addr?.pincode ?? pi?.pinCode ?? pi?.pincode ?? '');
+  if (/^\d{6}$/.test(pin)) { out.pinCode = pin; notes.push(`PIN: ${pin}`); }
+
+  const stateRaw = String(addr?.StateCode ?? addr?.stateCode ?? addr?.State ?? pi?.stateCode ?? '').padStart(2, '0');
+  if (/^\d{2}$/.test(stateRaw) && stateRaw !== '00') { out.stateCode = stateRaw; notes.push(`State: ${stateRaw}`); }
+
+  // ── Contact ───────────────────────────────────────────────────────────────────
+  const mobile = String(addr?.MobileNo ?? addr?.mobileNo ?? addr?.Phone ?? addr?.phone ?? pi?.mobileNumber ?? pi?.mobile ?? '').replace(/\D/g, '').slice(-10);
+  if (/^[6-9]\d{9}$/.test(mobile)) { out.mobileNumber = mobile; notes.push(`Mobile: ${mobile}`); }
+
+  const email = (addr?.EmailAddress ?? addr?.emailAddress ?? pi?.email ?? pi?.Email ?? '').trim();
+  if (email.includes('@')) { out.email = email; notes.push(`Email: ${email}`); }
+
+  // ── Aadhaar ───────────────────────────────────────────────────────────────────
+  const aadhaar = String(pi?.AadhaarCardNo ?? pi?.aadhaarCardNo ?? pi?.aadhaar ?? pi?.Aadhaar ?? '').replace(/\D/g, '');
+  if (/^\d{12}$/.test(aadhaar)) { out.aadhaarNumber = aadhaar; notes.push(`Aadhaar: ****${aadhaar.slice(-4)}`); }
+
+  // ── Portal username defaults to PAN ──────────────────────────────────────────
+  if (out.pan) out.portalUsername = out.pan;
+
+  return { ...out, _preview: notes.join(' · ') };
+}
+
 const PAN_REGEX = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
 const MOBILE_REGEX = /^[6-9]\d{9}$/;
 const AADHAAR_REGEX = /^\d{12}$/;
@@ -176,6 +272,7 @@ export default function ClientForm({ clientId, onSuccess, onCancel }: ClientForm
   const [fetchLoading, setFetchLoading] = useState(isEdit);
   const [showPassword, setShowPassword] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [importPreview, setImportPreview] = useState<string | null>(null);
 
   // Load existing client in edit mode
   useEffect(() => {
@@ -333,8 +430,7 @@ export default function ClientForm({ clientId, onSuccess, onCancel }: ClientForm
             Fields marked * are required. Client data is used to generate ITR JSON.
           </p>
         </div>
-        {!isEdit && (
-          <label style={{ cursor: 'pointer' }}>
+        <label style={{ cursor: 'pointer' }}>
             <input
               type="file"
               accept=".json"
@@ -345,38 +441,34 @@ export default function ClientForm({ clientId, onSuccess, onCancel }: ClientForm
                 try {
                   const text = await file.text();
                   const parsed = JSON.parse(text);
-                  const c = Array.isArray(parsed) ? parsed[0] : parsed;
-                  if (!c?.pan) { alert('JSON must contain a "pan" field'); return; }
-                  setForm((prev) => ({
-                    ...prev,
-                    pan: (c.pan ?? prev.pan).toUpperCase(),
-                    fullName: String(c.fullName || c.name || [c.firstName, c.middleName, c.lastName || c.surName].filter(Boolean).join(' ') || prev.fullName),
-                    assesseeType: c.assesseeType ?? prev.assesseeType,
-                    dateOfBirth: ((c.dateOfBirth ?? c.dob ?? '') as string).split('T')[0] || prev.dateOfBirth,
-                    residentialStatus: c.residentialStatus ?? prev.residentialStatus,
-                    mobileNumber: c.mobileNumber ?? c.mobile ?? prev.mobileNumber,
-                    email: c.email ?? prev.email,
-                    address: c.address ?? prev.address,
-                    city: c.city ?? prev.city,
-                    stateCode: c.stateCode ?? c.state ?? prev.stateCode,
-                    pinCode: String(c.pinCode ?? c.pincode ?? prev.pinCode),
-                    aadhaarNumber: c.aadhaarNumber ?? c.aadhaar ?? prev.aadhaarNumber,
-                    portalUsername: c.portalUsername ?? c.pan?.toUpperCase() ?? prev.portalUsername,
-                    portalPassword: c.portalPassword ?? c.password ?? prev.portalPassword,
-                  }));
+                  const { _preview, ...mapped } = parsePrefillJson(parsed);
+                  if (!mapped.pan && !mapped.fullName) {
+                    setFeedback({ type: 'error', message: 'Could not read ITR prefill data from this file. Make sure it is the JSON downloaded from the IT portal (e-File → Import Prefilled XML).' });
+                    return;
+                  }
+                  setForm((prev) => ({ ...prev, ...mapped }));
+                  setImportPreview(_preview ?? null);
+                  setTimeout(() => setImportPreview(null), 6000);
                 } catch {
-                  alert('Invalid JSON file');
+                  setFeedback({ type: 'error', message: 'Invalid JSON file — could not parse.' });
                 }
                 e.target.value = '';
               }}
             />
             <span className="btn btn-secondary" style={{ fontSize: '0.75rem', padding: '0.4rem 0.75rem' }}>
-              📂 Import from JSON
+              Import Prefill JSON
             </span>
           </label>
-        )}
       </div>
 
+      {importPreview && (
+        <div style={{
+          padding: '0.6rem 1rem', marginBottom: '0.75rem', borderRadius: 6, fontSize: '0.8rem',
+          background: 'rgba(56,139,253,0.12)', border: '1px solid rgba(56,139,253,0.4)', color: '#79c0ff',
+        }}>
+          Prefill imported — {importPreview}
+        </div>
+      )}
       {feedback && (
         <div
           style={{
