@@ -621,6 +621,35 @@ export interface ScheduleLTCG112A {
   TaxableLTCG112A: number;
 }
 
+// ─── STCG ────────────────────────────────────────────────────────────────────
+
+export interface STCG111AEntry {
+  id: string;
+  isin: string;
+  shareOrUnitName: string;
+  salesValue: number;
+  purchaseCost: number;
+  expenditure: number;
+  gainLoss: number;
+}
+
+export interface STCGOtherEntry {
+  id: string;
+  assetDesc: string;
+  salesValue: number;
+  purchaseCost: number;
+  expenditure: number;
+  gainLoss: number;
+}
+
+export interface ScheduleSTCG {
+  Entries111A: STCG111AEntry[];
+  TotalSTCG111A: number;
+  OtherEntries: STCGOtherEntry[];
+  TotalSTCGOther: number;
+  TotalSTCG: number;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // VERIFICATION
 // ─────────────────────────────────────────────────────────────────────────────
@@ -656,7 +685,8 @@ export interface IncomeSummary {
   GrossTotalIncomeIncLTCG112A?: number;
   TotalDeductions: number;            // Chapter VI-A total
   TotalIncome: number;                // Taxable income after deductions
-  LTCG112A?: number;                  // Excluded from slab, taxed separately
+  LTCG112A?: number;                  // Excluded from slab, taxed separately at 12.5%
+  STCG111A?: number;                  // Excluded from slab, taxed separately at 20%
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -728,6 +758,7 @@ export interface ReturnData {
   tds: ScheduleTDS | null;
   taxPayments: ScheduleTaxPayments | null;
   ltcg112A: ScheduleLTCG112A | null;
+  stcg: ScheduleSTCG | null;
 
   // ITR-4 only
   presumptiveIncome: SchedulePresumptiveIncome | null;
@@ -847,6 +878,7 @@ export function emptyReturnData(
     tds: null,
     taxPayments: null,
     ltcg112A: null,
+    stcg: null,
     presumptiveIncome: null,
     incomeSummary: null,
     taxComputation: null,

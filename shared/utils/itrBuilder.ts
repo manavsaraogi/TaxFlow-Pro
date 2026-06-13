@@ -219,9 +219,12 @@ function computeIncomeSummary(rd: ReturnData): IncomeSummary {
   const os = toInt(rd.otherSources?.IncomeFromOtherSources);
   const presumptive = toInt(rd.presumptiveIncome?.TotalPresumptiveIncome);
   const ltcg112A = toInt(rd.ltcg112A?.TaxableLTCG112A);
+  const stcg111A = toInt(rd.stcg?.TotalSTCG111A);
+  const stcgOther = toInt(rd.stcg?.TotalSTCGOther);
 
-  const grossTotal = salary + hp + os + presumptive;
-  const grossTotalIncLTCG = grossTotal + ltcg112A;
+  // Slab-income base (STCG other assets included, LTCG/111A excluded — taxed separately)
+  const grossTotal = salary + hp + os + presumptive + stcgOther;
+  const grossTotalIncCG = grossTotal + ltcg112A + stcg111A;
 
   const deductions = rd.deductions
     ? applyDeductionCaps(rd.deductions, grossTotal).TotalChapVIADeductions
@@ -235,10 +238,11 @@ function computeIncomeSummary(rd: ReturnData): IncomeSummary {
     IncomeFromOtherSources: os,
     IncomeFromBusinessProfession: presumptive || undefined,
     GrossTotalIncome: grossTotal,
-    GrossTotalIncomeIncLTCG112A: ltcg112A > 0 ? grossTotalIncLTCG : undefined,
+    GrossTotalIncomeIncLTCG112A: (ltcg112A > 0 || stcg111A > 0) ? grossTotalIncCG : undefined,
     TotalDeductions: deductions,
     TotalIncome: totalIncome,
     LTCG112A: ltcg112A || undefined,
+    STCG111A: stcg111A || undefined,
   };
 }
 
@@ -289,19 +293,23 @@ function computeRebate87A(income: number, tax: number, regime: 'OLD' | 'NEW'): n
 function computeTaxLiability(summary: IncomeSummary, regime: 'OLD' | 'NEW'): ITRTaxComputation {
   const totalIncome = summary.TotalIncome;
   const ltcg112A = summary.LTCG112A ?? 0;
+  const stcg111A = summary.STCG111A ?? 0;
 
-  // Slab tax on income excluding LTCG 112A
+  // Slab tax on income excluding LTCG 112A and STCG 111A (both taxed at special rates)
   const slabTax = computeSlabTax(totalIncome, regime);
 
   // LTCG 112A @ 12.5% on amount exceeding ₹1,25,000
   const taxableLTCG = Math.max(0, ltcg112A - DEDUCTION_CAPS.LTCG112AExempt);
   const ltcgTax = Math.round(taxableLTCG * 0.125);
 
-  const grossIncForRebate = totalIncome; // LTCG excluded from 87A check in most cases
-  const rebate = computeRebate87A(grossIncForRebate, slabTax, regime);
-  const taxAfterRebate = Math.max(0, slabTax - rebate) + ltcgTax;
+  // STCG 111A @ 20%
+  const stcg111ATax = Math.round(stcg111A * DEDUCTION_CAPS.STCG111A_rate);
 
-  const surcharge = Math.round(computeSurcharge(taxAfterRebate, totalIncome + ltcg112A, regime));
+  const grossIncForRebate = totalIncome;
+  const rebate = computeRebate87A(grossIncForRebate, slabTax, regime);
+  const taxAfterRebate = Math.max(0, slabTax - rebate) + ltcgTax + stcg111ATax;
+
+  const surcharge = Math.round(computeSurcharge(taxAfterRebate, totalIncome + ltcg112A + stcg111A, regime));
   const taxPlusSurcharge = taxAfterRebate + surcharge;
   const cess = Math.round(taxPlusSurcharge * 0.04);
   const grossTaxLiability = taxPlusSurcharge + cess;
@@ -929,16 +937,40 @@ function buildITR2(input: BuildITRInput): object {
 
         // ── ScheduleCGFor23 ──────────────────────────────────────────────
         ScheduleCGFor23: {
-          ShortTermCapGainFor23: {
-            NRITransacSec48Dtl:    { NRITransactionSec48: 0 },
-            NRISecur115AD:         { NRISecuritiesIncome: 0, NRISecuritiesTax: 0 },
-            SaleOnOtherAssets:     { SaleValue: 0, CostAcquisition: 0, LowDeductions: 0, CapGain: 0 },
-            TotalAmtDeemedStcg:    0,
-            PassThrIncNatureSTCG:  0,
-            TotalAmtNotTaxUsDTAAStcg: 0,
-            TotalAmtTaxUsDTAAStcg:    0,
-            TotalSTCG:             0,
-          },
+          ShortTermCapGainFor23: (() => {
+            const stcg = rd.stcg;
+            const stcg111ATotal = toInt(stcg?.TotalSTCG111A);
+            const stcgOtherTotal = toInt(stcg?.TotalSTCGOther);
+            const otherAssets = stcg?.OtherEntries ?? [];
+            const totalOtherSaleVal = otherAssets.reduce((s, e) => s + toInt(e.salesValue), 0);
+            const totalOtherCost    = otherAssets.reduce((s, e) => s + toInt(e.purchaseCost), 0);
+            const totalOtherExp     = otherAssets.reduce((s, e) => s + toInt(e.expenditure), 0);
+            const equityShares111A = stcg?.Entries111A ?? [];
+            return {
+              EquityMFDTDtls111A: equityShares111A.length > 0 ? {
+                ShareUnitSaleDetails111A: equityShares111A.map(e => ({
+                  ISIN:          e.isin ?? '',
+                  ShareUnitName: e.shareOrUnitName ?? '',
+                  SaleValue:     toInt(e.salesValue),
+                  CostAcquisition: toInt(e.purchaseCost),
+                  Expenditure:   toInt(e.expenditure),
+                  GainLoss:      toInt(e.gainLoss),
+                })),
+                TotalSaleValue:      stcg?.Entries111A.reduce((s, e) => s + toInt(e.salesValue), 0) ?? 0,
+                TotalCostOfAcq:      stcg?.Entries111A.reduce((s, e) => s + toInt(e.purchaseCost), 0) ?? 0,
+                TotalExpenditure:    stcg?.Entries111A.reduce((s, e) => s + toInt(e.expenditure), 0) ?? 0,
+                TotalSTCG111A:       stcg111ATotal,
+              } : undefined,
+              NRITransacSec48Dtl:    { NRITransactionSec48: 0 },
+              NRISecur115AD:         { NRISecuritiesIncome: 0, NRISecuritiesTax: 0 },
+              SaleOnOtherAssets:     { SaleValue: totalOtherSaleVal, CostAcquisition: totalOtherCost, LowDeductions: totalOtherExp, CapGain: stcgOtherTotal },
+              TotalAmtDeemedStcg:    0,
+              PassThrIncNatureSTCG:  0,
+              TotalAmtNotTaxUsDTAAStcg: 0,
+              TotalAmtTaxUsDTAAStcg:    0,
+              TotalSTCG:             stcg111ATotal + stcgOtherTotal,
+            };
+          })(),
           LongTermCapGain23: {
             SaleOfEquityShareUs112A: ltcg112AEntries.length > 0
               ? {

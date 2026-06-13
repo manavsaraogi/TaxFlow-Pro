@@ -6,7 +6,7 @@ import { NatureOfEmployment } from '@prisma/client';
 type Params = { params: { id: string; key: string } };
 
 // PUT /api/returns/[id]/schedule/[key]
-// key: salary | houseProperty | otherSources | deductions | tds | taxPayments | ltcg112A | presumptiveIncome | verification
+// key: salary | houseProperty | otherSources | deductions | tds | taxPayments | ltcg112A | stcg | presumptiveIncome | verification
 export async function PUT(request: NextRequest, { params }: Params) {
   const auth = await getAuthContext();
   if (!auth) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -167,6 +167,24 @@ export async function PUT(request: NextRequest, { params }: Params) {
         await prisma.lTCG112AEntry.createMany({
           data: body.entries.map((e: Record<string, unknown>) => ({ returnId, ...e })),
         });
+      }
+      break;
+    }
+    case 'stcg': {
+      await prisma.sTCGEntry.deleteMany({ where: { returnId } });
+      const allStcg: Record<string, unknown>[] = [];
+      if (Array.isArray(body.entries111A)) {
+        for (const e of body.entries111A) {
+          allStcg.push({ returnId, entryType: '111A', isin: e.isin ?? '', shareOrUnitName: e.shareOrUnitName ?? '', salesValue: Number(e.salesValue ?? 0), purchaseCost: Number(e.purchaseCost ?? 0), expenditure: Number(e.expenditure ?? 0), gainLoss: Number(e.gainLoss ?? 0) });
+        }
+      }
+      if (Array.isArray(body.entriesOther)) {
+        for (const e of body.entriesOther) {
+          allStcg.push({ returnId, entryType: 'OTHER', assetDesc: e.assetDesc ?? '', salesValue: Number(e.salesValue ?? 0), purchaseCost: Number(e.purchaseCost ?? 0), expenditure: Number(e.expenditure ?? 0), gainLoss: Number(e.gainLoss ?? 0) });
+        }
+      }
+      if (allStcg.length > 0) {
+        await prisma.sTCGEntry.createMany({ data: allStcg as any });
       }
       break;
     }

@@ -244,6 +244,7 @@ model Return {
   tdsEntries          TDSEntry[]
   taxPayments         TaxPaymentEntry[]
   ltcg112AEntries     LTCG112AEntry[]
+  stcgEntries         STCGEntry[]
   presumptiveSchedule PresumptiveSchedule?
   verification        ReturnVerification?
 
@@ -518,6 +519,29 @@ model LTCG112AEntry {
   isin             String
   shareOrUnitName  String
   fmvAsOn31Jan2018 Int?
+  salesValue       Int @default(0)
+  purchaseCost     Int @default(0)
+  expenditure      Int @default(0)
+  gainLoss         Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  return Return @relation(fields: [returnId], references: [id])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STCG (Short-Term Capital Gains)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model STCGEntry {
+  id       Int @id @default(autoincrement())
+  returnId Int
+
+  entryType        String  // '111A' | 'OTHER'
+  isin             String?
+  shareOrUnitName  String?
+  assetDesc        String?
   salesValue       Int @default(0)
   purchaseCost     Int @default(0)
   expenditure      Int @default(0)

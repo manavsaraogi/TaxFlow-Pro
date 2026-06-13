@@ -9,6 +9,7 @@ import type {
   ScheduleTDS,
   ScheduleTaxPayments,
   ScheduleLTCG112A,
+  ScheduleSTCG,
   SchedulePresumptiveIncome,
   Verification,
   IncomeSummary,
@@ -35,6 +36,7 @@ type ScheduleKey = keyof Pick<
   | 'tds'
   | 'taxPayments'
   | 'ltcg112A'
+  | 'stcg'
   | 'presumptiveIncome'
   | 'verification'
 >;
@@ -61,6 +63,7 @@ interface DirtyMap {
   tds: boolean;
   taxPayments: boolean;
   ltcg112A: boolean;
+  stcg: boolean;
   presumptiveIncome: boolean;
   verification: boolean;
 }
@@ -77,6 +80,7 @@ interface ReturnState {
   tds: ScheduleTDS | null;
   taxPayments: ScheduleTaxPayments | null;
   ltcg112A: ScheduleLTCG112A | null;
+  stcg: ScheduleSTCG | null;
   presumptiveIncome: SchedulePresumptiveIncome | null;
   verification: Verification | null;
 
@@ -99,6 +103,7 @@ interface ReturnState {
   setTDS: (data: ScheduleTDS) => void;
   setTaxPayments: (data: ScheduleTaxPayments) => void;
   setLTCG112A: (data: ScheduleLTCG112A) => void;
+  setSTCG: (data: ScheduleSTCG) => void;
   setPresumptiveIncome: (data: SchedulePresumptiveIncome) => void;
   setVerification: (data: Verification) => void;
 
@@ -120,6 +125,7 @@ function emptyDirty(): DirtyMap {
     tds: false,
     taxPayments: false,
     ltcg112A: false,
+    stcg: false,
     presumptiveIncome: false,
     verification: false,
   };
@@ -142,6 +148,7 @@ function buildReturnData(state: ReturnState): ReturnData {
     tds: state.tds,
     taxPayments: state.taxPayments,
     ltcg112A: state.ltcg112A,
+    stcg: state.stcg,
     presumptiveIncome: state.presumptiveIncome,
     incomeSummary: state.summary,
     taxComputation: state.taxComp,
@@ -152,7 +159,7 @@ function buildReturnData(state: ReturnState): ReturnData {
 function recomputeFromState(state: Pick<
   ReturnState,
   'meta' | 'salary' | 'houseProperty' | 'otherSources' | 'deductions' |
-  'tds' | 'taxPayments' | 'ltcg112A' | 'presumptiveIncome'
+  'tds' | 'taxPayments' | 'ltcg112A' | 'stcg' | 'presumptiveIncome'
 >): { summary: IncomeSummary; taxComp: ITRTaxComputation } {
   const rd = buildReturnData(state as ReturnState);
   const summary = computeIncomeSummary(rd);
@@ -175,6 +182,7 @@ export const useReturnStore = create<ReturnState>()(
     tds: null,
     taxPayments: null,
     ltcg112A: null,
+    stcg: null,
     presumptiveIncome: null,
     verification: null,
 
@@ -217,6 +225,7 @@ export const useReturnStore = create<ReturnState>()(
           tds: r.tdsEntries?.length ? (r.tdsEntries as unknown as ScheduleTDS) : null,
           taxPayments: r.taxPayments?.length ? (r.taxPayments as unknown as ScheduleTaxPayments) : null,
           ltcg112A: r.ltcg112AEntries?.length ? (r.ltcg112AEntries as unknown as ScheduleLTCG112A) : null,
+          stcg: r.stcgEntries?.length ? (r.stcgEntries as unknown as ScheduleSTCG) : null,
           presumptiveIncome: (r.presumptiveSchedule ?? null) as SchedulePresumptiveIncome | null,
           verification: (r.verification ?? null) as Verification | null,
         };
@@ -242,6 +251,7 @@ export const useReturnStore = create<ReturnState>()(
         tds: null,
         taxPayments: null,
         ltcg112A: null,
+        stcg: null,
         presumptiveIncome: null,
         verification: null,
         summary: null,
@@ -314,6 +324,15 @@ export const useReturnStore = create<ReturnState>()(
         return { ...next, summary, taxComp };
       });
       scheduleSave('ltcg112A', get, set);
+    },
+
+    setSTCG: (data) => {
+      set((s) => {
+        const next = { ...s, stcg: data, dirty: { ...s.dirty, stcg: true } };
+        const { summary, taxComp } = recomputeFromState(next);
+        return { ...next, summary, taxComp };
+      });
+      scheduleSave('stcg', get, set);
     },
 
     setPresumptiveIncome: (data) => {

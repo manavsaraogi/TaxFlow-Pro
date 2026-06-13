@@ -21,6 +21,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
       tdsEntries: true,
       taxPayments: true,
       ltcg112AEntries: true,
+      stcgEntries: true,
       presumptiveSchedule: true,
       verification: true,
     },

@@ -43,6 +43,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
       tdsEntries: true,
       taxPayments: true,
       ltcg112AEntries: true,
+      stcgEntries: true,
       presumptiveSchedule: true,
       verification: true,
     },
@@ -330,6 +331,23 @@ export async function GET(_req: NextRequest, { params }: Params) {
     };
   }
 
+  // ── Map STCG ──
+  let stcg = null;
+  const stcgAll = (ret as any).stcgEntries ?? [];
+  if (stcgAll.length > 0) {
+    const entries111A = stcgAll.filter((e: any) => e.entryType === '111A');
+    const entriesOther = stcgAll.filter((e: any) => e.entryType === 'OTHER');
+    const total111A = entries111A.reduce((s: number, e: any) => s + e.gainLoss, 0);
+    const totalOther = entriesOther.reduce((s: number, e: any) => s + e.gainLoss, 0);
+    stcg = {
+      Entries111A: entries111A.map((e: any) => ({ id: String(e.id), isin: e.isin ?? '', shareOrUnitName: e.shareOrUnitName ?? '', salesValue: e.salesValue, purchaseCost: e.purchaseCost, expenditure: e.expenditure, gainLoss: e.gainLoss })),
+      TotalSTCG111A: total111A,
+      OtherEntries: entriesOther.map((e: any) => ({ id: String(e.id), assetDesc: e.assetDesc ?? '', salesValue: e.salesValue, purchaseCost: e.purchaseCost, expenditure: e.expenditure, gainLoss: e.gainLoss })),
+      TotalSTCGOther: totalOther,
+      TotalSTCG: total111A + totalOther,
+    };
+  }
+
   // ── Map verification ──
   let verification = null;
   if (ret.verification) {
@@ -369,6 +387,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
     tds,
     taxPayments,
     ltcg112A,
+    stcg,
     presumptiveIncome,
     incomeSummary: null,
     taxComputation: null,

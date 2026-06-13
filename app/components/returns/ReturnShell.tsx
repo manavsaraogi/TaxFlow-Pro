@@ -102,7 +102,7 @@ const ALL_TABS: Tab[] = [
     label: 'Capital Gains',
     shortLabel: 'CG',
     icon: '📉',
-    applicableForms: ['ITR-2'],
+    applicableForms: ['ITR-2', 'ITR-4'],
   },
   {
     id: 'other_sources',
@@ -446,31 +446,6 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate }: 
       </div>
 
 
-      {/* ── Tab bar ── */}
-      <div
-        className="tab-list"
-        style={{
-          padding: '0 24px',
-          flexShrink: 0,
-          borderBottom: '1px solid var(--border-subtle)',
-          overflowX: 'auto',
-          background: 'var(--bg-surface)',
-        }}
-      >
-        {visibleTabs.map((tab) => (
-          <button
-            key={tab.id}
-            className={`tab-item${activeTab === tab.id ? ' active' : ''}`}
-            onClick={() => setActiveTab(tab.id)}
-            style={{ whiteSpace: 'nowrap' }}
-            title={tab.label}
-          >
-            <span style={{ marginRight: '6px' }}>{tab.icon}</span>
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
       {/* ── Portal upload modal ── */}
       {showPortalModal && (
         <div className="modal-overlay" onClick={() => setShowPortalModal(false)}>
@@ -502,140 +477,185 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate }: 
         </div>
       )}
 
-      {/* ── Tab content ── */}
-      <div style={{ flex: 1, overflow: 'auto', padding: '24px' }}>
-        {isFiledOrAcknowledged && (
-          <div
-            className="badge badge-success"
-            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', marginBottom: '16px', padding: '8px 14px', fontSize: '13px' }}
-          >
-            🔒 This return has been filed. Fields are read-only.
-          </div>
-        )}
+      {/* ── Vertical sidebar + content ── */}
+      <div style={{ flex: 1, display: 'flex', minHeight: 0, overflow: 'hidden' }}>
 
-        {activeTab === 'salary' && (
-          <ScheduleSalary
-            returnId={String(returnMeta.id)}
-            returnData={returnData ?? {} as any}
-            onSaved={(rd: any) => {
-              setReturnData(rd);
-              const newSummary = computeIncomeSummary(rd);
-              setSummary(newSummary);
-              setTaxComp(computeTaxLiability(newSummary, rd.regime ?? returnMeta?.regime ?? 'NEW'));
-              onScheduleChange(newSummary);
-            }}
-            setDirty={setDirty}
-          />
-        )}
+        {/* Sidebar */}
+        <nav style={{
+          width: '220px',
+          flexShrink: 0,
+          borderRight: '1px solid var(--border-subtle)',
+          background: 'var(--bg-surface)',
+          overflowY: 'auto',
+          padding: '8px 0',
+        }}>
+          {visibleTabs.map((tab) => {
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  width: '100%',
+                  padding: '9px 16px',
+                  border: 'none',
+                  borderLeft: isActive ? '3px solid var(--brand-primary)' : '3px solid transparent',
+                  background: isActive ? 'var(--bg-elevated)' : 'transparent',
+                  color: isActive ? 'var(--brand-text)' : 'var(--text-secondary)',
+                  fontSize: '13px',
+                  fontWeight: isActive ? 600 : 400,
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  transition: 'background 0.12s, color 0.12s',
+                }}
+                onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-hover)'; }}
+                onMouseLeave={e => { if (!isActive) (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
+              >
+                <span style={{ fontSize: '16px', width: '20px', textAlign: 'center' }}>{tab.icon}</span>
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
+        </nav>
 
-        {activeTab === 'business_profession' && (
-          <ScheduleBP
-            returnId={String(returnMeta.id)}
-            returnData={returnData ?? {} as any}
-            onSaved={(rd: any) => {
-              setReturnData(rd);
-              const newSummary = computeIncomeSummary(rd);
-              setSummary(newSummary);
-              setTaxComp(computeTaxLiability(newSummary, rd.regime ?? returnMeta?.regime ?? 'NEW'));
-              onScheduleChange(newSummary);
-            }}
-            setDirty={setDirty}
-          />
-        )}
+        {/* Content panel */}
+        <div style={{ flex: 1, overflow: 'auto', padding: '24px' }}>
+          {isFiledOrAcknowledged && (
+            <div
+              className="badge badge-success"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', marginBottom: '16px', padding: '8px 14px', fontSize: '13px' }}
+            >
+              🔒 This return has been filed. Fields are read-only.
+            </div>
+          )}
 
-        {activeTab === 'house_property' && (
-          <ScheduleHP
-            returnId={String(returnMeta.id)}
-            returnData={returnData ?? {} as any}
-            onSaved={(rd: any) => {
-              setReturnData(rd);
-              const newSummary = computeIncomeSummary(rd);
-              setSummary(newSummary);
-              setTaxComp(computeTaxLiability(newSummary, rd.regime ?? returnMeta?.regime ?? 'NEW'));
-              onScheduleChange(newSummary);
-            }}
-            setDirty={setDirty}
-          />
-        )}
+          {activeTab === 'salary' && (
+            <ScheduleSalary
+              returnId={String(returnMeta.id)}
+              returnData={returnData ?? {} as any}
+              onSaved={(rd: any) => {
+                setReturnData(rd);
+                const newSummary = computeIncomeSummary(rd);
+                setSummary(newSummary);
+                setTaxComp(computeTaxLiability(newSummary, rd.regime ?? returnMeta?.regime ?? 'NEW'));
+                onScheduleChange(newSummary);
+              }}
+              setDirty={setDirty}
+            />
+          )}
 
-        {activeTab === 'capital_gains' && (
-          <ScheduleCG
-            returnId={String(returnMeta.id)}
-            returnData={returnData ?? {} as any}
-            onSaved={(rd: any) => {
-              setReturnData(rd);
-              const newSummary = computeIncomeSummary(rd);
-              setSummary(newSummary);
-              setTaxComp(computeTaxLiability(newSummary, rd.regime ?? returnMeta?.regime ?? 'NEW'));
-              onScheduleChange(newSummary);
-            }}
-            setDirty={setDirty}
-          />
-        )}
+          {activeTab === 'business_profession' && (
+            <ScheduleBP
+              returnId={String(returnMeta.id)}
+              returnData={returnData ?? {} as any}
+              onSaved={(rd: any) => {
+                setReturnData(rd);
+                const newSummary = computeIncomeSummary(rd);
+                setSummary(newSummary);
+                setTaxComp(computeTaxLiability(newSummary, rd.regime ?? returnMeta?.regime ?? 'NEW'));
+                onScheduleChange(newSummary);
+              }}
+              setDirty={setDirty}
+            />
+          )}
 
-        {activeTab === 'other_sources' && (
-          <ScheduleOS
-            returnId={String(returnMeta.id)}
-            returnData={returnData ?? {} as any}
-            onSaved={(rd: any) => {
-              setReturnData(rd);
-              const newSummary = computeIncomeSummary(rd);
-              setSummary(newSummary);
-              setTaxComp(computeTaxLiability(newSummary, rd.regime ?? returnMeta?.regime ?? 'NEW'));
-              onScheduleChange(newSummary);
-            }}
-            setDirty={setDirty}
-          />
-        )}
+          {activeTab === 'house_property' && (
+            <ScheduleHP
+              returnId={String(returnMeta.id)}
+              returnData={returnData ?? {} as any}
+              onSaved={(rd: any) => {
+                setReturnData(rd);
+                const newSummary = computeIncomeSummary(rd);
+                setSummary(newSummary);
+                setTaxComp(computeTaxLiability(newSummary, rd.regime ?? returnMeta?.regime ?? 'NEW'));
+                onScheduleChange(newSummary);
+              }}
+              setDirty={setDirty}
+            />
+          )}
 
-        {activeTab === 'deductions' && (
-          <ScheduleDeductions
-            returnId={String(returnMeta.id)}
-            returnData={returnData ?? {} as any}
-            onSaved={() => {}}
-            setDirty={setDirty}
-          />
-        )}
+          {activeTab === 'capital_gains' && (
+            <ScheduleCG
+              returnId={String(returnMeta.id)}
+              returnData={returnData ?? {} as any}
+              onSaved={(rd: any) => {
+                setReturnData(rd);
+                const newSummary = computeIncomeSummary(rd);
+                setSummary(newSummary);
+                setTaxComp(computeTaxLiability(newSummary, rd.regime ?? returnMeta?.regime ?? 'NEW'));
+                onScheduleChange(newSummary);
+              }}
+              setDirty={setDirty}
+            />
+          )}
 
-        {activeTab === 'tds' && (
-          <ScheduleTDS
-            returnId={String(returnMeta.id)}
-            clientId={clientId}
-            returnData={returnData ?? {} as any}
-            onSaved={() => {}}
-            setDirty={setDirty}
-          />
-        )}
+          {activeTab === 'other_sources' && (
+            <ScheduleOS
+              returnId={String(returnMeta.id)}
+              returnData={returnData ?? {} as any}
+              onSaved={(rd: any) => {
+                setReturnData(rd);
+                const newSummary = computeIncomeSummary(rd);
+                setSummary(newSummary);
+                setTaxComp(computeTaxLiability(newSummary, rd.regime ?? returnMeta?.regime ?? 'NEW'));
+                onScheduleChange(newSummary);
+              }}
+              setDirty={setDirty}
+            />
+          )}
 
-        {activeTab === 'tax_payments' && (
-          <ScheduleTaxPayments
-            returnId={String(returnMeta.id)}
-            returnData={returnData ?? {} as any}
-            onSaved={() => {}}
-            setDirty={setDirty}
-          />
-        )}
+          {activeTab === 'deductions' && (
+            <ScheduleDeductions
+              returnId={String(returnMeta.id)}
+              returnData={returnData ?? {} as any}
+              onSaved={() => {}}
+              setDirty={setDirty}
+            />
+          )}
 
-        {activeTab === 'tax_summary' && (
-          <TaxSummary
-            returnId={String(returnMeta.id)}
-            returnData={returnData ?? {} as any}
-          />
-        )}
+          {activeTab === 'tds' && (
+            <ScheduleTDS
+              returnId={String(returnMeta.id)}
+              clientId={clientId}
+              returnData={returnData ?? {} as any}
+              onSaved={() => {}}
+              setDirty={setDirty}
+            />
+          )}
 
-        {activeTab === 'verification' && (
-          <Verification
-            returnId={returnMeta.id}
-            clientName={returnMeta.clientName}
-            formType={returnMeta.formType}
-            assessmentYear={returnMeta.assessmentYear}
-            readOnly={isFiledOrAcknowledged}
-            onFiled={() => {
-              setReturnMeta((prev) => prev ? { ...prev, status: 'FILED' } : prev);
-              onBack();
-            }}
-          />
-        )}
+          {activeTab === 'tax_payments' && (
+            <ScheduleTaxPayments
+              returnId={String(returnMeta.id)}
+              returnData={returnData ?? {} as any}
+              onSaved={() => {}}
+              setDirty={setDirty}
+            />
+          )}
+
+          {activeTab === 'tax_summary' && (
+            <TaxSummary
+              returnId={String(returnMeta.id)}
+              returnData={returnData ?? {} as any}
+            />
+          )}
+
+          {activeTab === 'verification' && (
+            <Verification
+              returnId={returnMeta.id}
+              clientName={returnMeta.clientName}
+              formType={returnMeta.formType}
+              assessmentYear={returnMeta.assessmentYear}
+              readOnly={isFiledOrAcknowledged}
+              onFiled={() => {
+                setReturnMeta((prev) => prev ? { ...prev, status: 'FILED' } : prev);
+                onBack();
+              }}
+            />
+          )}
+        </div>
       </div>
     </div>
   );
