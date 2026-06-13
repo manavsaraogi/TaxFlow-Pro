@@ -571,7 +571,7 @@ function buildTaxPayments(tp: ScheduleTaxPayments) {
 // PERSONAL INFO BUILDER
 // ─────────────────────────────────────────────────────────────────────────────
 
-function buildPersonalInfo(client: BuilderClient) {
+function buildPersonalInfo(client: BuilderClient, opts?: { includeStatus?: string }) {
   const name = splitName(client.fullName);
   return {
     AssesseeName: {
@@ -594,7 +594,10 @@ function buildPersonalInfo(client: BuilderClient) {
       MobileNo: client.mobileNumber,
       EmailAddress: client.email,
     },
+    SecondaryAdd: 'N' as const,
     ResidentialStatus: client.residentialStatus ?? 'RES',
+    EmployerCategory: 'OTH' as const,
+    ...(opts?.includeStatus ? { Status: opts.includeStatus } : {}),
   };
 }
 
@@ -664,36 +667,47 @@ function buildITR1(input: BuildITRInput): object {
         FilingStatus: {
           ReturnFileSec: rd.filingSection,
           OptOutNewTaxRegime: rd.regime === 'OLD' ? 'Y' : 'N',
+          AsseseeRepFlg: 'N',
+          ItrFilingDueDate: '2026-07-31',
         },
         ITR1_IncomeDeductions: buildITR1IncomeDeductions(rd, summary, capped),
         ITR1_TaxComputation: {
-          TotalTaxableIncome: toInt(summary.TotalIncome),
-          NetTaxPayable: toInt(taxComp.NetTaxPayable),
-          Rebate87A: toInt(taxComp.Rebate87A),
-          TaxAfterRebate: toInt(taxComp.TaxAfterRebate),
-          Surcharge: toInt(taxComp.Surcharge),
-          HealthAndEduCess: toInt(taxComp.HealthEducationCess),
-          GrossTaxLiability: toInt(taxComp.GrossTaxLiability),
-          TotalTaxPayable: toInt(taxComp.TotalTaxPayable),
+          TotalTaxPayable:     toInt(taxComp.NetTaxPayable),    // tax on TI before rebate
+          Rebate87A:           toInt(taxComp.Rebate87A),
+          TaxPayableOnRebate:  toInt(taxComp.TaxAfterRebate),   // after rebate
+          EducationCess:       toInt(taxComp.HealthEducationCess),
+          GrossTaxLiability:   toInt(taxComp.GrossTaxLiability),
+          Section89:           0,
+          NetTaxLiability:     toInt(taxComp.GrossTaxLiability),
+          TotalIntrstPay:      0,
+          IntrstPay: {
+            IntrstPayUs234A:   0,
+            IntrstPayUs234B:   0,
+            IntrstPayUs234C:   0,
+            LateFilingFee234F: 0,
+          },
+          TotTaxPlusIntrstPay: toInt(taxComp.GrossTaxLiability),
         },
         TaxPaid: {
           TaxesPaid: {
-            AdvanceTax: toInt(rd.taxPayments?.TotalAdvanceTax),
-            TDS: toInt(rd.tds?.TotalTDSOnSalaries) + toInt(rd.tds?.TotalTDSOnOtherIncome) + toInt(rd.tds?.TotalTDSOnRent),
-            TCS: toInt(rd.tds?.TotalTCS),
+            AdvanceTax:        toInt(rd.taxPayments?.TotalAdvanceTax),
+            TDS:               toInt(rd.tds?.TotalTDSOnSalaries) + toInt(rd.tds?.TotalTDSOnOtherIncome) + toInt(rd.tds?.TotalTDSOnRent),
+            TCS:               toInt(rd.tds?.TotalTCS),
             SelfAssessmentTax: toInt(rd.taxPayments?.TotalSelfAssessmentTax),
-            TotalTaxesPaid: totalTaxPaid,
+            TotalTaxesPaid:    totalTaxPaid,
           },
+          BalTaxPayable: Math.max(0, toInt(taxComp.GrossTaxLiability) - totalTaxPaid),
         },
         Refund: {
           RefundDue: taxComp.Refund ?? 0,
           BankAccountDtls: {
-            PriBankDetails: {
-              IFSCCode: '',  // Populated from client bank accounts by caller
-              BankName: '',
+            AddtnlBankDetails: [{
+              IFSCCode:      '',
+              BankName:      '',
               BankAccountNo: '',
-              AccountType: 'SB',
-            },
+              AccountType:   'SB',
+              IsPrimaryAccount: 'Y',
+            }],
           },
         },
         TDSonSalaries: rd.tds ? buildTDSOnSalaries(rd.tds) : { TotalTDSonSalaries: 0 },
@@ -1137,48 +1151,155 @@ function buildITR4(input: BuildITRInput): object {
   const { returnData: rd, client, sw, filingDate } = input;
   const date = filingDate ?? today();
   const summary = computeIncomeSummary(rd);
+  const capped = rd.deductions
+    ? applyDeductionCaps(rd.deductions, summary.GrossTotalIncome)
+    : applyDeductionCaps({ TotalChapVIADeductions: 0 } as DeductionsChapterVIA, 0);
+  const taxComp = computeTaxLiability(summary, rd.regime);
+
+  const ltcg112ATotal = toInt(rd.ltcg112A?.TaxableLTCG112A ?? 0);
+  const grossTotInc    = toInt(summary.GrossTotalIncome);
+  const grossTotIncInclLTCG = grossTotInc + ltcg112ATotal;
+  const totalIncome    = Math.max(0, grossTotIncInclLTCG - capped.TotalChapVIADeductions);
+
+  const tdsSalary  = toInt(rd.tds?.TotalTDSOnSalaries);
+  const tdsOther   = toInt(rd.tds?.TotalTDSOnOtherIncome) + toInt(rd.tds?.TotalTDSOnRent);
+  const tcs        = toInt(rd.tds?.TotalTCS);
+  const advTax     = toInt(rd.taxPayments?.TotalAdvanceTax);
+  const satTax     = toInt(rd.taxPayments?.TotalSelfAssessmentTax);
+  const totalTaxPaid = tdsSalary + tdsOther + tcs + advTax + satTax;
+  const netTaxLiability = toInt(taxComp.GrossTaxLiability);
+  const balPayable = Math.max(0, netTaxLiability - totalTaxPaid);
+  const refund     = totalTaxPaid > netTaxLiability ? totalTaxPaid - netTaxLiability : 0;
 
   return {
     ITR: {
       ITR4: {
         CreationInfo: {
-          SWVersionNo: sw.SWVersionNo,
-          SWCreatedBy: sw.SWCreatedBy,
-          JSONCreatedBy: sw.JSONCreatedBy,
+          SWVersionNo:      sw.SWVersionNo,
+          SWCreatedBy:      sw.SWCreatedBy,
+          JSONCreatedBy:    sw.JSONCreatedBy,
           JSONCreationDate: date,
           IntermediaryCity: sw.IntermediaryCity,
           Digest: '-',
         },
         Form_ITR4: {
-          FormName: 'ITR-4',
+          FormName:       'ITR-4',
+          Description:    'For Individuals, HUFs and Firms (other than LLP) being a resident having total income upto Rs.50 lakh and having income from business and profession which is computed under sections 44AD, 44ADA or 44AE',
           AssessmentYear: ayToYear(rd.assessmentYear),
-          SchemaVer: 'Ver1.0',
-          FormVer: 'Ver1.0',
+          SchemaVer:      'Ver1.0',
+          FormVer:        'Ver1.0',
         },
-        PersonalInfo: buildPersonalInfo(client),
+        PersonalInfo: buildPersonalInfo(client, { includeStatus: 'I' }),
         FilingStatus: {
-          ReturnFileSec: rd.filingSection,
-          OptOutNewTaxRegime: rd.regime === 'OLD' ? 'Y' : 'N',
+          ReturnFileSec:            rd.filingSection,
+          Form10IEAEarlierAYOldRegime: 'NA',
+          AsseseeRepFlg:            'N',
+          ItrFilingDueDate:         '2026-08-31',
         },
         IncomeDeductions: {
-          GrossSalary: toInt(rd.salary?.TotalGrossSalary),
-          IncomeFromSal: toInt(summary.IncomeFromSalary),
-          TotalIncomeChargeableUnHP: toInt(summary.IncomeFromHP),
-          IncomeFromBP: toInt(summary.IncomeFromBusinessProfession),
-          IncomeOthSrc: toInt(summary.IncomeFromOtherSources),
-          GrossTotIncome: toInt(summary.GrossTotalIncome),
-          TotalIncome: toInt(summary.TotalIncome),
+          IncomeFromBusinessProf:     toInt(summary.IncomeFromBusinessProfession),
+          GrossSalary:                toInt(rd.salary?.TotalGrossSalary),
+          Salary:                     toInt(rd.salary?.NetSalary),
+          PerquisitesValue:           0,
+          ProfitsInSalary:            0,
+          AllwncExemptUs10: {
+            TotalAllwncExemptUs10:    toInt(rd.salary?.AllwncExtentExemptUs10),
+          },
+          NetSalary:                  toInt(rd.salary?.NetSalary),
+          DeductionUs16:              toInt(rd.salary?.TotalDeductionUs16),
+          DeductionUs16ia:            capAt(rd.salary?.DeductionUs16ia ?? 0, DEDUCTION_CAPS.StandardDeduction16ia),
+          EntertainmntalwncUs16ii:    capAt(rd.salary?.EntertainmentAlw16ii ?? 0, DEDUCTION_CAPS.EntertainmentAlw16ii),
+          ProfessionalTaxUs16iii:     capAt(rd.salary?.ProfessionalTaxUs16iii ?? 0, DEDUCTION_CAPS.ProfessionalTax16iii),
+          IncomeFromSal:              toInt(summary.IncomeFromSalary),
+          PropertyDetails:            rd.houseProperty?.Properties.map(buildPropertyDetails) ?? [],
+          TotalIncomeChargeableUnHP:  toInt(summary.IncomeFromHP),
+          IncomeOthSrc:               Math.max(0, toInt(summary.IncomeFromOtherSources)),
+          OthersInc: rd.otherSources?.OtherSourceItems?.length
+            ? { OthersIncDtlsOthSrc: rd.otherSources.OtherSourceItems.map((it: any) => ({
+                OthSrcNatureDesc: it.NatureDesc ?? 'OTH',
+                OthSrcOthAmount:  toInt(it.Amount),
+              })) }
+            : undefined,
+          DeductionUs57iia:           capAt(rd.otherSources?.DeductionUs57iia ?? 0, 25_000),
+          GrossTotIncome:             grossTotInc,
+          GrossTotIncomeIncLTCG112A:  grossTotIncInclLTCG,
+          UsrDeductUndChapVIA:        buildUsrDeductions(rd.deductions),
+          DeductUndChapVIA:           { TotalDeductUndChapVIA: capped.TotalChapVIADeductions },
+          TotalIncome:                Math.min(totalIncome, 5_125_000),
         },
-        // Presumptive schedule
-        BP: rd.presumptiveIncome
+        TaxComputation: {
+          TotalTaxPayable:     toInt(taxComp.NetTaxPayable),
+          Rebate87A:           toInt(taxComp.Rebate87A),
+          TaxPayableOnRebate:  toInt(taxComp.TaxAfterRebate),
+          EducationCess:       toInt(taxComp.HealthEducationCess),
+          GrossTaxLiability:   netTaxLiability,
+          NetTaxLiability:     netTaxLiability,
+          IntrstPay: {
+            IntrstPayUs234A:   0,
+            IntrstPayUs234B:   0,
+            IntrstPayUs234C:   0,
+            LateFilingFee234F: 0,
+          },
+          TotTaxPlusIntrstPay: netTaxLiability,
+        },
+        TaxPaid: {
+          TaxesPaid: {
+            AdvanceTax:        advTax,
+            TDS:               tdsSalary + tdsOther,
+            TCS:               tcs,
+            SelfAssessmentTax: satTax,
+            TotalTaxesPaid:    totalTaxPaid,
+          },
+          BalTaxPayable: balPayable,
+        },
+        Refund: {
+          RefundDue: refund,
+          BankAccountDtls: {
+            AddtnlBankDetails: [{
+              IFSCCode:         '',
+              BankName:         '',
+              BankAccountNo:    '',
+              AccountType:      'SB',
+              IsPrimaryAccount: 'Y',
+            }],
+          },
+        },
+        // ScheduleBP — presumptive income
+        ScheduleBP: rd.presumptiveIncome
           ? {
-              NoOfBusiness: rd.presumptiveIncome.Business44AD?.length ?? 0,
-              TotPresInc: toInt(rd.presumptiveIncome.TotalPresumptiveIncome),
+              NoOfBusiness44AD:  rd.presumptiveIncome.Business44AD?.length ?? 0,
+              NoOfProf44ADA:     rd.presumptiveIncome.Profession44ADA?.length ?? 0,
+              TotPresumptiveInc: toInt(rd.presumptiveIncome.TotalPresumptiveIncome),
             }
           : undefined,
-        TDSonSalaries: rd.tds ? buildTDSOnSalaries(rd.tds) : { TotalTDSonSalaries: 0 },
-        TDSonOthThanSals: rd.tds ? buildTDSOnOtherIncome(rd.tds) : { TotalTDSonOthThanSals: 0 },
-        TaxPayments: rd.taxPayments ? buildTaxPayments(rd.taxPayments) : { TotalTaxPayments: 0 },
+        LTCG112A: rd.ltcg112A?.Entries.length
+          ? {
+              LTCG112ADtls: rd.ltcg112A.Entries.map((e) => ({
+                ISIN:            e.ISIN,
+                ShareUnitName:   e.ShareOrUnitName,
+                FMVPerShareUnit: toInt(e.FMVasOn31Jan2018),
+                SaleValue:       toInt(e.SalesValue),
+                PurchaseCost:    toInt(e.PurchaseCost),
+                Expenditure:     toInt(e.Expenditure),
+                GainLoss:        toInt(e.GainLoss),
+              })),
+              TotalLTCG112A: ltcg112ATotal,
+            }
+          : undefined,
+        TDSonSalaries:    rd.tds ? buildTDSOnSalaries(rd.tds)     : { TotalTDSonSalaries: 0 },
+        TDSonOthThanSals: rd.tds ? buildTDSOnOtherIncome(rd.tds)  : { TotalTDSonOthThanSals: 0 },
+        ScheduleTDS3Dtls: rd.tds ? buildTDS16C(rd.tds)            : { TotalTDS3Details: 0 },
+        ScheduleIT:       rd.taxPayments ? buildTaxPayments(rd.taxPayments) : { TotalTaxPayments: 0 },
+        ScheduleTCS: rd.tds?.TCSEntries?.length
+          ? {
+              TCSDetails: rd.tds.TCSEntries.map((t) => ({
+                TAN:          t.EmployerOrDeductorDetails?.TAN ?? '',
+                CollectorName: t.EmployerOrDeductorDetails?.EmployerName ?? '',
+                TotalTCS:     toInt(t.TCSCollected),
+              })),
+              TotalTCS: tcs,
+            }
+          : undefined,
         Verification: rd.verification ? buildVerification(rd.verification, date) : undefined,
       },
     },
