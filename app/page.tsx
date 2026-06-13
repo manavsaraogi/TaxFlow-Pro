@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useAuthStore } from '@/store/authStore';
 import { createClient } from '@/lib/supabase';
 import { LoginPage } from './components/auth/LoginPage';
@@ -10,7 +10,12 @@ export default function RootPage() {
   const { isLoggedIn, loading, user, refreshUser, setUser } = useAuthStore();
 
   useEffect(() => {
-    refreshUser();
+    // Safety timeout — if refreshUser hangs for any reason, unblock the UI
+    const timeout = setTimeout(() => {
+      useAuthStore.setState({ loading: false });
+    }, 5000);
+
+    refreshUser().finally(() => clearTimeout(timeout));
 
     const supabase = createClient();
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event) => {
