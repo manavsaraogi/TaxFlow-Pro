@@ -460,6 +460,35 @@ async function waitDashboard(page, log) {
   throw new Error('Login timed out after 90 seconds.');
 }
 
+// Extract 26AS text from a TRACES-downloaded ZIP.
+// TRACES ZIP password = PAN (uppercase) + DOB as DDMMYYYY, e.g. "JOMPS8827A06051999"
+function extract26ASFromZip(zipPath, pan, dob, log) {
+  try {
+    const zipPassword = (pan || '').toUpperCase() + (dob || '');
+    const zip = new AdmZip(zipPath);
+    const entries = zip.getEntries();
+    log('ZIP entries: ' + entries.map(e => e.entryName).join(', '));
+    for (const entry of entries) {
+      if (/\.(txt|html|htm|csv)$/i.test(entry.entryName)) {
+        let data;
+        if (zipPassword) {
+          try { data = zip.readFile(entry, zipPassword); } catch { /* try without */ }
+        }
+        if (!data) data = zip.readFile(entry);
+        if (data && data.length > 100) {
+          const text = data.toString('utf8');
+          log('✓ 26AS extracted from ZIP (' + text.length + ' chars) — file: ' + entry.entryName);
+          return text;
+        }
+      }
+    }
+    log('No text file found in ZIP');
+  } catch (e) {
+    log('ZIP extraction error: ' + e.message);
+  }
+  return null;
+}
+
 async function fetch26AS({ pan, password, dob, assessmentYear, onStatus }) {
   const log = m => { console.log('[26as]', m); onStatus?.(m); };
 
@@ -669,16 +698,15 @@ async function fetch26AS({ pan, password, dob, assessmentYear, onStatus }) {
 
     // Get the text content of the 26AS page
     const content26AS = await tracesPage.evaluate(() => {
-      // Try to get text from the main content area
       const tables = document.querySelectorAll('table');
       if (tables.length > 0) {
-        // Extract table data as tab-separated text (similar to copy-paste format)
+        // Use ^ as delimiter (TRACES format) so our parser works directly
         let result = '';
         tables.forEach(table => {
           const rows = table.querySelectorAll('tr');
           rows.forEach(row => {
             const cells = row.querySelectorAll('td, th');
-            result += Array.from(cells).map(c => c.textContent.trim()).join('\t') + '\n';
+            result += Array.from(cells).map(c => c.textContent.trim()).join('^') + '\n';
           });
           result += '\n';
         });
@@ -693,7 +721,7 @@ async function fetch26AS({ pan, password, dob, assessmentYear, onStatus }) {
     } else {
       log('26AS content too short (' + content26AS.length + ' chars) — may need manual download');
       // Try download approach as fallback
-      const dlPromise = tracesPage.waitForEvent('download', { timeout: 30000 }).catch(() => null);
+      const dlPromise = tracesPage.waitForEvent('download', { timeout: 60000 }).catch(() => null);
       const dlBtn = await waitFor(tracesPage, [
         'button:has-text("Download")',
         'a:has-text("Download")',
@@ -701,16 +729,12 @@ async function fetch26AS({ pan, password, dob, assessmentYear, onStatus }) {
       ], 5000);
       if (dlBtn) {
         await dlBtn.click();
-        log('Clicked Download button on TRACES');
+        log('Clicked Download button on TRACES — waiting for ZIP file...');
         const dl = await dlPromise;
         if (dl) {
           const fp = await dl.path();
           if (fp) {
-            const dlContent = fs.readFileSync(fp, 'utf8');
-            if (dlContent.length > 500) {
-              captured.text26AS = dlContent;
-              log('✓ 26AS downloaded (' + dlContent.length + ' chars)');
-            }
+            captured.text26AS = extract26ASFromZip(fp, pan, dob, log);
           }
         }
       }

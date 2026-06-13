@@ -331,58 +331,135 @@ function parseAISJson(raw: any): ParsedPortalData {
 }
 
 function parse26ASText(text: string): ParsedPortalData {
-  const entries: PortalTDSEntry[] = [];
-  const lines = text.split('\n').map((l) => l.trim());
-  let currentPart = '';
-  let inDataSection = false;
-  let headers: string[] = [];
+  const tdsEntries: PortalTDSEntry[] = [];
+  const tcsEntries: ParsedPortalData['tcsEntries'] = [];
 
-  for (const line of lines) {
-    if (!line) continue;
+  const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
+  const split = (line: string) => line.split('^').map((c) => c.trim());
 
-    // Detect section headers
-    if (/PART\s+A\s*[:\-]/i.test(line)) { currentPart = 'SALARY'; inDataSection = false; continue; }
-    if (/PART\s+B\s*[:\-]/i.test(line)) { currentPart = 'OTHER'; inDataSection = false; continue; }
-    if (/PART\s+C\s*[:\-]/i.test(line)) { currentPart = 'PROPERTY'; inDataSection = false; continue; }
-    if (/PART\s+D\s*[:\-]/i.test(line)) { currentPart = 'RENT'; inDataSection = false; continue; }
+  // TRACES 26AS format (^ delimited):
+  // PART-I header row starts with "Sr. No." and columns include TAN, Name, Total Amount, Total TDS
+  // Deductor rows: first col is a number (1, 2, ...) → SrNo^Name^TAN^...^TotalAmt^TotalTDS^TotalDeposited
+  // Transaction sub-rows: first col is empty → ^SrNo^Section^Date^...^Amt^TDS^Deposited
+  // PART-VI for TCS
 
-    // Detect header row (SNo or Sr No pattern)
-    if (/^(SNo|Sr\.?\s*No|S\.?No)/i.test(line)) {
-      headers = line.split(/\t|\|/).map((h) => h.trim().toLowerCase());
-      inDataSection = true;
-      continue;
+  // Detect whether this is TRACES ^ format
+  const isTraces = lines.some(l => l.includes('^PART-') || l.includes('^Annual Tax Statement'));
+  // Also handle tab/pipe format (old TRACES HTML extract)
+  const delim = isTraces ? '^' : null;
+  const splitLine = (line: string) =>
+    delim ? line.split('^').map(c => c.trim()) : line.split(/\t|\|/).map(c => c.trim());
+
+  if (isTraces) {
+    // TRACES ^ format — parse by PART sections
+    let currentPart: 'TDS' | 'TCS' | null = null;
+    // Column indices for the deductor header row in each part
+    let nameIdx = -1, tanIdx = -1, amtIdx = -1, tdsIdx = -1;
+    // For TCS: collector, tan, amount, tcs
+    let tcsNameIdx = -1, tcsTanIdx = -1, tcsAmtIdx = -1, tcsTaxIdx = -1;
+
+    for (const line of lines) {
+      // Part detection
+      if (/PART-I\b.*tax deducted at source/i.test(line)) { currentPart = 'TDS'; continue; }
+      if (/PART-VI\b.*tax collected/i.test(line)) { currentPart = 'TCS'; continue; }
+      // Other parts reset (PART-II through PART-X are not TDS/TCS deductor data we need)
+      if (/\^PART-(?:II|III|IV|V|VII|VIII|IX|X)\b/i.test(line)) { currentPart = null; continue; }
+
+      if (!currentPart) continue;
+      if (/No Transactions Present/i.test(line)) continue;
+
+      const cols = splitLine(line);
+
+      // Deductor header row: cols[0] is "Sr. No." (sub-header rows have cols[0]='' — skip those)
+      if (/^sr\.?\s*no\.?$/i.test(cols[0] ?? '')) {
+        const h = cols.map(c => c.toLowerCase());
+        if (currentPart === 'TDS') {
+          nameIdx = h.findIndex(c => c.includes('name of deduct'));
+          tanIdx  = h.findIndex(c => c.includes('tan of deduct'));
+          amtIdx  = h.findIndex(c => c.includes('total amount paid'));
+          tdsIdx  = h.findIndex(c => c.includes('total tax deducted'));
+          // fallbacks
+          if (nameIdx === -1) nameIdx = h.findIndex(c => c.includes('name'));
+          if (tanIdx  === -1) tanIdx  = h.findIndex(c => c.includes('tan'));
+          if (amtIdx  === -1) amtIdx  = h.findIndex(c => c.includes('amount'));
+          if (tdsIdx  === -1) tdsIdx  = h.findIndex(c => c.includes('tax deducted') || (c.includes('tds') && !c.includes('deposited')));
+        } else {
+          tcsNameIdx = h.findIndex(c => c.includes('name of collect'));
+          tcsTanIdx  = h.findIndex(c => c.includes('tan of collect'));
+          tcsAmtIdx  = h.findIndex(c => c.includes('total amount'));
+          tcsTaxIdx  = h.findIndex(c => c.includes('total tax collected'));
+          if (tcsNameIdx === -1) tcsNameIdx = h.findIndex(c => c.includes('name'));
+          if (tcsTanIdx  === -1) tcsTanIdx  = h.findIndex(c => c.includes('tan'));
+          if (tcsAmtIdx  === -1) tcsAmtIdx  = h.findIndex(c => c.includes('amount'));
+          if (tcsTaxIdx  === -1) tcsTaxIdx  = h.findIndex(c => c.includes('tax collected'));
+        }
+        continue;
+      }
+
+      // Deductor data row: first col is a positive integer (sr no), not empty, not a sub-row
+      const srNo = parseInt(cols[0] ?? '', 10);
+      if (!isNaN(srNo) && srNo > 0 && cols[0] !== '') {
+        const get = (i: number) => (i >= 0 && i < cols.length ? cols[i] : '');
+        const getNum = (i: number) => parseFloat(get(i).replace(/,/g, '')) || 0;
+
+        if (currentPart === 'TDS') {
+          const name = get(nameIdx !== -1 ? nameIdx : 1);
+          const tan  = get(tanIdx  !== -1 ? tanIdx  : 2);
+          const amt  = getNum(amtIdx !== -1 ? amtIdx : cols.length - 3);
+          const tds  = getNum(tdsIdx !== -1 ? tdsIdx : cols.length - 2);
+          if (name) tdsEntries.push({ tan, name, incomeAmount: amt, tdsDeducted: tds, entryType: 'OTHER' });
+        } else {
+          const name = get(tcsNameIdx !== -1 ? tcsNameIdx : 1);
+          const tan  = get(tcsTanIdx  !== -1 ? tcsTanIdx  : 2);
+          const amt  = getNum(tcsAmtIdx !== -1 ? tcsAmtIdx : cols.length - 3);
+          const tax  = getNum(tcsTaxIdx !== -1 ? tcsTaxIdx : cols.length - 2);
+          if (name) tcsEntries.push({ tan, name, amount: amt, tcsCollected: tax });
+        }
+      }
     }
+  } else {
+    // Legacy tab/pipe format (old TRACES HTML copy-paste)
+    let currentPart = '';
+    let inDataSection = false;
+    let headers: string[] = [];
 
-    if (!inDataSection || !currentPart) continue;
+    for (const line of lines) {
+      if (/PART\s+[AI]/i.test(line)) { currentPart = 'TDS'; inDataSection = false; continue; }
+      if (/PART\s+[BJ]/i.test(line)) { currentPart = 'TDS'; inDataSection = false; continue; }
+      if (/PART\s+[CK]/i.test(line)) { currentPart = 'PROPERTY'; inDataSection = false; continue; }
+      if (/PART\s+[DL]/i.test(line)) { currentPart = 'RENT'; inDataSection = false; continue; }
 
-    const cols = line.split(/\t|\|/).map((c) => c.trim());
-    if (cols.length < 4) continue;
+      if (/^(SNo|Sr\.?\s*No|S\.?No)/i.test(line)) {
+        headers = splitLine(line).map(h => h.toLowerCase());
+        inDataSection = true;
+        continue;
+      }
 
-    // Try to extract TAN, name, amount, TDS from columns
-    const tanIdx = headers.findIndex((h) => h.includes('tan'));
-    const nameIdx = headers.findIndex((h) => h.includes('name') || h.includes('deduct'));
-    const amtIdx = headers.findIndex((h) => h.includes('paid') || h.includes('credited') || h.includes('amount'));
-    const tdsIdx = headers.findIndex((h) => h.includes('tax deducted') || (h.includes('tds') && !h.includes('deposited')));
+      if (!inDataSection || !currentPart) continue;
+      const cols = splitLine(line);
+      if (cols.length < 4) continue;
 
-    const getValue = (idx: number) => (idx >= 0 && cols[idx] ? cols[idx] : '');
-    const getNum = (idx: number) => parseFloat(getValue(idx).replace(/,/g, '')) || 0;
+      const h = headers;
+      const nameIdx = h.findIndex(c => c.includes('name') || c.includes('deduct'));
+      const tanIdx  = h.findIndex(c => c.includes('tan'));
+      const amtIdx  = h.findIndex(c => c.includes('paid') || c.includes('credited') || c.includes('amount'));
+      const tdsIdx  = h.findIndex(c => c.includes('tax deducted') || (c.includes('tds') && !c.includes('deposited')));
 
-    const tan = getValue(tanIdx !== -1 ? tanIdx : 1);
-    const name = getValue(nameIdx !== -1 ? nameIdx : 2);
-    const income = getNum(amtIdx !== -1 ? amtIdx : cols.length - 3);
-    const tds = getNum(tdsIdx !== -1 ? tdsIdx : cols.length - 2);
+      const get = (i: number) => (i >= 0 && cols[i] ? cols[i] : '');
+      const getNum = (i: number) => parseFloat(get(i).replace(/,/g, '')) || 0;
 
-    if (name && tds > 0) {
-      entries.push({ tan, name, incomeAmount: income, tdsDeducted: tds, entryType: currentPart });
+      const name   = get(nameIdx !== -1 ? nameIdx : 2);
+      const tan    = get(tanIdx  !== -1 ? tanIdx  : 1);
+      const income = getNum(amtIdx !== -1 ? amtIdx : cols.length - 3);
+      const tds    = getNum(tdsIdx !== -1 ? tdsIdx : cols.length - 2);
+
+      if (name && tds > 0) {
+        tdsEntries.push({ tan, name, incomeAmount: income, tdsDeducted: tds, entryType: currentPart });
+      }
     }
   }
 
-  return {
-    source: '26AS',
-    importedAt: new Date().toISOString(),
-    tdsEntries: entries,
-    tcsEntries: [],
-  };
+  return { source: '26AS', importedAt: new Date().toISOString(), tdsEntries, tcsEntries };
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
