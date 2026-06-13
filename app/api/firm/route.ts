@@ -18,6 +18,10 @@ export async function POST(request: NextRequest) {
   });
 
   if (existing) {
+    // Always re-stamp metadata so firm_id is present in the JWT even after re-login
+    await supabase.auth.updateUser({
+      data: { firm_id: existing.firmId, firm_name: existing.firm.name, role: existing.role },
+    });
     return NextResponse.json({ data: { firmId: existing.firmId, firmName: existing.firm.name } });
   }
 
