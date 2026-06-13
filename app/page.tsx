@@ -21,15 +21,17 @@ export default function RootPage() {
         const res = await fetch('/api/firm', { method: 'POST' });
         if (res.ok) {
           const { data } = await res.json();
-          // Re-read user to pick up updated metadata (firm_id now stored)
-          const { data: { user: refreshed } } = await supabase.auth.getUser();
-          if (refreshed && data) {
-            const meta = refreshed.user_metadata;
+          // Force-refresh the session so the new firm_id propagates into the JWT/cookie
+          await supabase.auth.refreshSession();
+          if (data) {
+            // Re-read user to pick up updated metadata
+            const { data: { user: refreshed } } = await supabase.auth.getUser();
+            const meta = refreshed?.user_metadata ?? {};
             setUser({
-              id: refreshed.id,
-              email: refreshed.email ?? '',
-              name: meta?.display_name ?? refreshed.email ?? '',
-              role: meta?.role ?? 'ADMIN',
+              id: refreshed?.id ?? '',
+              email: refreshed?.email ?? '',
+              name: meta.display_name ?? refreshed?.email ?? '',
+              role: meta.role ?? 'ADMIN',
               firmId: data.firmId,
               firmName: data.firmName,
             });

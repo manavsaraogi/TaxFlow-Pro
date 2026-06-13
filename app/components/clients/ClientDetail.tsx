@@ -559,9 +559,19 @@ function DocumentsTab({ clientId, returns }: { clientId: number; returns?: Retur
         <h3 style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 14px' }}>
           Import Tax Data — AIS / TIS / 26AS
         </h3>
-        <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '16px' }}>
+        <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '12px' }}>
           Download JSON from the Income Tax portal → AIS / 26AS section, then upload here. TDS entries, challans and income summaries will be auto-filled into the selected return.
         </p>
+        <div style={{
+          marginBottom: '16px', padding: '10px 12px', borderRadius: '6px',
+          background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
+          fontSize: '11px', color: 'var(--text-secondary)', lineHeight: '1.7',
+        }}>
+          <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '6px' }}>How to download from incometax.gov.in</div>
+          <div><span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>26AS:</span> e-File → Income Tax Returns → View Form 26AS → Download → JSON</div>
+          <div><span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>AIS:</span> Services → AIS → Download → JSON</div>
+          <div><span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>TIS:</span> Services → AIS → Download → JSON (same location as AIS)</div>
+        </div>
         <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '16px' }}>
           {(['26AS', 'AIS', 'TIS'] as const).map((t) => (
             <button
@@ -618,6 +628,14 @@ function DocumentsTab({ clientId, returns }: { clientId: number; returns?: Retur
 
 // ── New Return Modal ──────────────────────────────────────────────────────────
 
+// ── ITR form suggestion helper ────────────────────────────────────────────────
+
+function suggestFormType(assesseeType: string): string {
+  if (assesseeType === 'FIRM') return 'ITR-5';
+  // For INDIVIDUAL and HUF default to ITR-1; user can override
+  return 'ITR-1';
+}
+
 function NewReturnModal({ client, onClose, onCreated }: {
   client: ClientData;
   onClose: () => void;
@@ -627,8 +645,12 @@ function NewReturnModal({ client, onClose, onCreated }: {
   const defaultAY = '2026-27';
   const ayOptions = ['2026-27', '2025-26', '2024-25'];
 
+  const suggested = suggestFormType(client.assesseeType);
+  // Use ITR-1 as default if suggested is ITR-5 (not supported in UI yet)
+  const defaultFormType = suggested === 'ITR-5' ? 'ITR-5' : 'ITR-1';
+
   const [ayLabel, setAyLabel] = useState(defaultAY);
-  const [formType, setFormType] = useState('ITR-1');
+  const [formType, setFormType] = useState(defaultFormType);
   const [regime, setRegime] = useState('NEW');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -688,7 +710,22 @@ function NewReturnModal({ client, onClose, onCreated }: {
               <option value="ITR-1">ITR-1 (Salary + 1 HP + Other Sources)</option>
               <option value="ITR-2">ITR-2 (Capital Gains, Multiple HP)</option>
               <option value="ITR-4">ITR-4 (Presumptive Income)</option>
+              {client.assesseeType === 'FIRM' && (
+                <option value="ITR-5">ITR-5 (Firm / LLP)</option>
+              )}
             </select>
+            <div style={{ marginTop: '6px', fontSize: '11px', color: 'var(--brand-text)' }}>
+              Suggested: {suggested} based on assessee type
+            </div>
+            {formType === 'ITR-4' && (
+              <div style={{
+                marginTop: '8px', padding: '8px 10px', borderRadius: '6px',
+                background: 'rgba(212,160,23,0.08)', border: '1px solid var(--brand-primary)',
+                fontSize: '11px', color: 'var(--text-secondary)', lineHeight: '1.5',
+              }}>
+                For presumptive income u/s 44AD (business ≤ ₹3 Cr), 44ADA (professionals ≤ ₹75 L), or 44AE (goods carriage)
+              </div>
+            )}
           </div>
 
           <div className="form-group">

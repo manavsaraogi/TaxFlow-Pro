@@ -14,7 +14,7 @@
  *   onNavigate — global navigation handler
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, Fragment } from 'react';
 import type { ITRFormType, TaxRegime, IncomeSummary, ITRTaxComputation } from '@/shared/types/itr';
 import { computeIncomeSummary, computeTaxLiability } from '@/shared/utils/itrBuilder';
 
@@ -207,6 +207,8 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate }: 
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [returnData, setReturnData] = useState<any>(null);
   const [dirty, setDirty] = useState(false);
+  const [showPortalModal, setShowPortalModal] = useState(false);
+  const [downloadingJson, setDownloadingJson] = useState(false);
 
   // Load return metadata
   useEffect(() => {
@@ -254,6 +256,31 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate }: 
       setTimeout(() => setSaveState('idle'), 2000);
     }, 1500);
   }, [returnMeta]);
+
+  // Download ITR JSON
+  const handleDownloadITR = useCallback(async () => {
+    if (!returnMeta) return;
+    setDownloadingJson(true);
+    try {
+      const res = await fetch(`/api/returns/${returnId}/generate-itr`);
+      if (!res.ok) throw new Error('Failed to generate ITR JSON');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const cd = res.headers.get('Content-Disposition') ?? '';
+      const match = cd.match(/filename="([^"]+)"/);
+      a.download = match ? match[1] : `ITR-${returnMeta.formType}-${returnMeta.clientPAN}-AY${returnMeta.assessmentYear}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      // silently ignore — user can retry
+    } finally {
+      setDownloadingJson(false);
+    }
+  }, [returnMeta, returnId]);
 
   // Tabs applicable to this form type
   const visibleTabs = returnMeta
@@ -339,6 +366,23 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate }: 
             {saveState === 'error' && (
               <span style={{ fontSize: '12px', color: 'var(--color-error)' }}>⚠ Save failed</span>
             )}
+
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={handleDownloadITR}
+              disabled={downloadingJson}
+              title="Download ITR JSON for upload to IT Portal"
+            >
+              {downloadingJson ? '⏳ Generating…' : '⬇ Download ITR JSON'}
+            </button>
+
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={() => setShowPortalModal(true)}
+              title="Instructions to upload to Income Tax Portal"
+            >
+              ↑ Upload to Portal
+            </button>
 
             {!isFiledOrAcknowledged && (
               <button
@@ -426,6 +470,37 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate }: 
           </button>
         ))}
       </div>
+
+      {/* ── Portal upload modal ── */}
+      {showPortalModal && (
+        <div className="modal-overlay" onClick={() => setShowPortalModal(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '480px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>Upload to IT Portal</h3>
+              <button className="btn btn-ghost btn-sm" onClick={() => setShowPortalModal(false)}>✕</button>
+            </div>
+            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '16px', lineHeight: '1.6' }}>
+              To upload your ITR JSON to the Income Tax portal:
+            </p>
+            <ol style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '2', paddingLeft: '20px', marginBottom: '20px' }}>
+              <li>Download the JSON using the <strong>Download ITR JSON</strong> button above.</li>
+              <li>Go to <strong>incometax.gov.in</strong> → e-File → Income Tax Returns → Upload XML/JSON.</li>
+              <li>Select the downloaded file and submit.</li>
+            </ol>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <button className="btn btn-secondary" onClick={() => setShowPortalModal(false)}>Close</button>
+              <a
+                href="https://eportal.incometax.gov.in/iec/foservices/#/e-file/er-efile-main"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn btn-primary"
+              >
+                Open IT Portal →
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Tab content ── */}
       <div style={{ flex: 1, overflow: 'auto', padding: '24px' }}>
