@@ -627,6 +627,230 @@ input, textarea, [data-selectable] {
   font-size: 14px;
 }
 
+/* ══ Computax-style ITR Schedule Form ════════════════════════════════════════
+   Dense 2-column row layout: [seq] [field label] [amount]
+   Matches the look and feel of CA software like Computax / Winman.
+   ═══════════════════════════════════════════════════════════════════════════*/
+
+.itr-form {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 20px;
+}
+
+/* Blue-gold header band — schedule name */
+.itr-schedule-header {
+  background: var(--brand-subtle);
+  border-bottom: 2px solid var(--brand-primary);
+  padding: 8px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.itr-schedule-header .schedule-code {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--brand-primary);
+  background: rgba(212,160,23,0.15);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  letter-spacing: 0.05em;
+}
+.itr-schedule-header .schedule-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--brand-text);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* Gray section sub-header inside a schedule */
+.itr-section-head {
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border-subtle);
+  border-top: 1px solid var(--border-subtle);
+  padding: 5px 14px 5px 44px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+
+/* One form row: [num cell] [label cell] [amount cell] */
+.itr-row {
+  display: grid;
+  grid-template-columns: 36px 1fr 176px;
+  border-bottom: 1px solid var(--border-subtle);
+  min-height: 34px;
+  align-items: stretch;
+}
+.itr-row:last-child { border-bottom: none; }
+
+.itr-row.computed  { background: rgba(255,255,255,0.015); }
+.itr-row.subtotal  { background: rgba(212,160,23,0.04); }
+.itr-row.total     {
+  background: rgba(212,160,23,0.07);
+  border-top: 1px solid var(--brand-primary);
+  border-bottom: 1px solid var(--brand-primary);
+}
+.itr-row.deduction { background: rgba(63,185,80,0.04); }
+.itr-row.indent    { grid-template-columns: 36px 1fr 176px; }
+
+/* Sequence number cell */
+.itr-num {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: var(--text-muted);
+  border-right: 1px solid var(--border-subtle);
+  background: rgba(0,0,0,0.08);
+  font-family: var(--font-mono);
+  padding: 2px;
+  flex-shrink: 0;
+}
+
+/* Description / label cell */
+.itr-label {
+  display: flex;
+  align-items: center;
+  padding: 5px 12px 5px 10px;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  border-right: 1px solid var(--border-subtle);
+  line-height: 1.4;
+  gap: 6px;
+}
+.itr-label .hint {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+.itr-row.indent .itr-label  { padding-left: 28px; color: var(--text-muted); font-size: 12px; }
+.itr-row.total  .itr-label  { font-weight: 700; color: var(--text-primary); }
+.itr-row.subtotal .itr-label { font-weight: 600; color: var(--text-secondary); }
+
+/* Amount cell — contains either an <input> or a display span */
+.itr-amount {
+  display: flex;
+  align-items: center;
+}
+
+.itr-amount input {
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: transparent;
+  text-align: right;
+  padding: 5px 12px;
+  font-size: 13px;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+  outline: none;
+  min-height: 34px;
+}
+.itr-amount input:focus {
+  background: rgba(212,160,23,0.07);
+  outline: 1px solid var(--brand-primary);
+  outline-offset: -1px;
+}
+.itr-amount input:read-only,
+.itr-amount input[readonly] {
+  color: var(--text-muted);
+  cursor: default;
+}
+.itr-amount input:read-only:focus { background: transparent; outline: none; }
+.itr-row.total   .itr-amount input { font-weight: 700; color: var(--brand-text); }
+.itr-row.subtotal .itr-amount input { font-weight: 600; }
+
+/* Text input spanning 2 columns (label spans amount col too) */
+.itr-row-text {
+  display: grid;
+  grid-template-columns: 36px 1fr;
+  border-bottom: 1px solid var(--border-subtle);
+  min-height: 34px;
+  align-items: stretch;
+}
+.itr-row-text .itr-label { border-right: none; flex-direction: column; align-items: flex-start; gap: 2px; }
+.itr-row-text input,
+.itr-row-text select {
+  width: 100%;
+  border: none;
+  border-left: 1px solid var(--border-subtle);
+  background: transparent;
+  padding: 5px 12px;
+  font-size: 12.5px;
+  color: var(--text-primary);
+  outline: none;
+  font-family: var(--font-sans);
+}
+.itr-row-text input:focus,
+.itr-row-text select:focus {
+  background: rgba(212,160,23,0.05);
+  outline: 1px solid var(--brand-primary);
+  outline-offset: -1px;
+}
+.itr-row-text select option { background: var(--bg-elevated); }
+
+/* Employer / entity selector tabs above a form */
+.itr-entity-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 2px solid var(--border-default);
+  background: var(--bg-elevated);
+  overflow-x: auto;
+}
+.itr-entity-tab {
+  padding: 7px 16px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  white-space: nowrap;
+  transition: color 0.12s;
+}
+.itr-entity-tab:hover { color: var(--text-secondary); }
+.itr-entity-tab.active {
+  color: var(--brand-text);
+  border-bottom-color: var(--brand-primary);
+  font-weight: 600;
+}
+.itr-entity-tab.add-btn {
+  color: var(--brand-primary);
+  font-weight: 600;
+}
+
+/* Action bar at bottom of a schedule form */
+.itr-action-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--bg-elevated);
+  border-top: 1px solid var(--border-subtle);
+}
+
+/* Sidebar nav — schedule fill indicators */
+.itr-nav-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+.itr-nav-dot.filled  { background: var(--status-success); }
+.itr-nav-dot.partial { background: var(--status-warning); }
+.itr-nav-dot.empty   { background: var(--border-default); }
+
 /* ── Animations ─────────────────────────────────────────────────────────── */
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(6px); }

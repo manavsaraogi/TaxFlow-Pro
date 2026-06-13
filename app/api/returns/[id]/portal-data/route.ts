@@ -25,6 +25,32 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   }
 }
 
+export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+  const auth = await getAuthContext();
+  if (!auth) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const returnId = parseInt(params.id);
+  if (isNaN(returnId)) return NextResponse.json({ error: 'Invalid return ID' }, { status: 400 });
+
+  try {
+    const rows = await prisma.$queryRaw<Array<{ id: number }>>`
+      SELECT id FROM "Return"
+      WHERE id = ${returnId}
+        AND "clientId" IN (SELECT id FROM "Client" WHERE "firmId" = ${auth.firmId})
+      LIMIT 1
+    `;
+    if (!rows.length) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
+    await prisma.$executeRaw`
+      UPDATE "Return" SET "portalData" = NULL, "updatedAt" = NOW()
+      WHERE id = ${returnId}
+    `;
+    return NextResponse.json({ ok: true });
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message }, { status: 500 });
+  }
+}
+
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
   const auth = await getAuthContext();
   if (!auth) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

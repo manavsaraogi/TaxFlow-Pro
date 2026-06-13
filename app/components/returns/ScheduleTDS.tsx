@@ -280,8 +280,9 @@ function parseAISJson(raw: any): ParsedPortalData {
           const name: string = el.title ?? 'Unknown';
           const labels: string[] = (el.l1?.columnLabel ?? []).map((c: any) => c.field as string);
           const statusIdx = labels.indexOf('status');
-          const isTCS = /TCS|tax collected/i.test(sKey);
           const infoCode: string = el.infoCode ?? el.l1?.columnLabel?.find((c: any) => c.infoCode)?.infoCode ?? '';
+          // Detect TCS by element infoCode prefix, NOT section key (section key 'tdsTcs' contains 'TCS' substring)
+          const isTCS = /^TCS-/i.test(infoCode);
           const section_code = infoCode.replace(/^TDS-/i, '').replace(/^TCS-/i, '');
 
           for (const row of (el.l1?.columnData ?? [])) {
@@ -689,6 +690,8 @@ export default function ScheduleTDS({ returnId, clientId, returnData, onSaved, s
   const [import26ASError, setImport26ASError] = useState<string | null>(null);
   const [showImportPanel, setShowImportPanel] = useState(false);
   const [mismatchLoading, setMismatchLoading] = useState(false);
+  const [clearingPortal, setClearingPortal] = useState(false);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   // Local agent state — AIS
   const [agentAvailable, setAgentAvailable] = useState<boolean | null>(null); // null = not checked yet
@@ -1081,6 +1084,23 @@ export default function ScheduleTDS({ returnId, clientId, returnData, onSaved, s
     }
   }
 
+  async function clearPortalData(clearEntries: boolean) {
+    setClearingPortal(true);
+    setShowClearConfirm(false);
+    try {
+      await fetch(`/api/returns/${returnId}/portal-data`, { method: 'DELETE' });
+      setPortalData(null);
+      setMismatches([]);
+      if (clearEntries) {
+        const empty = { ...state, salarySources: [], otherSources: [], propertySources: [], rentSources: [], tcsSources: [] };
+        setState(empty);
+        persist(empty);
+      }
+    } finally {
+      setClearingPortal(false);
+    }
+  }
+
   function populateFromPortalData(data: ParsedPortalData) {
     const newSalarySources: TDSState['salarySources'] = [];
     const newOtherSources: TDSState['otherSources'] = [];
@@ -1365,6 +1385,14 @@ export default function ScheduleTDS({ returnId, clientId, returnData, onSaved, s
                 </button>
                 <button className="btn btn-secondary btn-sm" onClick={refreshMismatches} disabled={mismatchLoading}>
                   {mismatchLoading ? 'Checking…' : '⚡ Check Mismatches'}
+                </button>
+                <button
+                  className="btn btn-danger btn-sm"
+                  disabled={clearingPortal}
+                  onClick={() => setShowClearConfirm(true)}
+                  title="Remove imported AIS/26AS data"
+                >
+                  {clearingPortal ? 'Clearing…' : '✕ Clear Import'}
                 </button>
               </>
             )}
@@ -1869,6 +1897,30 @@ export default function ScheduleTDS({ returnId, clientId, returnData, onSaved, s
         {saving && '💾 Saving…'}
         {saveError && <span style={{ color: '#f87171' }}>⚠ {saveError}</span>}
       </div>
+
+      {/* ── Clear AIS/26AS confirm modal ─────────────────────────────────────── */}
+      {showClearConfirm && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div className="card" style={{ maxWidth: 420, width: '90%', padding: 24 }}>
+            <h3 style={{ marginBottom: 8, color: 'var(--text-primary)', fontSize: 15 }}>Clear Imported Portal Data</h3>
+            <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 20, lineHeight: 1.6 }}>
+              This will remove the AIS / 26AS data saved for this return.<br />
+              Do you also want to clear the TDS/TCS entries that were auto-populated from the import?
+            </p>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+              <button className="btn btn-secondary btn-sm" onClick={() => setShowClearConfirm(false)}>
+                Cancel
+              </button>
+              <button className="btn btn-secondary btn-sm" onClick={() => clearPortalData(false)}>
+                Clear Import Only
+              </button>
+              <button className="btn btn-danger btn-sm" onClick={() => clearPortalData(true)}>
+                Clear Import + TDS Entries
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

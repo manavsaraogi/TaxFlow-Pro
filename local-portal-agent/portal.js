@@ -559,28 +559,44 @@ async function fetch26AS({ pan, password, dob, assessmentYear, onStatus }) {
     log('Logged in!');
     await page.screenshot({ path: path.join(SS_DIR, '26as-01-dashboard.png') }).catch(() => null);
 
-    // ── STEP 2: e-File → Income Tax Returns → View Form 26AS ────────────────
-    log('Navigating: e-File → Income Tax Returns → View Form 26AS...');
+    // ── STEP 2: Navigate to TRACES via direct URL (most reliable) ────────────
+    log('Navigating to View Form 26AS (direct URL)...');
 
-    // Register new-tab listener BEFORE clicking anything that might open TRACES
+    // Register new-tab listener BEFORE navigating — the portal may open TRACES in a new tab
     let tracesTabPromise = context.waitForEvent('page', { timeout: 60000 }).catch(() => null);
 
-    // Click "e-File" in the top nav
-    const efileClicked = await clickMenuItem(page, /^e-file$/i, log, 'e-File menu');
-    if (efileClicked) {
-      await page.waitForTimeout(600);
-      await page.screenshot({ path: path.join(SS_DIR, '26as-02-efile.png') }).catch(() => null);
+    // Primary: use the portal's deep link which SSO-redirects to TRACES
+    await page.goto(
+      'https://eportal.incometax.gov.in/iec/foservices/#/taxstatement/form26as',
+      { waitUntil: 'domcontentloaded', timeout: 30000 }
+    ).catch(() => null);
+    await page.waitForTimeout(3000);
+    await page.screenshot({ path: path.join(SS_DIR, '26as-02-after-direct-nav.png') }).catch(() => null);
+    log('After direct nav, URL: ' + page.url());
 
-      // Click "Income Tax Returns" in the dropdown
-      const itrClicked = await clickMenuItemVisible(page, /^income tax returns$/i, log, 'Income Tax Returns submenu');
-      if (itrClicked) {
+    // If the direct URL logged us out or asked for login again, re-login
+    if (/login|signin/i.test(page.url())) {
+      log('Session expired — going back to dashboard first...');
+      await page.goto(PORTAL_URL, { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => null);
+      await waitDashboard(page, log);
+      tracesTabPromise = context.waitForEvent('page', { timeout: 60000 }).catch(() => null);
+      await page.goto(
+        'https://eportal.incometax.gov.in/iec/foservices/#/taxstatement/form26as',
+        { waitUntil: 'domcontentloaded', timeout: 30000 }
+      ).catch(() => null);
+      await page.waitForTimeout(3000);
+    }
+
+    // Fallback: try the menu navigation if direct URL didn't work
+    if (!/traces\.gov\.in|tdscpc\.gov\.in/i.test(page.url())) {
+      log('Direct URL did not redirect to TRACES — trying menu navigation...');
+      const efileClicked = await clickMenuItem(page, /e-fil/i, log, 'e-File/e-Filing menu');
+      if (efileClicked) {
+        await page.waitForTimeout(800);
+        await clickMenuItemVisible(page, /income tax returns/i, log, 'Income Tax Returns');
         await page.waitForTimeout(600);
-        await page.screenshot({ path: path.join(SS_DIR, '26as-03-itr-submenu.png') }).catch(() => null);
-
-        // Click "View Form 26AS" in the sub-menu
-        const view26Clicked = await clickMenuItemVisible(page, /view form 26as|view.*26as|form 26as/i, log, 'View Form 26AS');
-        if (!view26Clicked) {
-          log('View Form 26AS not found in submenu — trying text scan...');
+        const clicked = await clickMenuItemVisible(page, /view form 26as|view.*26as|form 26as/i, log, 'View Form 26AS');
+        if (!clicked) {
           await page.evaluate(() => {
             const el = [...document.querySelectorAll('a, li, span, button')]
               .find(e => /view.*form.*26as|form.*26as/i.test(e.textContent) && e.getBoundingClientRect().width > 0);
@@ -588,32 +604,16 @@ async function fetch26AS({ pan, password, dob, assessmentYear, onStatus }) {
           }).catch(() => null);
         }
       } else {
-        // Maybe ITR label is different — try text scan
-        log('Income Tax Returns submenu not visible — trying text scan...');
         await page.evaluate(() => {
           const el = [...document.querySelectorAll('a, li, span, button')]
-            .find(e => /income tax returns/i.test(e.textContent) && e.getBoundingClientRect().width > 0);
-          if (el) { el.scrollIntoView({ block: 'center' }); el.click(); }
-        }).catch(() => null);
-        await page.waitForTimeout(600);
-        await page.evaluate(() => {
-          const el = [...document.querySelectorAll('a, li, span, button')]
-            .find(e => /view.*form.*26as|form.*26as/i.test(e.textContent) && e.getBoundingClientRect().width > 0);
+            .find(e => /view form 26as|annual tax statement/i.test(e.textContent) && e.getBoundingClientRect().width > 0);
           if (el) { el.scrollIntoView({ block: 'center' }); el.click(); }
         }).catch(() => null);
       }
-    } else {
-      // Direct fallback: look for View Form 26AS anywhere on the page
-      log('e-File menu not found — trying direct text scan for View Form 26AS...');
-      await page.evaluate(() => {
-        const el = [...document.querySelectorAll('a, li, span, button')]
-          .find(e => /view form 26as|annual tax statement/i.test(e.textContent) && e.getBoundingClientRect().width > 0);
-        if (el) { el.scrollIntoView({ block: 'center' }); el.click(); }
-      }).catch(() => null);
+      await page.waitForTimeout(2000);
     }
 
-    await page.waitForTimeout(2000);
-    await page.screenshot({ path: path.join(SS_DIR, '26as-04-after-nav.png') }).catch(() => null);
+    await page.screenshot({ path: path.join(SS_DIR, '26as-03-after-nav.png') }).catch(() => null);
     log('After navigation, page URL: ' + page.url());
 
     // ── STEP 3: Wait for TRACES tab to open ─────────────────────────────────
