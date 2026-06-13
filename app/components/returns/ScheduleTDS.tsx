@@ -431,12 +431,18 @@ export default function ScheduleTDS({ returnId, clientId, returnData, onSaved, s
   const [showImportPanel, setShowImportPanel] = useState(false);
   const [mismatchLoading, setMismatchLoading] = useState(false);
 
-  // Local agent state
+  // Local agent state — AIS
   const [agentAvailable, setAgentAvailable] = useState<boolean | null>(null); // null = not checked yet
   const [agentFetching, setAgentFetching] = useState(false);
   const [agentLog, setAgentLog] = useState<string[]>([]);
   const [agentError, setAgentError] = useState<string | null>(null);
   const agentPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Local agent state — 26AS
+  const [agent26ASFetching, setAgent26ASFetching] = useState(false);
+  const [agent26ASLog, setAgent26ASLog] = useState<string[]>([]);
+  const [agent26ASError, setAgent26ASError] = useState<string | null>(null);
+  const agent26ASPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
 
   // ── Load ────────────────────────────────────────────────────────────────────
@@ -575,6 +581,87 @@ export default function ScheduleTDS({ returnId, clientId, returnData, onSaved, s
     } catch (e: any) {
       setAgentFetching(false);
       setAgentError(e.message ?? 'Failed to contact local agent');
+    }
+  }
+
+  async function fetch26ASFromAgent() {
+    setAgent26ASError(null);
+    setAgent26ASLog([]);
+
+    let pan = (returnData as any)?.client?.pan ?? '';
+    let password = '';
+    let dob = '';
+    try {
+      const cr = await fetch(`/api/clients/${clientId}/portal-credentials`);
+      if (cr.ok) {
+        const cj = await cr.json();
+        pan = cj.data?.pan ?? pan;
+        password = cj.data?.portalPassword ?? '';
+        dob = cj.data?.dob ?? '';
+      }
+    } catch { /* ignore */ }
+
+    if (!password) {
+      setAgent26ASError('No portal password stored for this client. Edit the client and add the portal password first.');
+      return;
+    }
+
+    setAgent26ASFetching(true);
+    setAgent26ASLog(['Starting 26AS fetch...']);
+
+    const agentUrl = await findAgentUrl();
+    if (!agentUrl) { setAgent26ASFetching(false); setAgent26ASError('LOCAL_AGENT_NOT_RUNNING'); return; }
+
+    const ayLabel: string = (returnData as any)?.assessmentYear?.label ?? '2025-26';
+
+    try {
+      const startRes = await fetch(`${agentUrl}/fetch-26as`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pan, password, dob, assessmentYear: ayLabel, force: true }),
+      });
+      if (!startRes.ok) {
+        const j = await startRes.json().catch(() => ({}));
+        throw new Error(j.error ?? 'Agent failed to start 26AS fetch');
+      }
+
+      agent26ASPollRef.current = setInterval(async () => {
+        try {
+          const statusRes = await fetch(`${agentUrl}/status-26as`);
+          const s = await statusRes.json();
+          if (s.log?.length) setAgent26ASLog(s.log);
+
+          if (s.status === 'done') {
+            clearInterval(agent26ASPollRef.current!);
+            setAgent26ASFetching(false);
+            const data = s.result;
+
+            let parsed: ParsedPortalData | null = null;
+            if (data?.form26AS?.raw) {
+              const p = parse26ASText(data.form26AS.raw);
+              if (p.tdsEntries.length || p.tcsEntries.length) parsed = p;
+            }
+
+            if (parsed) {
+              await ipc.savePortalData(returnId, parsed);
+              setPortalData(parsed);
+              const mm = await ipc.getMismatches(returnId);
+              setMismatches(mm);
+              setAgent26ASLog(prev => [...prev, `Done! ${parsed!.tdsEntries.length} TDS + ${parsed!.tcsEntries.length} TCS entries from 26AS.`]);
+            } else {
+              setAgent26ASError('26AS fetched but no TDS/TCS entries found. Try uploading the 26AS text file manually.');
+            }
+          } else if (s.status === 'error') {
+            clearInterval(agent26ASPollRef.current!);
+            setAgent26ASFetching(false);
+            setAgent26ASError(s.error ?? '26AS fetch failed');
+          }
+        } catch { /* ignore poll errors */ }
+      }, 2000);
+
+    } catch (e: any) {
+      setAgent26ASFetching(false);
+      setAgent26ASError(e.message ?? 'Failed to contact local agent');
     }
   }
 
@@ -805,10 +892,10 @@ export default function ScheduleTDS({ returnId, clientId, returnData, onSaved, s
                 </button>
               </>
             )}
-            {/* Auto fetch button — uses local agent */}
+            {/* Auto fetch AIS button — uses local agent */}
             <button
               className="btn btn-primary btn-sm"
-              disabled={agentFetching}
+              disabled={agentFetching || agent26ASFetching}
               onClick={async () => {
                 setAgentError(null);
                 const avail = await checkAgent();
@@ -819,7 +906,23 @@ export default function ScheduleTDS({ returnId, clientId, returnData, onSaved, s
                 await fetchFromAgent();
               }}
             >
-              {agentFetching ? '⏳ Fetching…' : '🔄 Fetch from Portal'}
+              {agentFetching ? '⏳ Fetching AIS…' : '🔄 Fetch AIS'}
+            </button>
+            {/* 26AS fetch button */}
+            <button
+              className="btn btn-secondary btn-sm"
+              disabled={agentFetching || agent26ASFetching}
+              onClick={async () => {
+                setAgent26ASError(null);
+                const avail = await checkAgent();
+                if (!avail) {
+                  setAgent26ASError('LOCAL_AGENT_NOT_RUNNING');
+                  return;
+                }
+                await fetch26ASFromAgent();
+              }}
+            >
+              {agent26ASFetching ? '⏳ Fetching 26AS…' : '📄 Fetch 26AS'}
             </button>
             {/* Manual file upload fallback */}
             <label style={{ cursor: 'pointer' }}>
@@ -832,15 +935,23 @@ export default function ScheduleTDS({ returnId, clientId, returnData, onSaved, s
           </div>
         </div>
 
-        {/* Agent log while fetching */}
+        {/* AIS agent log while fetching */}
         {agentFetching && agentLog.length > 0 && (
           <div style={{ marginTop: 10, padding: '8px 12px', background: 'rgba(30,40,60,0.4)', borderRadius: 6, fontSize: 12, color: 'var(--text-muted)', fontFamily: 'monospace' }}>
+            <div style={{ fontWeight: 700, marginBottom: 4, color: 'var(--text-primary)' }}>AIS Fetch Log</div>
             {agentLog.map((l, i) => <div key={i}>▶ {l}</div>)}
+          </div>
+        )}
+        {/* 26AS agent log while fetching */}
+        {agent26ASFetching && agent26ASLog.length > 0 && (
+          <div style={{ marginTop: 10, padding: '8px 12px', background: 'rgba(30,40,60,0.4)', borderRadius: 6, fontSize: 12, color: 'var(--text-muted)', fontFamily: 'monospace' }}>
+            <div style={{ fontWeight: 700, marginBottom: 4, color: 'var(--text-primary)' }}>26AS Fetch Log</div>
+            {agent26ASLog.map((l, i) => <div key={i}>▶ {l}</div>)}
           </div>
         )}
 
         {/* Error states */}
-        {agentError === 'LOCAL_AGENT_NOT_RUNNING' && (
+        {(agentError === 'LOCAL_AGENT_NOT_RUNNING' || agent26ASError === 'LOCAL_AGENT_NOT_RUNNING') && (
           <div style={{ marginTop: 10, padding: '10px 14px', background: 'rgba(210,153,34,0.1)', border: '1px solid rgba(210,153,34,0.3)', borderRadius: 6, fontSize: 12, lineHeight: 1.9 }}>
             <strong style={{ color: 'var(--status-warning)' }}>Portal Agent not found on this computer.</strong><br />
             <strong>Option 1 — Install on this PC (one-time):</strong><br />
@@ -856,6 +967,7 @@ export default function ScheduleTDS({ returnId, clientId, returnData, onSaved, s
                   const url = val.startsWith('http') ? val : `http://${val}`;
                   localStorage.setItem('taxflow_agent_url', url);
                   setAgentError(null);
+                  setAgent26ASError(null);
                 }
               }}
             />&nbsp;
@@ -865,7 +977,12 @@ export default function ScheduleTDS({ returnId, clientId, returnData, onSaved, s
         )}
         {agentError && agentError !== 'LOCAL_AGENT_NOT_RUNNING' && (
           <div style={{ marginTop: 10, padding: '8px 12px', background: 'rgba(248,81,73,0.1)', border: '1px solid rgba(248,81,73,0.3)', borderRadius: 6, fontSize: 12, color: '#f85149' }}>
-            {agentError}
+            AIS: {agentError}
+          </div>
+        )}
+        {agent26ASError && agent26ASError !== 'LOCAL_AGENT_NOT_RUNNING' && (
+          <div style={{ marginTop: 10, padding: '8px 12px', background: 'rgba(248,81,73,0.1)', border: '1px solid rgba(248,81,73,0.3)', borderRadius: 6, fontSize: 12, color: '#f85149' }}>
+            26AS: {agent26ASError}
           </div>
         )}
         {importError && (
