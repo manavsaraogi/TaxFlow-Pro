@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import JSZip from 'jszip';
 import type { ReturnData } from '@/shared/types/itr';
 
 // ─── Portal import types ──────────────────────────────────────────────────────
@@ -505,6 +506,8 @@ export default function ScheduleTDS({ returnId, clientId, returnData, onSaved, s
   const [mismatches, setMismatches] = useState<MismatchItem[]>([]);
   const [importLoading, setImportLoading] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
+  const [import26ASLoading, setImport26ASLoading] = useState(false);
+  const [import26ASError, setImport26ASError] = useState<string | null>(null);
   const [showImportPanel, setShowImportPanel] = useState(false);
   const [mismatchLoading, setMismatchLoading] = useState(false);
 
@@ -776,47 +779,94 @@ export default function ScheduleTDS({ returnId, clientId, returnData, onSaved, s
     setImportError(null);
     try {
       const text = await file.text();
-      let parsed: ParsedPortalData;
-
-      if (file.name.endsWith('.json') || file.type === 'application/json') {
-        let json: any;
-        // Detect encrypted AIS Utility format (64-char hex prefix)
-        if (/^[0-9a-f]{64}/i.test(text.trimStart())) {
-          // Fetch client PAN + DOB to derive decryption key
-          let pan = (returnData as any)?.client?.pan ?? '';
-          let dob = '';
-          try {
-            const cr = await fetch(`/api/clients/${clientId}/portal-credentials`);
-            if (cr.ok) { const cj = await cr.json(); pan = cj.data?.pan ?? pan; dob = cj.data?.dob ?? ''; }
-          } catch { /* proceed with available values */ }
-          json = await decryptAISFile(text.trimStart(), pan, dob);
-        } else {
-          json = JSON.parse(text);
-        }
-        parsed = parseAISJson(json);
+      let json: any;
+      if (/^[0-9a-f]{64}/i.test(text.trimStart())) {
+        let pan = (returnData as any)?.client?.pan ?? '';
+        let dob = '';
+        try {
+          const cr = await fetch(`/api/clients/${clientId}/portal-credentials`);
+          if (cr.ok) { const cj = await cr.json(); pan = cj.data?.pan ?? pan; dob = cj.data?.dob ?? ''; }
+        } catch { /* proceed */ }
+        json = await decryptAISFile(text.trimStart(), pan, dob);
       } else {
-        parsed = parse26ASText(text);
+        json = JSON.parse(text);
       }
-
+      const parsed = parseAISJson(json);
       if (parsed.tdsEntries.length === 0 && parsed.tcsEntries.length === 0) {
-        setImportError('No TDS/TCS entries found in the file. Make sure you are uploading AIS JSON or 26AS text.');
+        setImportError('No TDS/TCS entries found. Make sure you are uploading the AIS JSON file.');
         return;
       }
-
       await ipc.savePortalData(returnId, parsed);
       setPortalData(parsed);
-      setShowImportPanel(false);
-
-      // Fetch mismatches after import
       const mm = await ipc.getMismatches(returnId);
       setMismatches(mm);
     } catch (e: any) {
-      setImportError(e.message ?? 'Failed to parse file');
+      setImportError(e.message ?? 'Failed to parse AIS file');
     } finally {
       setImportLoading(false);
     }
   }
 
+
+  async function handleFile26ASImport(file: File) {
+    setImport26ASLoading(true);
+    setImport26ASError(null);
+    try {
+      let text: string;
+
+      if (file.name.endsWith('.zip') || file.type === 'application/zip' || file.type === 'application/x-zip-compressed') {
+        // TRACES ZIP: password = PAN (uppercase) + DOB as DDMMYYYY
+        let pan = (returnData as any)?.client?.pan ?? '';
+        let dob = '';
+        try {
+          const cr = await fetch(`/api/clients/${clientId}/portal-credentials`);
+          if (cr.ok) { const cj = await cr.json(); pan = cj.data?.pan ?? pan; dob = cj.data?.dob ?? ''; }
+        } catch { /* proceed */ }
+
+        const zipPassword = pan.toUpperCase() + dob;
+        const buf = await file.arrayBuffer();
+        let zip: JSZip;
+        try {
+          zip = await JSZip.loadAsync(buf);
+        } catch {
+          const pwd = `${pan.toUpperCase()}${dob}`;
+          throw new Error(
+            `The TRACES ZIP is password-protected and cannot be opened directly.\n` +
+            `Password: ${pwd || 'PAN + DOB (e.g. JOMPS8827A06051999)'}\n` +
+            `Please extract the ZIP using Windows Explorer or WinZip, then upload the .txt file here.`
+          );
+        }
+        const txtFile = Object.values(zip.files).find(f => !f.dir && /\.(txt|html|csv)$/i.test(f.name));
+        if (!txtFile) throw new Error('No text file found inside the ZIP. Please extract the ZIP and upload the .txt file directly.');
+        try {
+          text = await txtFile.async('string');
+        } catch {
+          const pwd = `${pan.toUpperCase()}${dob}`;
+          throw new Error(
+            `Could not read from the ZIP (likely password-protected).\n` +
+            `Password: ${pwd || 'PAN + DOB (e.g. JOMPS8827A06051999)'}\n` +
+            `Please extract the ZIP manually and upload the .txt file.`
+          );
+        }
+      } else {
+        text = await file.text();
+      }
+
+      const parsed = parse26ASText(text);
+      if (parsed.tdsEntries.length === 0 && parsed.tcsEntries.length === 0) {
+        setImport26ASError('No TDS/TCS entries found. Make sure you are uploading the TRACES Form 26AS text file.');
+        return;
+      }
+      await ipc.savePortalData(returnId, parsed);
+      setPortalData(parsed);
+      const mm = await ipc.getMismatches(returnId);
+      setMismatches(mm);
+    } catch (e: any) {
+      setImport26ASError(e.message ?? 'Failed to parse 26AS file');
+    } finally {
+      setImport26ASLoading(false);
+    }
+  }
 
   async function refreshMismatches() {
     setMismatchLoading(true);
@@ -1001,12 +1051,20 @@ export default function ScheduleTDS({ returnId, clientId, returnData, onSaved, s
             >
               {agent26ASFetching ? '⏳ Fetching 26AS…' : '📄 Fetch 26AS'}
             </button>
-            {/* Manual file upload fallback */}
+            {/* AIS JSON upload */}
             <label style={{ cursor: 'pointer' }}>
-              <input type="file" accept=".json,.txt,.csv" style={{ display: 'none' }}
+              <input type="file" accept=".json" style={{ display: 'none' }}
                 onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileImport(f); e.target.value = ''; }} />
               <span className="btn btn-secondary btn-sm">
-                {importLoading ? '⏳ Importing…' : '⬆ Upload AIS / 26AS'}
+                {importLoading ? '⏳ Importing…' : '⬆ Upload AIS'}
+              </span>
+            </label>
+            {/* 26AS upload — accepts TRACES .txt or .zip */}
+            <label style={{ cursor: 'pointer' }}>
+              <input type="file" accept=".txt,.zip" style={{ display: 'none' }}
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile26ASImport(f); e.target.value = ''; }} />
+              <span className="btn btn-secondary btn-sm">
+                {import26ASLoading ? '⏳ Importing…' : '⬆ Upload 26AS'}
               </span>
             </label>
           </div>
@@ -1064,7 +1122,12 @@ export default function ScheduleTDS({ returnId, clientId, returnData, onSaved, s
         )}
         {importError && (
           <div style={{ marginTop: 10, padding: '8px 12px', background: 'rgba(248,81,73,0.1)', border: '1px solid rgba(248,81,73,0.3)', borderRadius: 6, fontSize: 12, color: '#f85149' }}>
-            {importError}
+            AIS: {importError}
+          </div>
+        )}
+        {import26ASError && (
+          <div style={{ marginTop: 10, padding: '8px 12px', background: 'rgba(248,81,73,0.1)', border: '1px solid rgba(248,81,73,0.3)', borderRadius: 6, fontSize: 12, color: '#f85149', whiteSpace: 'pre-wrap' }}>
+            26AS: {import26ASError}
           </div>
         )}
       </div>
