@@ -1,26 +1,37 @@
-/**
- * ScheduleTDS.tsx
- * Directory: renderer/app/components/returns/ScheduleTDS.tsx
- *
- * TDS / TCS credit schedule:
- *  - Part A: TDS on Salary (Form 16) — employer-wise
- *  - Part B: TDS on Other Income (Form 16A) — bank FD, rent, etc.
- *  - Part C: TDS on Sale of Immovable Property (Form 16B) — buyer deducts
- *  - Part D: TDS on Rent (Form 16C) — tenant deducts
- *  - Part E: TCS — tax collected at source
- *
- * Rules:
- *  - TAN validation (10-char alphanumeric)
- *  - PAN validation for buyer (Form 16B)
- *  - Each row: deductor name, TAN/PAN, income credited, TDS/TCS deducted
- *  - Running total shown per part and grand total
- *  - Auto-save: dirty flag + 1.5 s debounce
- */
-
 'use client';
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReturnData } from '@/shared/types/itr';
+
+// ─── Portal import types ──────────────────────────────────────────────────────
+
+interface PortalTDSEntry {
+  tan?: string;
+  name: string;
+  section?: string;
+  incomeAmount?: number;
+  tdsDeducted: number;
+  entryType?: string;
+}
+
+interface ParsedPortalData {
+  source: string;
+  importedAt: string;
+  pan?: string;
+  tdsEntries: PortalTDSEntry[];
+  tcsEntries: Array<{ tan?: string; name: string; amount: number; tcsCollected: number }>;
+}
+
+interface MismatchItem {
+  type: string;
+  severity: 'ERROR' | 'WARNING';
+  tan?: string;
+  name: string;
+  field: string;
+  portalValue?: number;
+  itrValue?: number;
+  message: string;
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -107,7 +118,7 @@ const EMPTY_STATE: TDSState = {
   tcsSources: [],
 };
 
-// ─── Mock IPC ─────────────────────────────────────────────────────────────────
+// ─── IPC ──────────────────────────────────────────────────────────────────────
 
 const ipc = {
   getTDS: async (returnId: string) => {
@@ -124,7 +135,146 @@ const ipc = {
     if (!res.ok) { const j = await res.json(); throw new Error(j.error || 'Save failed'); }
     return { ok: true };
   },
+  getPortalData: async (returnId: string): Promise<ParsedPortalData | null> => {
+    const res = await fetch(`/api/returns/${returnId}/portal-data`);
+    const j = await res.json();
+    return j.data ?? null;
+  },
+  savePortalData: async (returnId: string, data: ParsedPortalData) => {
+    const res = await fetch(`/api/returns/${returnId}/portal-data`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error('Failed to save portal data');
+  },
+  getMismatches: async (returnId: string): Promise<MismatchItem[]> => {
+    const res = await fetch(`/api/returns/${returnId}/portal-mismatch`);
+    const j = await res.json();
+    return j.data ?? [];
+  },
 };
+
+// ─── Portal parsers ───────────────────────────────────────────────────────────
+
+function parseAISJson(raw: any): ParsedPortalData {
+  const entries: PortalTDSEntry[] = [];
+  const tcsEntries: ParsedPortalData['tcsEntries'] = [];
+
+  // Try various AIS JSON formats from incometax.gov.in
+  const tdsArr =
+    raw?.taxData?.tds ??
+    raw?.aisData?.tdsDetails ??
+    raw?.tdsDetails ??
+    raw?.tdsSummary ??
+    raw?.TDS_DETAILS ??
+    [];
+
+  for (const t of tdsArr) {
+    entries.push({
+      tan: t.tan ?? t.TAN ?? t.deductorTAN ?? '',
+      name: t.payerName ?? t.deductorName ?? t.PAYER_NAME ?? t.name ?? 'Unknown',
+      section: t.section ?? t.sectionCode ?? t.SECTION ?? '',
+      incomeAmount: Number(t.grossAmount ?? t.amountCredited ?? t.AMOUNT_CREDITED ?? t.amount ?? 0),
+      tdsDeducted: Number(t.taxDeducted ?? t.TDS ?? t.TAX_DEDUCTED ?? t.tds ?? 0),
+      entryType: t.type ?? t.category ?? 'OTHER',
+    });
+  }
+
+  const tcsArr =
+    raw?.taxData?.tcs ??
+    raw?.aisData?.tcsDetails ??
+    raw?.tcsDetails ??
+    raw?.TCS_DETAILS ??
+    [];
+
+  for (const t of tcsArr) {
+    tcsEntries.push({
+      tan: t.tan ?? t.TAN ?? t.collectorTAN ?? '',
+      name: t.collectorName ?? t.payerName ?? t.name ?? 'Unknown',
+      amount: Number(t.amount ?? t.grossAmount ?? 0),
+      tcsCollected: Number(t.taxCollected ?? t.TCS ?? t.tcs ?? 0),
+    });
+  }
+
+  // Handle flat array format: [{ section, deductorTAN, deductorName, ... }]
+  if (entries.length === 0 && Array.isArray(raw)) {
+    for (const t of raw) {
+      if (t.taxDeducted !== undefined || t.tds !== undefined) {
+        entries.push({
+          tan: t.tan ?? t.deductorTAN ?? '',
+          name: t.deductorName ?? t.payerName ?? t.name ?? 'Unknown',
+          section: t.section ?? '',
+          incomeAmount: Number(t.grossAmount ?? t.amount ?? 0),
+          tdsDeducted: Number(t.taxDeducted ?? t.tds ?? 0),
+        });
+      }
+    }
+  }
+
+  return {
+    source: 'AIS',
+    importedAt: new Date().toISOString(),
+    pan: raw?.payerInfo?.pan ?? raw?.pan ?? raw?.PAN ?? '',
+    tdsEntries: entries,
+    tcsEntries,
+  };
+}
+
+function parse26ASText(text: string): ParsedPortalData {
+  const entries: PortalTDSEntry[] = [];
+  const lines = text.split('\n').map((l) => l.trim());
+  let currentPart = '';
+  let inDataSection = false;
+  let headers: string[] = [];
+
+  for (const line of lines) {
+    if (!line) continue;
+
+    // Detect section headers
+    if (/PART\s+A\s*[:\-]/i.test(line)) { currentPart = 'SALARY'; inDataSection = false; continue; }
+    if (/PART\s+B\s*[:\-]/i.test(line)) { currentPart = 'OTHER'; inDataSection = false; continue; }
+    if (/PART\s+C\s*[:\-]/i.test(line)) { currentPart = 'PROPERTY'; inDataSection = false; continue; }
+    if (/PART\s+D\s*[:\-]/i.test(line)) { currentPart = 'RENT'; inDataSection = false; continue; }
+
+    // Detect header row (SNo or Sr No pattern)
+    if (/^(SNo|Sr\.?\s*No|S\.?No)/i.test(line)) {
+      headers = line.split(/\t|\|/).map((h) => h.trim().toLowerCase());
+      inDataSection = true;
+      continue;
+    }
+
+    if (!inDataSection || !currentPart) continue;
+
+    const cols = line.split(/\t|\|/).map((c) => c.trim());
+    if (cols.length < 4) continue;
+
+    // Try to extract TAN, name, amount, TDS from columns
+    const tanIdx = headers.findIndex((h) => h.includes('tan'));
+    const nameIdx = headers.findIndex((h) => h.includes('name') || h.includes('deduct'));
+    const amtIdx = headers.findIndex((h) => h.includes('paid') || h.includes('credited') || h.includes('amount'));
+    const tdsIdx = headers.findIndex((h) => h.includes('tax deducted') || (h.includes('tds') && !h.includes('deposited')));
+
+    const getValue = (idx: number) => (idx >= 0 && cols[idx] ? cols[idx] : '');
+    const getNum = (idx: number) => parseFloat(getValue(idx).replace(/,/g, '')) || 0;
+
+    const tan = getValue(tanIdx !== -1 ? tanIdx : 1);
+    const name = getValue(nameIdx !== -1 ? nameIdx : 2);
+    const income = getNum(amtIdx !== -1 ? amtIdx : cols.length - 3);
+    const tds = getNum(tdsIdx !== -1 ? tdsIdx : cols.length - 2);
+
+    if (name && tds > 0) {
+      entries.push({ tan, name, incomeAmount: income, tdsDeducted: tds, entryType: currentPart });
+    }
+  }
+
+  return {
+    source: '26AS',
+    importedAt: new Date().toISOString(),
+    tdsEntries: entries,
+    tcsEntries: [],
+  };
+}
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -164,12 +314,24 @@ export default function ScheduleTDS({ returnId, returnData, onSaved, setDirty }:
   const [loaded, setLoaded] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Portal import state
+  const [portalData, setPortalData] = useState<ParsedPortalData | null>(null);
+  const [mismatches, setMismatches] = useState<MismatchItem[]>([]);
+  const [importLoading, setImportLoading] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [showImportPanel, setShowImportPanel] = useState(false);
+  const [mismatchLoading, setMismatchLoading] = useState(false);
+
   // ── Load ────────────────────────────────────────────────────────────────────
   useEffect(() => {
     (async () => {
       try {
-        const saved = await ipc.getTDS(returnId);
+        const [saved, portal] = await Promise.all([
+          ipc.getTDS(returnId),
+          ipc.getPortalData(returnId),
+        ]);
         if (saved) setState(saved as TDSState);
+        if (portal) setPortalData(portal);
       } catch (e) {
         console.error('ScheduleTDS load error', e);
       } finally {
@@ -177,6 +339,107 @@ export default function ScheduleTDS({ returnId, returnData, onSaved, setDirty }:
       }
     })();
   }, [returnId]);
+
+  // ── Portal helpers ──────────────────────────────────────────────────────────
+  async function handleFileImport(file: File) {
+    setImportLoading(true);
+    setImportError(null);
+    try {
+      const text = await file.text();
+      let parsed: ParsedPortalData;
+
+      if (file.name.endsWith('.json') || file.type === 'application/json') {
+        const json = JSON.parse(text);
+        parsed = parseAISJson(json);
+      } else {
+        parsed = parse26ASText(text);
+      }
+
+      if (parsed.tdsEntries.length === 0 && parsed.tcsEntries.length === 0) {
+        setImportError('No TDS/TCS entries found in the file. Make sure you are uploading AIS JSON or 26AS text.');
+        return;
+      }
+
+      await ipc.savePortalData(returnId, parsed);
+      setPortalData(parsed);
+      setShowImportPanel(false);
+
+      // Fetch mismatches after import
+      const mm = await ipc.getMismatches(returnId);
+      setMismatches(mm);
+    } catch (e: any) {
+      setImportError(e.message ?? 'Failed to parse file');
+    } finally {
+      setImportLoading(false);
+    }
+  }
+
+  async function refreshMismatches() {
+    setMismatchLoading(true);
+    try {
+      const mm = await ipc.getMismatches(returnId);
+      setMismatches(mm);
+    } finally {
+      setMismatchLoading(false);
+    }
+  }
+
+  function populateFromPortal() {
+    if (!portalData) return;
+    const newSalarySources: TDSState['salarySources'] = [];
+    const newOtherSources: TDSState['otherSources'] = [];
+    const newTcsSources: TDSState['tcsSources'] = [];
+
+    for (const e of portalData.tdsEntries) {
+      const isSalary = (e.section ?? '').startsWith('192') || e.entryType === 'SALARY';
+      if (isSalary) {
+        newSalarySources.push({
+          id: uuid(),
+          employerName: e.name,
+          employerTAN: e.tan ?? '',
+          grossSalary: e.incomeAmount ?? 0,
+          tdsDeducted: e.tdsDeducted,
+        });
+      } else {
+        newOtherSources.push({
+          id: uuid(),
+          deductorName: e.name,
+          deductorTAN: e.tan ?? '',
+          incomeType: sectionToIncomeType(e.section),
+          incomeCredited: e.incomeAmount ?? 0,
+          tdsDeducted: e.tdsDeducted,
+        });
+      }
+    }
+
+    for (const t of portalData.tcsEntries) {
+      newTcsSources.push({
+        id: uuid(),
+        collectorName: t.name,
+        collectorTAN: t.tan ?? '',
+        amountPaid: t.amount,
+        tcsCollected: t.tcsCollected,
+      });
+    }
+
+    const next: TDSState = {
+      ...state,
+      salarySources: newSalarySources.length > 0 ? newSalarySources : state.salarySources,
+      otherSources: newOtherSources.length > 0 ? newOtherSources : state.otherSources,
+      tcsSources: newTcsSources.length > 0 ? newTcsSources : state.tcsSources,
+    };
+    setState(next);
+    persist(next);
+  }
+
+  function sectionToIncomeType(section?: string): string {
+    if (!section) return 'Other (specify)';
+    if (section.startsWith('194A')) return 'Interest on FD';
+    if (section.startsWith('194I')) return 'Rent (194I)';
+    if (section.startsWith('194J')) return 'Professional Fees';
+    if (section.startsWith('194')) return 'Other (specify)';
+    return 'Other (specify)';
+  }
 
   // ── Auto-save ───────────────────────────────────────────────────────────────
   const persist = useCallback(
@@ -227,8 +490,119 @@ export default function ScheduleTDS({ returnId, returnData, onSaved, setDirty }:
     );
   }
 
+  const errorCount = mismatches.filter((m) => m.severity === 'ERROR').length;
+  const warnCount = mismatches.filter((m) => m.severity === 'WARNING').length;
+
   return (
     <div className="animate-in" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+      {/* ── Portal Import Panel ───────────────────────────────────────────────── */}
+      <div className="card" style={{ borderColor: portalData ? 'rgba(63,185,80,0.3)' : 'var(--border-subtle)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+          <div>
+            <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)', marginBottom: 2 }}>
+              Portal Data Import — 26AS / AIS / TIS
+            </div>
+            {portalData ? (
+              <div style={{ fontSize: 12, color: 'var(--status-success)' }}>
+                {portalData.source} imported · {portalData.tdsEntries.length} TDS entries, {portalData.tcsEntries.length} TCS entries
+                · {new Date(portalData.importedAt).toLocaleDateString('en-IN')}
+              </div>
+            ) : (
+              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                Download AIS JSON or 26AS from incometax.gov.in and upload here to auto-populate and validate.
+              </div>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            {portalData && (
+              <>
+                <button className="btn btn-secondary btn-sm" onClick={populateFromPortal} title="Overwrite TDS entries with portal data">
+                  ↓ Populate from Portal
+                </button>
+                <button className="btn btn-secondary btn-sm" onClick={refreshMismatches} disabled={mismatchLoading}>
+                  {mismatchLoading ? 'Checking…' : '⚡ Check Mismatches'}
+                </button>
+              </>
+            )}
+            <label style={{ cursor: 'pointer' }}>
+              <input type="file" accept=".json,.txt,.csv" style={{ display: 'none' }}
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileImport(f); e.target.value = ''; }} />
+              <span className="btn btn-secondary btn-sm">
+                {importLoading ? 'Importing…' : portalData ? '↺ Re-import' : '↑ Upload 26AS / AIS JSON'}
+              </span>
+            </label>
+          </div>
+        </div>
+
+        {importError && (
+          <div style={{ marginTop: 10, padding: '8px 12px', background: 'rgba(248,81,73,0.1)', border: '1px solid rgba(248,81,73,0.3)', borderRadius: 6, fontSize: 12, color: '#f85149' }}>
+            {importError}
+          </div>
+        )}
+
+        {/* Download instructions */}
+        {!portalData && (
+          <div style={{ marginTop: 12, padding: '10px 14px', background: 'var(--bg-elevated)', borderRadius: 6, fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.7 }}>
+            <strong style={{ color: 'var(--text-primary)' }}>How to download:</strong>
+            <ol style={{ margin: '4px 0 0 16px', padding: 0 }}>
+              <li>Login to <strong>incometax.gov.in</strong> using client's credentials</li>
+              <li>Go to <strong>e-File → Income Tax Returns → View AIS</strong></li>
+              <li>Click <strong>Download → JSON</strong> (for AIS) or go to 26AS and download as text</li>
+              <li>Upload the downloaded file above</li>
+            </ol>
+          </div>
+        )}
+      </div>
+
+      {/* ── Mismatch Panel ────────────────────────────────────────────────────── */}
+      {mismatches.length > 0 && (
+        <div className="card" style={{ borderColor: errorCount > 0 ? 'rgba(248,81,73,0.4)' : 'rgba(210,153,34,0.4)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+            <span style={{ fontSize: 16 }}>{errorCount > 0 ? '🔴' : '🟡'}</span>
+            <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)' }}>
+              Portal vs ITR Mismatches
+            </span>
+            {errorCount > 0 && (
+              <span style={{ background: 'rgba(248,81,73,0.15)', color: '#f85149', borderRadius: 12, padding: '2px 8px', fontSize: 11, fontWeight: 700 }}>
+                {errorCount} ERROR{errorCount !== 1 ? 'S' : ''}
+              </span>
+            )}
+            {warnCount > 0 && (
+              <span style={{ background: 'rgba(210,153,34,0.15)', color: '#D29922', borderRadius: 12, padding: '2px 8px', fontSize: 11, fontWeight: 700 }}>
+                {warnCount} WARNING{warnCount !== 1 ? 'S' : ''}
+              </span>
+            )}
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {mismatches.map((m, i) => (
+              <div key={i} style={{
+                padding: '10px 14px',
+                borderRadius: 6,
+                border: `1px solid ${m.severity === 'ERROR' ? 'rgba(248,81,73,0.3)' : 'rgba(210,153,34,0.3)'}`,
+                background: m.severity === 'ERROR' ? 'rgba(248,81,73,0.06)' : 'rgba(210,153,34,0.06)',
+                fontSize: 13,
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ color: m.severity === 'ERROR' ? '#f85149' : '#D29922', fontWeight: 700, fontSize: 11 }}>
+                    {m.severity}
+                  </span>
+                  <span style={{ color: 'var(--text-primary)' }}>{m.message}</span>
+                </div>
+                {m.portalValue !== undefined && m.itrValue !== undefined && (
+                  <div style={{ marginTop: 4, fontSize: 12, color: 'var(--text-muted)', display: 'flex', gap: 16 }}>
+                    <span>Portal: <strong className="amount" style={{ color: 'var(--text-primary)' }}>₹{m.portalValue.toLocaleString('en-IN')}</strong></span>
+                    <span>ITR: <strong className="amount" style={{ color: 'var(--text-primary)' }}>₹{m.itrValue.toLocaleString('en-IN')}</strong></span>
+                    <span style={{ color: m.severity === 'ERROR' ? '#f85149' : '#D29922' }}>
+                      Diff: ₹{Math.abs(m.portalValue - m.itrValue).toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ── Part A: TDS on Salary ─────────────────────────────────────────────── */}
       <div className="card">

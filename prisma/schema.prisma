@@ -253,6 +253,7 @@ model Return {
   totalTaxesPaid    Int? @default(0)
   balTaxPayable     Int? @default(0)
   refundDue         Int? @default(0)
+  portalData        String?
 
   documents         Document[]
   validationResults ValidationResult[]
