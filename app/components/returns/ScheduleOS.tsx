@@ -489,30 +489,48 @@ export default function ScheduleOSComponent({ returnId, returnData, onSaved, set
 
   return (
     <div className="schedule-os">
-      {/* Top bar */}
-      <div className="schedule-topbar">
-        <div>
-          <h2 className="schedule-title">Schedule OS — Other Sources</h2>
-          <p className="schedule-subtitle">u/s 56–59 of the Income Tax Act</p>
+      {/* Schedule header */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: '12px',
+        flexWrap: 'wrap',
+        paddingBottom: '14px',
+        borderBottom: '1px solid var(--border-subtle)',
+        marginBottom: '4px',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <span style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: '11px',
+            fontWeight: 700,
+            background: 'var(--brand-primary)',
+            color: '#000',
+            padding: '3px 8px',
+            borderRadius: '4px',
+            letterSpacing: '0.04em',
+          }}>OS</span>
+          <div>
+            <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.2 }}>
+              Schedule OS — Income from Other Sources
+            </div>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>u/s 56–59 of the Income Tax Act</div>
+          </div>
         </div>
-        <div className="schedule-topbar-right">
-          {saving && <span className="save-indicator saving">Saving…</span>}
-          {!saving && lastSaved && (
-            <span className="save-indicator saved">
-              Saved {lastSaved.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
-            </span>
-          )}
-          {saveErr && <span className="save-indicator error">{saveErr}</span>}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {saving && <span style={{ fontSize: '11px', color: 'var(--brand-text)', background: 'rgba(212,160,23,0.1)', padding: '3px 8px', borderRadius: '4px' }}>Saving…</span>}
+          {!saving && lastSaved && <span style={{ fontSize: '11px', color: 'var(--status-success)' }}>Saved {lastSaved.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span>}
+          {saveErr && <span style={{ fontSize: '11px', color: 'var(--status-error)' }}>{saveErr}</span>}
           <button
             className="btn btn-secondary btn-sm"
             onClick={importFromPortal}
             disabled={aisImporting}
-            title="Import FD interest, dividends and savings interest from imported AIS / 26AS data"
           >
-            {aisImporting ? '⏳ Importing…' : '⬇ Import from AIS / 26AS'}
+            {aisImporting ? 'Importing…' : 'Import from AIS / 26AS'}
           </button>
           <button className="btn btn-primary btn-sm" onClick={() => save(state)} disabled={saving}>
-            {saving ? 'Saving…' : 'Save'}
+            Save
           </button>
         </div>
       </div>
@@ -532,29 +550,44 @@ export default function ScheduleOSComponent({ returnId, returnData, onSaved, set
         </div>
       )}
 
-      {/* Summary stat cards */}
-      <div className="os-stats">
-        <div className="stat-card">
-          <div className="stat-label">Interest Income</div>
-          <div className="stat-value amount">{fmt(summary.savingsInterest + summary.fdInterest)}</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-label">Dividends</div>
-          <div className="stat-value amount">{fmt(summary.dividends)}</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-label">Family Pension (net)</div>
-          <div className="stat-value amount">{fmt(summary.familyPensionNet)}</div>
-        </div>
-        {summary.lotteryWinnings > 0 && (
-          <div className="stat-card warn">
-            <div className="stat-label">Lottery / Winnings</div>
-            <div className="stat-value amount warn-text">{fmt(summary.lotteryWinnings)}</div>
+      {/* Compact summary bar */}
+      <div style={{
+        display: 'flex',
+        gap: 0,
+        background: 'var(--bg-elevated)',
+        border: '1px solid var(--border-subtle)',
+        borderRadius: '6px',
+        overflow: 'hidden',
+        fontSize: '12px',
+      }}>
+        {[
+          { label: 'Interest', value: summary.savingsInterest + summary.fdInterest },
+          { label: 'Dividends', value: summary.dividends },
+          { label: 'Family Pension', value: summary.familyPensionNet },
+          ...(summary.lotteryWinnings > 0 ? [{ label: 'Lottery (30%)', value: summary.lotteryWinnings }] : []),
+          { label: 'Other', value: summary.otherIncome },
+        ].map((item, i, arr) => (
+          <div key={item.label} style={{
+            flex: 1,
+            padding: '10px 14px',
+            borderRight: i < arr.length - 1 ? '1px solid var(--border-subtle)' : 'none',
+          }}>
+            <div style={{ color: 'var(--text-muted)', marginBottom: '4px', whiteSpace: 'nowrap' }}>{item.label}</div>
+            <div className="amount" style={{ fontWeight: 600, color: item.value > 0 ? 'var(--text-primary)' : 'var(--text-muted)', fontSize: '13px' }}>
+              {item.value > 0 ? fmt(item.value) : '—'}
+            </div>
           </div>
-        )}
-        <div className="stat-card highlight">
-          <div className="stat-label">Total OS Income</div>
-          <div className="stat-value amount brand">{fmt(summary.totalOSIncome)}</div>
+        ))}
+        <div style={{
+          padding: '10px 14px',
+          background: 'rgba(212,160,23,0.08)',
+          borderLeft: '1px solid var(--border-subtle)',
+          minWidth: '140px',
+        }}>
+          <div style={{ color: 'var(--text-muted)', marginBottom: '4px', fontSize: '12px' }}>Total OS Income</div>
+          <div className="amount" style={{ fontWeight: 700, color: 'var(--brand-text)', fontSize: '14px' }}>
+            {fmt(summary.totalOSIncome)}
+          </div>
         </div>
       </div>
 

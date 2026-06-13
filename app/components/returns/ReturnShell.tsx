@@ -76,16 +76,16 @@ interface ReturnShellProps {
 
 // All heads of income always shown — ITR type auto-detected from filled data
 const ALL_TABS: Tab[] = [
-  { id: 'salary',              label: 'Salary',               shortLabel: 'Salary',   icon: '💼' },
-  { id: 'house_property',      label: 'House Property',        shortLabel: 'HP',       icon: '🏠' },
-  { id: 'business_profession', label: 'Business / Profession', shortLabel: 'BP',       icon: '🏭' },
-  { id: 'capital_gains',       label: 'Capital Gains',         shortLabel: 'CG',       icon: '📈' },
-  { id: 'other_sources',       label: 'Other Sources',         shortLabel: 'OS',       icon: '📉' },
-  { id: 'deductions',          label: 'Deductions (VI-A)',      shortLabel: 'VI-A',     icon: '🧾' },
-  { id: 'tds',                 label: 'TDS / TCS',             shortLabel: 'TDS',      icon: '📋' },
-  { id: 'tax_payments',        label: 'Tax Payments',          shortLabel: 'Challan',  icon: '🏦' },
-  { id: 'tax_summary',         label: 'Tax Summary',           shortLabel: 'Summary',  icon: '📊' },
-  { id: 'verification',        label: 'Verification',          shortLabel: 'Verify',   icon: '✅' },
+  { id: 'salary',              label: 'Salary',               shortLabel: 'S',    icon: 'S'   },
+  { id: 'house_property',      label: 'House Property',        shortLabel: 'HP',   icon: 'HP'  },
+  { id: 'business_profession', label: 'Business / Profession', shortLabel: 'BP',   icon: 'BP'  },
+  { id: 'capital_gains',       label: 'Capital Gains',         shortLabel: 'CG',   icon: 'CG'  },
+  { id: 'other_sources',       label: 'Other Sources',         shortLabel: 'OS',   icon: 'OS'  },
+  { id: 'deductions',          label: 'Deductions (VI-A)',      shortLabel: 'VIA',  icon: 'VIA' },
+  { id: 'tds',                 label: 'TDS / TCS',             shortLabel: 'TDS',  icon: 'TDS' },
+  { id: 'tax_payments',        label: 'Tax Payments',          shortLabel: 'ADV',  icon: 'ADV' },
+  { id: 'tax_summary',         label: 'Tax Summary',           shortLabel: 'SUM',  icon: 'SUM' },
+  { id: 'verification',        label: 'Verification',          shortLabel: 'VER',  icon: 'VER' },
 ];
 
 // ─── Mock data ────────────────────────────────────────────────────────────────
@@ -311,109 +311,87 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate }: 
       <div style={{
         background: 'var(--bg-surface)',
         borderBottom: '1px solid var(--border-subtle)',
-        padding: '16px 24px',
+        padding: '12px 20px',
         flexShrink: 0,
       }}>
-        {/* Breadcrumb */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+        {/* Single compact row: back + client + badges + actions */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+          {/* Back link */}
           <button
             className="btn btn-ghost btn-sm"
             onClick={onBack}
-            style={{ padding: '4px 8px', fontSize: '13px' }}
+            style={{ padding: '3px 8px', fontSize: '12px', color: 'var(--text-muted)', flexShrink: 0 }}
           >
             ← {returnMeta.clientName}
           </button>
-          <span style={{ color: 'var(--text-muted)', fontSize: '13px' }}>/</span>
-          <span style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>
-            AY {returnMeta.assessmentYear}
-          </span>
-        </div>
 
-        {/* Title row */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-            <h1 style={{ fontSize: '20px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
+          <span style={{ color: 'var(--border-default)', fontSize: '14px', flexShrink: 0 }}>/</span>
+
+          {/* Title + badges */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', flex: 1 }}>
+            <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
               Income Tax Return
-            </h1>
-            <span className={formTypeBadgeClass(returnMeta.formType)}>
+            </span>
+            <span className={formTypeBadgeClass(returnMeta.formType)} style={{ fontSize: '11px' }}>
               {returnMeta.formType}
             </span>
-            <span className={statusBadgeClass(returnMeta.status)}>
+            <span className={statusBadgeClass(returnMeta.status)} style={{ fontSize: '11px' }}>
               {statusLabel(returnMeta.status)}
             </span>
-            <span className="badge badge-neutral">
+            <span className="badge badge-neutral" style={{ fontSize: '11px' }}>
               {returnMeta.regime === 'NEW' ? 'New Regime' : 'Old Regime'}
             </span>
-          </div>
-
-          {/* Actions + save indicator */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
-            {saveState === 'saving' && (
-              <span style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <div className="spinner" style={{ width: '12px', height: '12px' }} />
-                Saving…
+            <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+              {returnMeta.clientPAN}
+            </span>
+            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+              AY {returnMeta.assessmentYear}
+            </span>
+            {returnMeta.filedAt && (
+              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                Filed {new Date(returnMeta.filedAt).toLocaleDateString('en-IN')}
               </span>
             )}
+            {returnMeta.acknowledgementNumber && (
+              <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', background: 'var(--bg-elevated)', padding: '2px 6px', borderRadius: '3px' }}>
+                ACK: {returnMeta.acknowledgementNumber}
+              </span>
+            )}
+          </div>
+
+          {/* Actions */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+            {saveState === 'saving' && (
+              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Saving…</span>
+            )}
             {saveState === 'saved' && (
-              <span style={{ fontSize: '12px', color: 'var(--color-success)' }}>✓ Saved</span>
+              <span style={{ fontSize: '11px', color: 'var(--status-success)' }}>✓ Saved</span>
             )}
             {saveState === 'error' && (
-              <span style={{ fontSize: '12px', color: 'var(--color-error)' }}>⚠ Save failed</span>
+              <span style={{ fontSize: '11px', color: 'var(--status-error)' }}>Save failed</span>
             )}
-
             <button
               className="btn btn-secondary btn-sm"
               onClick={handleDownloadITR}
               disabled={downloadingJson}
-              title="Download ITR JSON for upload to IT Portal"
             >
-              {downloadingJson ? '⏳ Generating…' : '⬇ Download ITR JSON'}
+              {downloadingJson ? 'Generating…' : 'Download ITR JSON'}
             </button>
-
             <button
               className="btn btn-secondary btn-sm"
               onClick={() => setShowPortalModal(true)}
-              title="Instructions to upload to Income Tax Portal"
             >
-              ↑ Upload to Portal
+              Upload to Portal
             </button>
-
             {!isFiledOrAcknowledged && (
               <button
-                className="btn btn-secondary btn-sm"
+                className="btn btn-primary btn-sm"
                 onClick={() => setActiveTab('verification')}
               >
                 Proceed to File →
               </button>
             )}
-
-            {returnMeta.acknowledgementNumber && (
-              <span
-                className="font-mono"
-                style={{ fontSize: '12px', color: 'var(--text-secondary)', background: 'var(--bg-elevated)', padding: '4px 8px', borderRadius: '4px' }}
-              >
-                ACK: {returnMeta.acknowledgementNumber}
-              </span>
-            )}
           </div>
-        </div>
-
-        {/* Client info strip */}
-        <div style={{ display: 'flex', gap: '24px', marginTop: '10px', flexWrap: 'wrap' }}>
-          <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-            <span style={{ color: 'var(--text-muted)' }}>PAN: </span>
-            <span className="pan-field">{returnMeta.clientPAN}</span>
-          </span>
-          <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-            <span style={{ color: 'var(--text-muted)' }}>AY: </span>
-            {returnMeta.assessmentYear}
-          </span>
-          {returnMeta.filedAt && (
-            <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-              <span style={{ color: 'var(--text-muted)' }}>Filed: </span>
-              {new Date(returnMeta.filedAt).toLocaleDateString('en-IN')}
-            </span>
-          )}
         </div>
       </div>
 
@@ -454,13 +432,16 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate }: 
 
         {/* Sidebar */}
         <nav style={{
-          width: '220px',
+          width: '196px',
           flexShrink: 0,
           borderRight: '1px solid var(--border-subtle)',
           background: 'var(--bg-surface)',
           overflowY: 'auto',
-          padding: '8px 0',
+          padding: '12px 0',
         }}>
+          <div style={{ padding: '0 12px 8px', fontSize: '10px', fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+            Schedules
+          </div>
           {visibleTabs.map((tab) => {
             const isActive = activeTab === tab.id;
             return (
@@ -472,21 +453,37 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate }: 
                   alignItems: 'center',
                   gap: '10px',
                   width: '100%',
-                  padding: '9px 16px',
+                  padding: '7px 12px',
                   border: 'none',
-                  borderLeft: isActive ? '3px solid var(--brand-primary)' : '3px solid transparent',
-                  background: isActive ? 'var(--bg-elevated)' : 'transparent',
+                  borderLeft: isActive ? '2px solid var(--brand-primary)' : '2px solid transparent',
+                  background: isActive ? 'rgba(212,160,23,0.08)' : 'transparent',
                   color: isActive ? 'var(--brand-text)' : 'var(--text-secondary)',
-                  fontSize: '13px',
+                  fontSize: '12.5px',
                   fontWeight: isActive ? 600 : 400,
                   cursor: 'pointer',
                   textAlign: 'left',
-                  transition: 'background 0.12s, color 0.12s',
+                  transition: 'all 0.1s',
+                  lineHeight: '1',
                 }}
-                onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-hover)'; }}
-                onMouseLeave={e => { if (!isActive) (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
+                onMouseEnter={e => { if (!isActive) { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.04)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-primary)'; } }}
+                onMouseLeave={e => { if (!isActive) { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-secondary)'; } }}
               >
-                <span style={{ fontSize: '16px', width: '20px', textAlign: 'center' }}>{tab.icon}</span>
+                <span style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '10px',
+                  fontWeight: 700,
+                  letterSpacing: '0.02em',
+                  width: '30px',
+                  textAlign: 'center',
+                  padding: '2px 4px',
+                  borderRadius: '3px',
+                  flexShrink: 0,
+                  background: isActive ? 'var(--brand-primary)' : 'var(--bg-elevated)',
+                  color: isActive ? '#000' : 'var(--text-muted)',
+                  border: '1px solid ' + (isActive ? 'transparent' : 'var(--border-subtle)'),
+                }}>
+                  {tab.icon}
+                </span>
                 <span>{tab.label}</span>
               </button>
             );
