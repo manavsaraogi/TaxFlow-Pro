@@ -233,6 +233,10 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate }: 
         };
         setReturnMeta(meta);
         setReturnData(data);
+        // Seed the live tax bar immediately from loaded data
+        const initialSummary = computeIncomeSummary(data);
+        setSummary(initialSummary);
+        setTaxComp(computeTaxLiability(initialSummary, meta.regime));
       } catch (e: unknown) {
         setError(e instanceof Error ? e.message : 'Failed to load return');
       } finally {
@@ -424,7 +428,7 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate }: 
       </div>
 
       {/* ── Live tax bar ── */}
-      {summary && taxComp && (
+      {summary && taxComp && (summary.GrossTotalIncome > 0 || taxComp.GrossTaxLiability > 0) && (
         <div style={{
           background: 'var(--bg-elevated)',
           borderBottom: '1px solid var(--border-subtle)',
