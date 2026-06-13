@@ -127,6 +127,14 @@ function splitName(fullName: string): { FirstName: string; MiddleName: string; S
   };
 }
 
+// Detect assessee type from PAN 4th character (P=Individual, H=HUF, F=Firm)
+function detectStatusFromPAN(pan: string): 'I' | 'H' | 'F' {
+  const ch = (pan[3] ?? 'P').toUpperCase();
+  if (ch === 'H') return 'H';
+  if (ch === 'F') return 'F';
+  return 'I';
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // CAP ENFORCEMENT
 // ─────────────────────────────────────────────────────────────────────────────
@@ -571,13 +579,45 @@ function buildTaxPayments(tp: ScheduleTaxPayments) {
 // PERSONAL INFO BUILDER
 // ─────────────────────────────────────────────────────────────────────────────
 
-function buildPersonalInfo(client: BuilderClient, opts?: { includeStatus?: string }) {
+function buildPersonalInfo(client: BuilderClient, opts?: { includeStatus?: string; itr2?: boolean }) {
   const name = splitName(client.fullName);
+  const statusCode = opts?.includeStatus ?? detectStatusFromPAN(client.pan);
+  const mobileInt = client.mobileNumber ? parseInt(client.mobileNumber.replace(/\D/g, ''), 10) || undefined : undefined;
+
+  if (opts?.itr2) {
+    // ITR-2 PersonalInfo: SurNameOrOrgName, Status required; no EmployerCategory; Address needs CountryCodeMobile+MobileNo+EmailAddress
+    return {
+      AssesseeName: {
+        FirstName: name.FirstName,
+        MiddleName: name.MiddleName,
+        SurNameOrOrgName: name.SurName,
+      },
+      PAN: client.pan.toUpperCase(),
+      DOB: client.dateOfBirth,
+      AadhaarCardNo: client.aadhaarNumber,
+      Address: {
+        ResidenceNo: client.address || '-',
+        ResidenceName: '',
+        RoadOrStreet: '',
+        LocalityOrArea: client.city ?? '-',
+        CityOrTownOrDistrict: client.city ?? '',
+        StateCode: (client.state ?? '11') as string,
+        CountryCode: '91' as const,
+        PinCode: client.pinCode,
+        CountryCodeMobile: 91,
+        MobileNo: mobileInt ?? 9999999999,
+        EmailAddress: client.email ?? 'noreply@example.com',
+      },
+      SecondaryAdd: 'N' as const,
+      Status: statusCode,
+    };
+  }
+
   return {
     AssesseeName: {
       FirstName: name.FirstName,
       MiddleName: name.MiddleName,
-      SurName: name.SurName,
+      SurNameOrOrgName: name.SurName,
     },
     PAN: client.pan.toUpperCase(),
     DOB: client.dateOfBirth,
@@ -710,9 +750,9 @@ function buildITR1(input: BuildITRInput): object {
             }],
           },
         },
-        TDSonSalaries: rd.tds ? buildTDSOnSalaries(rd.tds) : { TotalTDSonSalaries: 0 },
-        TDSonOthThanSals: rd.tds ? buildTDSOnOtherIncome(rd.tds) : { TotalTDSonOthThanSals: 0 },
-        ScheduleTDS3Dtls: rd.tds ? buildTDS16C(rd.tds) : { TotalTDS3Details: 0 },
+        TDSonSalaries: rd.tds ? buildTDSOnSalaries(rd.tds) : { TDSonSalary: [], TotalTDSonSalaries: 0 },
+        TDSonOthThanSals: rd.tds ? buildTDSOnOtherIncome(rd.tds) : { TDSonOthThanSal: [], TotalTDSonOthThanSals: 0 },
+        ScheduleTDS3Dtls: rd.tds ? buildTDS16C(rd.tds) : { TDS3Details: [], TotalTDS3Details: 0 },
         TaxPayments: rd.taxPayments ? buildTaxPayments(rd.taxPayments) : { TotalTaxPayments: 0 },
         LTCG112A: rd.ltcg112A
           ? {
@@ -831,22 +871,23 @@ function buildITR2(input: BuildITRInput): object {
           Digest: '-',
         },
         Form_ITR2: {
-          FormName:      'ITR-2',
+          FormName:       'ITR-2',
+          Description:    'For Individuals and HUFs not having income from profits and gains of business or profession',
           AssessmentYear: ayToYear(rd.assessmentYear),
-          SchemaVer:     'Ver1.0',
-          FormVer:       'Ver1.0',
+          SchemaVer:      'Ver1.0',
+          FormVer:        'Ver1.0',
         },
 
         // ── PartA_GEN1 ────────────────────────────────────────────────────
         PartA_GEN1: {
-          PersonalInfo: buildPersonalInfo(client),
+          PersonalInfo: buildPersonalInfo(client, { itr2: true }),
           FilingStatus: {
             ReturnFileSec:        rd.filingSection,
             OptOutNewTaxRegime:   rd.regime === 'OLD' ? 'Y' : 'N',
             SeventhProvisio139:   'N',
-            clauseiv7provisio139: 'N',
-            clausev7provisio139:  'N',
-            clausevi7provisio139: 'N',
+            clauseiv7provisio139i: 'N',
+            AsseseeRepFlg:        'N',
+            ResidentialStatus:    (client.residentialStatus ?? 'RES') === 'RNR' ? 'NOR' : (client.residentialStatus ?? 'RES'),
           },
         },
 
@@ -1114,13 +1155,13 @@ function buildITR2(input: BuildITRInput): object {
         },
 
         // ── ScheduleTDS1 (TDS on salary) ─────────────────────────────────
-        ScheduleTDS1: rd.tds ? buildTDSOnSalaries(rd.tds) : { TotalTDSonSalaries: 0 },
+        ScheduleTDS1: rd.tds ? buildTDSOnSalaries(rd.tds) : { TDSonSalary: [], TotalTDSonSalaries: 0 },
 
         // ── ScheduleTDS2 (TDS on other income) ───────────────────────────
-        ScheduleTDS2: rd.tds ? buildTDSOnOtherIncome(rd.tds) : { TotalTDSonOthThanSals: 0 },
+        ScheduleTDS2: rd.tds ? buildTDSOnOtherIncome(rd.tds) : { TDSonOthThanSal: [], TotalTDSonOthThanSals: 0 },
 
         // ── ScheduleTDS3 (TDS u/s 194IB rent) ───────────────────────────
-        ScheduleTDS3Dtls: rd.tds ? buildTDS16C(rd.tds) : { TotalTDS3Details: 0 },
+        ScheduleTDS3: rd.tds ? buildTDS16C(rd.tds) : { TDS3Details: [], TotalTDS3Details: 0 },
 
         // ── ScheduleIT (advance tax / SAT challans) ───────────────────────
         ScheduleIT: rd.taxPayments ? buildTaxPayments(rd.taxPayments) : { TotalTaxPayments: 0 },
@@ -1189,7 +1230,7 @@ function buildITR4(input: BuildITRInput): object {
           SchemaVer:      'Ver1.0',
           FormVer:        'Ver1.0',
         },
-        PersonalInfo: buildPersonalInfo(client, { includeStatus: 'I' }),
+        PersonalInfo: buildPersonalInfo(client, { includeStatus: detectStatusFromPAN(client.pan) }),
         FilingStatus: {
           ReturnFileSec:            rd.filingSection,
           Form10IEAEarlierAYOldRegime: 'NA',
@@ -1215,10 +1256,7 @@ function buildITR4(input: BuildITRInput): object {
           TotalIncomeChargeableUnHP:  toInt(summary.IncomeFromHP),
           IncomeOthSrc:               Math.max(0, toInt(summary.IncomeFromOtherSources)),
           OthersInc: rd.otherSources?.OtherSourceItems?.length
-            ? { OthersIncDtlsOthSrc: rd.otherSources.OtherSourceItems.map((it: any) => ({
-                OthSrcNatureDesc: it.NatureDesc ?? 'OTH',
-                OthSrcOthAmount:  toInt(it.Amount),
-              })) }
+            ? { OthersIncDtlsOthSrc: rd.otherSources.OtherSourceItems.map(buildOtherSourceItem) }
             : undefined,
           DeductionUs57iia:           capAt(rd.otherSources?.DeductionUs57iia ?? 0, 25_000),
           GrossTotIncome:             grossTotInc,
@@ -1286,9 +1324,9 @@ function buildITR4(input: BuildITRInput): object {
               TotalLTCG112A: ltcg112ATotal,
             }
           : undefined,
-        TDSonSalaries:    rd.tds ? buildTDSOnSalaries(rd.tds)     : { TotalTDSonSalaries: 0 },
-        TDSonOthThanSals: rd.tds ? buildTDSOnOtherIncome(rd.tds)  : { TotalTDSonOthThanSals: 0 },
-        ScheduleTDS3Dtls: rd.tds ? buildTDS16C(rd.tds)            : { TotalTDS3Details: 0 },
+        TDSonSalaries:    rd.tds ? buildTDSOnSalaries(rd.tds)     : { TDSonSalary: [], TotalTDSonSalaries: 0 },
+        TDSonOthThanSals: rd.tds ? buildTDSOnOtherIncome(rd.tds)  : { TDSonOthThanSal: [], TotalTDSonOthThanSals: 0 },
+        ScheduleTDS3Dtls: rd.tds ? buildTDS16C(rd.tds)            : { TDS3Details: [], TotalTDS3Details: 0 },
         ScheduleIT:       rd.taxPayments ? buildTaxPayments(rd.taxPayments) : { TotalTaxPayments: 0 },
         ScheduleTCS: rd.tds?.TCSEntries?.length
           ? {
