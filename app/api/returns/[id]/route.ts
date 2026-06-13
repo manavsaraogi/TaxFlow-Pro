@@ -32,7 +32,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
   return NextResponse.json({ data: ret });
 }
 
-// PATCH /api/returns/[id] — update status, notes, etc.
+// PATCH /api/returns/[id] — update status, formType, notes, etc.
 export async function PATCH(request: NextRequest, { params }: Params) {
   const auth = await getAuthContext();
   if (!auth) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -63,4 +63,34 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   });
 
   return NextResponse.json({ data: updated });
+}
+
+// DELETE /api/returns/[id] — delete return and all child records
+export async function DELETE(_req: NextRequest, { params }: Params) {
+  const auth = await getAuthContext();
+  if (!auth) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const existing = await prisma.return.findFirst({
+    where: { id: Number(params.id), client: { firmId: auth.firmId } },
+  });
+  if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
+  // Cascade-delete all child records then the return itself
+  const id = Number(params.id);
+  await prisma.$transaction([
+    prisma.employerEntry.deleteMany({ where: { salarySchedule: { returnId: id } } }),
+    prisma.salarySchedule.deleteMany({ where: { returnId: id } }),
+    prisma.hPSchedule.deleteMany({ where: { returnId: id } }),
+    prisma.oSSchedule.deleteMany({ where: { returnId: id } }),
+    prisma.deductionSchedule.deleteMany({ where: { returnId: id } }),
+    prisma.tDSEntry.deleteMany({ where: { returnId: id } }),
+    prisma.taxPaymentEntry.deleteMany({ where: { returnId: id } }),
+    prisma.lTCG112AEntry.deleteMany({ where: { returnId: id } }),
+    prisma.sTCGEntry.deleteMany({ where: { returnId: id } }),
+    prisma.presumptiveSchedule.deleteMany({ where: { returnId: id } }),
+    prisma.returnVerification.deleteMany({ where: { returnId: id } }),
+    prisma.return.delete({ where: { id } }),
+  ]);
+
+  return NextResponse.json({ data: { deleted: true } });
 }

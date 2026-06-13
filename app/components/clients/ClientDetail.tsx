@@ -90,6 +90,8 @@ export function ClientDetail({ clientId, onNavigate }: ClientDetailProps) {
   const [activeTab, setActiveTab] = useState<ActiveTab>('overview');
   const [showNewReturnModal, setShowNewReturnModal] = useState(false);
   const [showBankModal, setShowBankModal] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ id: number; label: string } | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => { loadClient(); }, [clientId]);
 
@@ -103,6 +105,20 @@ export function ClientDetail({ clientId, onNavigate }: ClientDetailProps) {
       // ignore
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleDeleteReturn() {
+    if (!deleteConfirm) return;
+    setDeleting(true);
+    try {
+      await fetch(`/api/returns/${deleteConfirm.id}`, { method: 'DELETE' });
+      setClient(prev => prev ? { ...prev, returns: prev.returns?.filter(r => r.id !== deleteConfirm.id) } : prev);
+      setDeleteConfirm(null);
+    } catch {
+      // ignore
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -264,6 +280,7 @@ export function ClientDetail({ clientId, onNavigate }: ClientDetailProps) {
             returnId: String(returnId),
             clientId: String(client.id),
           })}
+          onDeleteReturn={(id, label) => setDeleteConfirm({ id, label })}
         />
       )}
       {activeTab === 'bank' && (
@@ -292,6 +309,34 @@ export function ClientDetail({ clientId, onNavigate }: ClientDetailProps) {
           onClose={() => setShowBankModal(false)}
           onAdded={() => { setShowBankModal(false); loadClient(); }}
         />
+      )}
+
+      {/* ── Delete return confirm ── */}
+      {deleteConfirm && (
+        <div className="modal-overlay" onClick={() => setDeleteConfirm(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '400px' }}>
+            <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '12px' }}>
+              Delete Return?
+            </h3>
+            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '20px', lineHeight: '1.6' }}>
+              This will permanently delete <strong>{deleteConfirm.label}</strong> and all its data
+              (salary, TDS, capital gains, etc.). This cannot be undone.
+            </p>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <button className="btn btn-secondary" onClick={() => setDeleteConfirm(null)} disabled={deleting}>
+                Cancel
+              </button>
+              <button
+                className="btn btn-primary"
+                style={{ background: 'var(--color-error, #f85149)', borderColor: 'var(--color-error, #f85149)' }}
+                onClick={handleDeleteReturn}
+                disabled={deleting}
+              >
+                {deleting ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -386,10 +431,11 @@ function InfoRows({ rows }: { rows: { label: string; value: string; mono?: boole
 
 // ── Returns Tab ───────────────────────────────────────────────────────────────
 
-function ReturnsTab({ client, onNewReturn, onOpenReturn }: {
+function ReturnsTab({ client, onNewReturn, onOpenReturn, onDeleteReturn }: {
   client: ClientData;
   onNewReturn: () => void;
   onOpenReturn: (returnId: number) => void;
+  onDeleteReturn: (id: number, label: string) => void;
 }) {
   const returns = client.returns ?? [];
   return (
@@ -462,6 +508,17 @@ function ReturnsTab({ client, onNewReturn, onOpenReturn }: {
                       onClick={(e) => { e.stopPropagation(); onOpenReturn(ret.id); }}
                     >
                       Open →
+                    </button>
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      style={{ color: 'var(--color-error, #f85149)', padding: '4px 8px' }}
+                      title="Delete this return"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDeleteReturn(ret.id, `AY ${ret.assessmentYear?.ayLabel ?? ret.id} ${ret.formType ?? ''}`);
+                      }}
+                    >
+                      Delete
                     </button>
                   </div>
                 </div>
