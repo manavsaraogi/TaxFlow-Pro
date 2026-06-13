@@ -14,9 +14,9 @@
  *   onNavigate — global navigation handler
  */
 
-import { useState, useEffect, useCallback, useRef, Fragment } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { ITRFormType, TaxRegime, IncomeSummary, ITRTaxComputation } from '@/shared/types/itr';
-import { computeIncomeSummary, computeTaxLiability } from '@/shared/utils/itrBuilder';
+import { computeIncomeSummary, computeTaxLiability, detectFormTypeFromReturnData } from '@/shared/utils/itrBuilder';
 
 // ─── Lazy schedule imports (each is a heavy form) ────────────────────────────
 import ScheduleSalary from './ScheduleSalary';
@@ -63,7 +63,6 @@ interface Tab {
   label: string;
   shortLabel: string;
   icon: string;
-  applicableForms: ITRFormType[];
 }
 
 interface ReturnShellProps {
@@ -75,77 +74,18 @@ interface ReturnShellProps {
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
+// All heads of income always shown — ITR type auto-detected from filled data
 const ALL_TABS: Tab[] = [
-  {
-    id: 'salary',
-    label: 'Salary',
-    shortLabel: 'Salary',
-    icon: '💼',
-    applicableForms: ['ITR-1', 'ITR-2', 'ITR-4'],
-  },
-  {
-    id: 'business_profession',
-    label: 'Business / Profession',
-    shortLabel: 'BP',
-    icon: '🏭',
-    applicableForms: ['ITR-4'],
-  },
-  {
-    id: 'house_property',
-    label: 'House Property',
-    shortLabel: 'HP',
-    icon: '🏠',
-    applicableForms: ['ITR-1', 'ITR-2', 'ITR-4'],
-  },
-  {
-    id: 'capital_gains',
-    label: 'Capital Gains',
-    shortLabel: 'CG',
-    icon: '📉',
-    applicableForms: ['ITR-2', 'ITR-4'],
-  },
-  {
-    id: 'other_sources',
-    label: 'Other Sources',
-    shortLabel: 'OS',
-    icon: '📈',
-    applicableForms: ['ITR-1', 'ITR-2', 'ITR-4'],
-  },
-  {
-    id: 'deductions',
-    label: 'Deductions',
-    shortLabel: 'VI-A',
-    icon: '🧾',
-    applicableForms: ['ITR-1', 'ITR-2', 'ITR-4'],
-  },
-  {
-    id: 'tds',
-    label: 'TDS / TCS',
-    shortLabel: 'TDS',
-    icon: '📋',
-    applicableForms: ['ITR-1', 'ITR-2', 'ITR-4'],
-  },
-  {
-    id: 'tax_payments',
-    label: 'Tax Payments',
-    shortLabel: 'Challan',
-    icon: '🏦',
-    applicableForms: ['ITR-1', 'ITR-2', 'ITR-4'],
-  },
-  {
-    id: 'tax_summary',
-    label: 'Tax Summary',
-    shortLabel: 'Summary',
-    icon: '📊',
-    applicableForms: ['ITR-1', 'ITR-2', 'ITR-4'],
-  },
-  {
-    id: 'verification',
-    label: 'Verification',
-    shortLabel: 'Verify',
-    icon: '✅',
-    applicableForms: ['ITR-1', 'ITR-2', 'ITR-4'],
-  },
+  { id: 'salary',              label: 'Salary',               shortLabel: 'Salary',   icon: '💼' },
+  { id: 'house_property',      label: 'House Property',        shortLabel: 'HP',       icon: '🏠' },
+  { id: 'business_profession', label: 'Business / Profession', shortLabel: 'BP',       icon: '🏭' },
+  { id: 'capital_gains',       label: 'Capital Gains',         shortLabel: 'CG',       icon: '📈' },
+  { id: 'other_sources',       label: 'Other Sources',         shortLabel: 'OS',       icon: '📉' },
+  { id: 'deductions',          label: 'Deductions (VI-A)',      shortLabel: 'VI-A',     icon: '🧾' },
+  { id: 'tds',                 label: 'TDS / TCS',             shortLabel: 'TDS',      icon: '📋' },
+  { id: 'tax_payments',        label: 'Tax Payments',          shortLabel: 'Challan',  icon: '🏦' },
+  { id: 'tax_summary',         label: 'Tax Summary',           shortLabel: 'Summary',  icon: '📊' },
+  { id: 'verification',        label: 'Verification',          shortLabel: 'Verify',   icon: '✅' },
 ];
 
 // ─── Mock data ────────────────────────────────────────────────────────────────
@@ -227,6 +167,8 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate }: 
   const [dirty, setDirty] = useState(false);
   const [showPortalModal, setShowPortalModal] = useState(false);
   const [downloadingJson, setDownloadingJson] = useState(false);
+  const [detectedForm, setDetectedForm] = useState<{ formType: ITRFormType; reason: string } | null>(null);
+  const [switchingForm, setSwitchingForm] = useState(false);
 
   // Load return metadata
   useEffect(() => {
@@ -251,10 +193,12 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate }: 
         };
         setReturnMeta(meta);
         setReturnData(data);
-        // Seed the live tax bar immediately from loaded data
         const initialSummary = computeIncomeSummary(data);
         setSummary(initialSummary);
         setTaxComp(computeTaxLiability(initialSummary, meta.regime));
+        // Auto-detect form type on load
+        const detected = detectFormTypeFromReturnData(data);
+        if (detected.formType !== meta.formType) setDetectedForm(detected);
       } catch (e: unknown) {
         setError(e instanceof Error ? e.message : 'Failed to load return');
       } finally {
@@ -270,13 +214,43 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate }: 
     if (returnMeta) {
       setTaxComp(computeTaxLiability(newSummary, returnMeta.regime));
     }
-    // Trigger auto-save indicator
     setSaveState('saving');
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
       setSaveState('saved');
       setTimeout(() => setSaveState('idle'), 2000);
     }, 1500);
+  }, [returnMeta]);
+
+  // Run ITR auto-detection whenever returnData changes
+  const runDetection = useCallback((rd: any) => {
+    if (!returnMeta) return;
+    const detected = detectFormTypeFromReturnData(rd);
+    if (detected.formType !== returnMeta.formType) {
+      setDetectedForm(detected);
+    } else {
+      setDetectedForm(null);
+    }
+  }, [returnMeta]);
+
+  // Switch form type on the server and update local state
+  const handleSwitchFormType = useCallback(async (toType: ITRFormType) => {
+    if (!returnMeta) return;
+    setSwitchingForm(true);
+    try {
+      const res = await fetch(`/api/returns/${returnMeta.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ formType: toType }),
+      });
+      if (!res.ok) throw new Error('Switch failed');
+      setReturnMeta(prev => prev ? { ...prev, formType: toType } : prev);
+      setDetectedForm(null);
+    } catch {
+      // ignore — user can retry
+    } finally {
+      setSwitchingForm(false);
+    }
   }, [returnMeta]);
 
   // Download ITR JSON
@@ -304,10 +278,8 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate }: 
     }
   }, [returnMeta, returnId]);
 
-  // Tabs applicable to this form type
-  const visibleTabs = returnMeta
-    ? ALL_TABS.filter((t) => t.applicableForms.includes(returnMeta.formType))
-    : ALL_TABS;
+  // All heads always visible — ITR type is auto-detected from filled data
+  const visibleTabs = ALL_TABS;
 
   const isFiledOrAcknowledged =
     returnMeta?.status === 'FILED' || returnMeta?.status === 'ACKNOWLEDGED';
@@ -528,7 +500,32 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate }: 
               className="badge badge-success"
               style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', marginBottom: '16px', padding: '8px 14px', fontSize: '13px' }}
             >
-              🔒 This return has been filed. Fields are read-only.
+              This return has been filed. Fields are read-only.
+            </div>
+          )}
+
+          {/* ── Auto ITR type detection banner ── */}
+          {detectedForm && !isFiledOrAcknowledged && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap',
+              padding: '12px 16px', marginBottom: '18px',
+              background: 'rgba(212,160,23,0.10)', border: '1px solid var(--brand-primary)',
+              borderRadius: '8px', fontSize: '13px',
+            }}>
+              <div style={{ flex: 1 }}>
+                <strong style={{ color: 'var(--brand-text)' }}>ITR type mismatch detected</strong>
+                <span style={{ color: 'var(--text-secondary)', marginLeft: '8px' }}>{detectedForm.reason}</span>
+              </div>
+              <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
+                <button
+                  className="btn btn-primary btn-sm"
+                  onClick={() => handleSwitchFormType(detectedForm.formType)}
+                  disabled={switchingForm}
+                >
+                  {switchingForm ? 'Switching…' : `Switch to ${detectedForm.formType}`}
+                </button>
+                <button className="btn btn-ghost btn-sm" onClick={() => setDetectedForm(null)}>Dismiss</button>
+              </div>
             </div>
           )}
 
@@ -542,6 +539,7 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate }: 
                 setSummary(newSummary);
                 setTaxComp(computeTaxLiability(newSummary, rd.regime ?? returnMeta?.regime ?? 'NEW'));
                 onScheduleChange(newSummary);
+                runDetection(rd);
               }}
               setDirty={setDirty}
             />
@@ -557,6 +555,7 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate }: 
                 setSummary(newSummary);
                 setTaxComp(computeTaxLiability(newSummary, rd.regime ?? returnMeta?.regime ?? 'NEW'));
                 onScheduleChange(newSummary);
+                runDetection(rd);
               }}
               setDirty={setDirty}
             />
@@ -572,6 +571,7 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate }: 
                 setSummary(newSummary);
                 setTaxComp(computeTaxLiability(newSummary, rd.regime ?? returnMeta?.regime ?? 'NEW'));
                 onScheduleChange(newSummary);
+                runDetection(rd);
               }}
               setDirty={setDirty}
             />
@@ -587,6 +587,7 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate }: 
                 setSummary(newSummary);
                 setTaxComp(computeTaxLiability(newSummary, rd.regime ?? returnMeta?.regime ?? 'NEW'));
                 onScheduleChange(newSummary);
+                runDetection(rd);
               }}
               setDirty={setDirty}
             />
@@ -602,6 +603,7 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate }: 
                 setSummary(newSummary);
                 setTaxComp(computeTaxLiability(newSummary, rd.regime ?? returnMeta?.regime ?? 'NEW'));
                 onScheduleChange(newSummary);
+                runDetection(rd);
               }}
               setDirty={setDirty}
             />

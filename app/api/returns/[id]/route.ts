@@ -49,6 +49,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     data: {
       status: body.status ?? existing.status,
       notes: body.notes ?? existing.notes,
+      formType: body.formType ?? existing.formType,
       filedAt: body.filedAt ? new Date(body.filedAt) : existing.filedAt,
       acknowledgementNumber: body.acknowledgementNumber ?? existing.acknowledgementNumber,
       grossTotalIncome: body.grossTotalIncome ?? existing.grossTotalIncome,

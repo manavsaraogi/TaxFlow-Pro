@@ -812,6 +812,46 @@ export function autoSelectFormType(opts: {
   return { formType: 'ITR-1', reason: 'Salary + up to 1 house property + other sources' };
 }
 
+/**
+ * Detect the correct ITR form type directly from a fully-populated ReturnData.
+ * Used by ReturnShell to auto-suggest / auto-switch form type as the user fills in schedules.
+ *
+ * Priority (first match wins — stricter rules first):
+ *  1. STCG (any) → ITR-2
+ *  2. LTCG 112A > ₹1.25L AND no presumptive → ITR-2
+ *  3. Presumptive income → ITR-4  (LTCG 112A within limit is allowed in ITR-4)
+ *  4. Any LTCG 112A entry (even within limit, no presumptive) → ITR-2
+ *  5. Total income > ₹50 lakh → ITR-2
+ *  6. HUF status (4th PAN char = H) → ITR-2
+ *  7. Otherwise → ITR-1
+ */
+export function detectFormTypeFromReturnData(rd: ReturnData): { formType: ITRFormType; reason: string } {
+  const hasSTCG       = (rd.stcg?.TotalSTCG ?? 0) > 0;
+  const ltcg112ACount = rd.ltcg112A?.Entries?.length ?? 0;
+  const ltcg112AGain  = rd.ltcg112A?.TotalGain ?? 0;
+  const ltcg112AOver  = ltcg112AGain > DEDUCTION_CAPS.LTCG112AExempt;
+  const hasPresumptive = (rd.presumptiveIncome?.TotalPresumptiveIncome ?? 0) > 0;
+  const summary       = computeIncomeSummary(rd);
+  const grossIncome   = summary.GrossTotalIncome;
+
+  if (hasSTCG)
+    return { formType: 'ITR-2', reason: 'Short-term capital gains (STCG) — ITR-2 required' };
+
+  if (ltcg112AOver && !hasPresumptive)
+    return { formType: 'ITR-2', reason: `LTCG u/s 112A gain ₹${ltcg112AGain.toLocaleString('en-IN')} exceeds ₹1.25L exemption — ITR-2 required` };
+
+  if (hasPresumptive)
+    return { formType: 'ITR-4', reason: 'Presumptive income u/s 44AD/44ADA/44AE — ITR-4 required' };
+
+  if (ltcg112ACount > 0)
+    return { formType: 'ITR-2', reason: 'Capital gains u/s 112A — ITR-2 required (or ITR-4 for presumptive income filers)' };
+
+  if (grossIncome > 5_000_000)
+    return { formType: 'ITR-2', reason: `Total income ₹${(grossIncome/100000).toFixed(1)}L exceeds ₹50L — ITR-2 required` };
+
+  return { formType: 'ITR-1', reason: 'Salary, house property and other sources — ITR-1 applicable' };
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // MAIN BUILDER — ITR-2 (Individuals/HUF with CG, multiple HP, foreign income)
 // ─────────────────────────────────────────────────────────────────────────────
