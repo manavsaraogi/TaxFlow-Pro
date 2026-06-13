@@ -427,29 +427,6 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate }: 
         </div>
       </div>
 
-      {/* ── Live tax bar ── */}
-      {summary && taxComp && (summary.GrossTotalIncome > 0 || taxComp.GrossTaxLiability > 0) && (
-        <div style={{
-          background: 'var(--bg-elevated)',
-          borderBottom: '1px solid var(--border-subtle)',
-          padding: '10px 24px',
-          display: 'flex',
-          gap: '32px',
-          flexShrink: 0,
-          overflowX: 'auto',
-        }}>
-          <TaxBarItem label="Gross Total Income" value={summary.GrossTotalIncome} />
-          <TaxBarItem label="Deductions" value={summary.TotalDeductions} />
-          <TaxBarItem label="Taxable Income" value={summary.TotalIncome} highlight />
-          <div style={{ width: '1px', background: 'var(--border-subtle)', flexShrink: 0 }} />
-          <TaxBarItem label="Tax Payable" value={taxComp.GrossTaxLiability} />
-          <TaxBarItem label="Taxes Paid" value={taxComp.TotalTaxesPaid} />
-          {(taxComp.Refund ?? 0) > 0
-            ? <TaxBarItem label="Refund Due" value={taxComp.Refund!} positive />
-            : <TaxBarItem label="Balance Tax" value={taxComp.BalTaxPayable} negative={taxComp.BalTaxPayable > 0} />
-          }
-        </div>
-      )}
 
       {/* ── Tab bar ── */}
       <div
