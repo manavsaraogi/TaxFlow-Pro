@@ -349,10 +349,6 @@ export default function ScheduleTDS({ returnId, clientId, returnData, onSaved, s
   const [showImportPanel, setShowImportPanel] = useState(false);
   const [mismatchLoading, setMismatchLoading] = useState(false);
 
-  // Portal auto-fetch state
-  const [fetchLoading, setFetchLoading] = useState(false);
-  const [fetchError, setFetchError] = useState<string | null>(null);
-  const [fetchSuccess, setFetchSuccess] = useState<string | null>(null);
 
   // ── Load ────────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -403,36 +399,6 @@ export default function ScheduleTDS({ returnId, clientId, returnData, onSaved, s
     }
   }
 
-  async function fetchFromPortal() {
-    if (!clientId) { setFetchError('Client ID not available'); return; }
-    setFetchLoading(true);
-    setFetchError(null);
-    setFetchSuccess(null);
-    try {
-      const res = await fetch('/api/portal/fetch-ais', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clientId: Number(clientId), returnId: Number(returnId) }),
-      });
-      const json = await res.json();
-      if (!res.ok) {
-        setFetchError(json.error ?? 'Portal fetch failed');
-        return;
-      }
-      // Reload portal data and mismatches
-      const [portal, mm] = await Promise.all([
-        ipc.getPortalData(returnId),
-        ipc.getMismatches(returnId),
-      ]);
-      if (portal) setPortalData(portal);
-      setMismatches(mm);
-      setFetchSuccess(`Fetched ${json.imported?.tdsCount ?? 0} TDS + ${json.imported?.tcsCount ?? 0} TCS entries from portal.`);
-    } catch (e: any) {
-      setFetchError(e.message ?? 'Network error');
-    } finally {
-      setFetchLoading(false);
-    }
-  }
 
   async function refreshMismatches() {
     setMismatchLoading(true);
@@ -586,34 +552,24 @@ export default function ScheduleTDS({ returnId, clientId, returnData, onSaved, s
                 </button>
               </>
             )}
-            {/* Auto-fetch via portal login */}
-            <button
-              className="btn btn-primary btn-sm"
-              onClick={fetchFromPortal}
-              disabled={fetchLoading}
-              title="Login to IT portal with client credentials and fetch AIS data automatically"
-            >
-              {fetchLoading ? '⏳ Fetching…' : portalData ? '↺ Re-fetch from Portal' : '⬇ Fetch from Portal'}
-            </button>
-            {/* Manual file upload fallback */}
-            <label style={{ cursor: 'pointer' }}>
+              <label style={{ cursor: 'pointer' }}>
               <input type="file" accept=".json,.txt,.csv" style={{ display: 'none' }}
                 onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileImport(f); e.target.value = ''; }} />
-              <span className="btn btn-secondary btn-sm" title="Upload AIS JSON or 26AS text file downloaded from the portal">
-                {importLoading ? 'Uploading…' : '↑ Upload File'}
+              <span className="btn btn-primary btn-sm">
+                {importLoading ? '⏳ Importing…' : portalData ? '↺ Re-import AIS / 26AS' : '⬇ Import AIS / 26AS'}
               </span>
             </label>
           </div>
         </div>
 
-        {(fetchError || importError) && (
+        {importError && (
           <div style={{ marginTop: 10, padding: '8px 12px', background: 'rgba(248,81,73,0.1)', border: '1px solid rgba(248,81,73,0.3)', borderRadius: 6, fontSize: 12, color: '#f85149' }}>
-            {fetchError ?? importError}
+            {importError}
           </div>
         )}
-        {fetchSuccess && (
-          <div style={{ marginTop: 10, padding: '8px 12px', background: 'rgba(63,185,80,0.1)', border: '1px solid rgba(63,185,80,0.3)', borderRadius: 6, fontSize: 12, color: 'var(--status-success)' }}>
-            {fetchSuccess}
+        {!portalData && (
+          <div style={{ marginTop: 10, fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.6 }}>
+            Login to <strong>incometax.gov.in</strong> → e-File → View AIS → Download JSON, then upload above.
           </div>
         )}
       </div>

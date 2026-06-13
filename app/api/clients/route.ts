@@ -10,12 +10,14 @@ export async function GET() {
 
   const clients = await prisma.client.findMany({
     where: { firmId: auth.firmId, isActive: true },
-    include: {
-      _count: { select: { returns: { where: { status: { not: 'CANCELLED' } } } } },
+    select: {
+      id: true, pan: true, fullName: true, assesseeType: true,
+      mobileNumber: true, email: true, city: true, stateCode: true,
+      residentialStatus: true, taxRegimePreference: true, createdAt: true,
       returns: {
         orderBy: { createdAt: 'desc' },
         take: 1,
-        include: { assessmentYear: true },
+        select: { id: true, status: true, assessmentYear: { select: { ayLabel: true } } },
       },
     },
     orderBy: { fullName: 'asc' },
@@ -32,7 +34,7 @@ export async function GET() {
     state: c.stateCode,
     residentialStatus: c.residentialStatus ?? 'RES',
     taxRegimePreference: c.taxRegimePreference,
-    activeReturnsCount: c._count.returns,
+    activeReturnsCount: c.returns.filter(r => r.status !== 'CANCELLED').length,
     lastReturnAY: c.returns[0]?.assessmentYear?.ayLabel ?? null,
     createdAt: c.createdAt.toISOString(),
   }));

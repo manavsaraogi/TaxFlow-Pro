@@ -178,11 +178,6 @@ function newDonee(): DoneeEntry {
 // ─── Mock IPC fallback ────────────────────────────────────────────────────────
 
 const ipc = {
-  getDeductions: async (returnId: string) => {
-    const res = await fetch(`/api/returns/${returnId}`);
-    const j = await res.json();
-    return j.data?.deductions ?? null;
-  },
   upsertDeductions: async (returnId: string, data: unknown) => {
     const res = await fetch(`/api/returns/${returnId}/schedule/deductions`, {
       method: 'PUT',
@@ -261,24 +256,34 @@ export default function ScheduleDeductions({ returnId, returnData, onSaved, setD
 
   // ── Load ────────────────────────────────────────────────────────────────────
   useEffect(() => {
-    (async () => {
-      try {
-        const saved = await ipc.getDeductions(returnId);
-        if (saved) {
-          setState(saved as DeductionsState);
-        }
-        // Pre-fill 80TTA from ScheduleOS
-        const savingsInterest: number = (returnData as any)?.scheduleOS?.savingsInterest ?? 0;
-        setState((prev) => ({
-          ...prev,
-          savingsInterest80TTA: cap(savingsInterest, SECTION_80TTA_CAP),
-        }));
-      } catch (e) {
-        console.error('ScheduleDeductions load error', e);
-      } finally {
-        setLoaded(true);
-      }
-    })();
+    const db = (returnData as any)?.deductionSchedule;
+    if (db) {
+      setState((prev) => ({
+        ...prev,
+        // Map DB aggregate section values back to UI fields
+        lifeInsurancePremium: db.section80C ?? prev.lifeInsurancePremium,
+        pensionFund80CCC: db.section80CCC ?? prev.pensionFund80CCC,
+        nps80CCD1: db.section80CCDEmployeeOrSE ?? prev.nps80CCD1,
+        nps80CCD1B: db.section80CCD1B ?? prev.nps80CCD1B,
+        nps80CCD2: db.section80CCDEmployer ?? prev.nps80CCD2,
+        healthInsuranceSelf: db.section80D ?? prev.healthInsuranceSelf,
+        disabilityDependent: db.section80DD ?? prev.disabilityDependent,
+        educationLoanInterest: db.section80E ?? prev.educationLoanInterest,
+        homeLoanInterest80EE: db.section80EE ?? prev.homeLoanInterest80EE,
+        homeLoanInterest80EEA: db.section80EEA ?? prev.homeLoanInterest80EEA,
+        evLoanInterest80EEB: db.section80EEB ?? prev.evLoanInterest80EEB,
+        savingsInterest80TTA: db.section80TTA ?? prev.savingsInterest80TTA,
+        selfDisability: db.section80U ?? prev.selfDisability,
+        donations80GGA: db.section80GGA ?? prev.donations80GGA,
+        politicalPartyDonation: db.section80GGC ?? prev.politicalPartyDonation,
+      }));
+    }
+    // Pre-fill 80TTA from ScheduleOS savings interest if not in deductions DB
+    const savingsInterest: number = (returnData as any)?.osSchedule?.savingsInterest ?? 0;
+    if (!db?.section80TTA && savingsInterest > 0) {
+      setState((prev) => ({ ...prev, savingsInterest80TTA: cap(savingsInterest, SECTION_80TTA_CAP) }));
+    }
+    setLoaded(true);
   }, [returnId, returnData]);
 
   // ── Auto-save ───────────────────────────────────────────────────────────────
