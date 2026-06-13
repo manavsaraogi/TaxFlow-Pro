@@ -630,10 +630,12 @@ function DocumentsTab({ clientId, returns }: { clientId: number; returns?: Retur
 
 // ── ITR form suggestion helper ────────────────────────────────────────────────
 
-function suggestFormType(assesseeType: string): string {
-  if (assesseeType === 'FIRM') return 'ITR-5';
-  // For INDIVIDUAL and HUF default to ITR-1; user can override
-  return 'ITR-1';
+function suggestFormType(client: ClientData): { formType: string; reason: string } {
+  if (client.assesseeType === 'FIRM') return { formType: 'ITR-5', reason: 'Firm / LLP' };
+  if (client.assesseeType === 'HUF') return { formType: 'ITR-2', reason: 'HUF assessee' };
+  const rs = (client as any).residentialStatus as string | undefined;
+  if (rs === 'NRI' || rs === 'RNR') return { formType: 'ITR-2', reason: 'Non-resident / RNOR' };
+  return { formType: 'ITR-1', reason: 'Salary + up to 1 house property + other sources' };
 }
 
 function NewReturnModal({ client, onClose, onCreated }: {
@@ -645,12 +647,10 @@ function NewReturnModal({ client, onClose, onCreated }: {
   const defaultAY = '2026-27';
   const ayOptions = ['2026-27', '2025-26', '2024-25'];
 
-  const suggested = suggestFormType(client.assesseeType);
-  // Use ITR-1 as default if suggested is ITR-5 (not supported in UI yet)
-  const defaultFormType = suggested === 'ITR-5' ? 'ITR-5' : 'ITR-1';
+  const { formType: autoFormType, reason: autoFormReason } = suggestFormType(client);
 
   const [ayLabel, setAyLabel] = useState(defaultAY);
-  const [formType, setFormType] = useState(defaultFormType);
+  const [formType] = useState(autoFormType);
   const [regime, setRegime] = useState('NEW');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -705,27 +705,19 @@ function NewReturnModal({ client, onClose, onCreated }: {
           </div>
 
           <div className="form-group">
-            <label className="form-label">ITR Form</label>
-            <select className="form-select" value={formType} onChange={(e) => setFormType(e.target.value)}>
-              <option value="ITR-1">ITR-1 (Salary + 1 HP + Other Sources)</option>
-              <option value="ITR-2">ITR-2 (Capital Gains, Multiple HP)</option>
-              <option value="ITR-4">ITR-4 (Presumptive Income)</option>
-              {client.assesseeType === 'FIRM' && (
-                <option value="ITR-5">ITR-5 (Firm / LLP)</option>
-              )}
-            </select>
-            <div style={{ marginTop: '6px', fontSize: '11px', color: 'var(--brand-text)' }}>
-              Suggested: {suggested} based on assessee type
+            <label className="form-label">ITR Form (auto-selected)</label>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: '10px',
+              padding: '10px 12px', borderRadius: '6px',
+              background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
+            }}>
+              <span style={{
+                fontSize: '15px', fontWeight: 700, color: 'var(--brand-text)',
+                background: 'rgba(212,160,23,0.12)', borderRadius: '4px',
+                padding: '2px 8px',
+              }}>{formType}</span>
+              <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{autoFormReason}</span>
             </div>
-            {formType === 'ITR-4' && (
-              <div style={{
-                marginTop: '8px', padding: '8px 10px', borderRadius: '6px',
-                background: 'rgba(212,160,23,0.08)', border: '1px solid var(--brand-primary)',
-                fontSize: '11px', color: 'var(--text-secondary)', lineHeight: '1.5',
-              }}>
-                For presumptive income u/s 44AD (business ≤ ₹3 Cr), 44ADA (professionals ≤ ₹75 L), or 44AE (goods carriage)
-              </div>
-            )}
           </div>
 
           <div className="form-group">
