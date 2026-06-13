@@ -89,11 +89,6 @@ const EMPTY_STATE: TaxPaymentsState = {
 // ─── Mock IPC ─────────────────────────────────────────────────────────────────
 
 const ipc = {
-  getTaxPayments: async (returnId: string) => {
-    const res = await fetch(`/api/returns/${returnId}`);
-    const j = await res.json();
-    return j.data?.taxPayments ?? null;
-  },
   upsertTaxPayments: async (returnId: string, data: unknown) => {
     const res = await fetch(`/api/returns/${returnId}/schedule/taxPayments`, {
       method: 'PUT',
@@ -226,19 +221,38 @@ export default function ScheduleTaxPayments({ returnId, returnData, onSaved, set
   const [loaded, setLoaded] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // ── Load ────────────────────────────────────────────────────────────────────
+  // ── Load from returnData prop (no extra fetch) ───────────────────────────────
   useEffect(() => {
-    (async () => {
-      try {
-        const saved = await ipc.getTaxPayments(returnId);
-        if (saved) setState(saved as TaxPaymentsState);
-      } catch (e) {
-        console.error('ScheduleTaxPayments load error', e);
-      } finally {
-        setLoaded(true);
+    const dbPayments: any[] = (returnData as any)?.taxPayments ?? [];
+    if (dbPayments.length > 0) {
+      const advance = dbPayments
+        .filter((p: any) => p.paymentType === 'ADVANCE')
+        .map((p: any) => dbChallanToEntry(p));
+      const self = dbPayments
+        .filter((p: any) => p.paymentType !== 'ADVANCE')
+        .map((p: any) => dbChallanToEntry(p));
+      if (advance.length > 0 || self.length > 0) {
+        setState({ advanceTax: advance, selfAssessmentTax: self });
       }
-    })();
+    }
+    setLoaded(true);
   }, [returnId]);
+
+  function dbChallanToEntry(p: any): ChallanEntry {
+    const total = (p.taxAmount ?? 0) + (p.surchargeAmount ?? 0) + (p.educationCess ?? 0) + (p.interestAmount ?? 0) + (p.feeAmount ?? 0);
+    return {
+      id: String(p.id ?? Math.random()),
+      bsrCode: p.bsrCode ?? '',
+      challanSerial: p.challanSerialNo ?? '',
+      dateOfDeposit: p.dateOfDeposit ? new Date(p.dateOfDeposit).toISOString().slice(0, 10) : '',
+      taxAmount: p.taxAmount ?? 0,
+      surcharge: p.surchargeAmount ?? 0,
+      educationCess: p.educationCess ?? 0,
+      interestPaid: p.interestAmount ?? 0,
+      penaltyPaid: p.feeAmount ?? 0,
+      totalAmount: total,
+    };
+  }
 
   // ── Auto-save ───────────────────────────────────────────────────────────────
   const persist = useCallback(

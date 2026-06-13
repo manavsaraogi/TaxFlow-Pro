@@ -173,13 +173,7 @@ const Row = ({
 
 // â”€â”€â”€ Mock IPC â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-const ipc = {
-  getTaxInputs: async (returnId: string): Promise<TaxInputs | null> => {
-    const res = await fetch(`/api/returns/${returnId}`);
-    const j = await res.json();
-    return j.data ?? null;
-  },
-};
+// TaxSummary uses returnData prop directly — no extra fetch needed
 
 // â”€â”€â”€ Computation engine â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -259,21 +253,12 @@ function buildDefaultInputs(returnData: ReturnData): TaxInputs {
 
 export default function TaxSummary({ returnId, returnData }: Props) {
   const [inputs, setInputs] = useState<TaxInputs>(() => buildDefaultInputs(returnData));
-  const [loading, setLoading] = useState(false);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
 
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    try {
-      const fresh = await ipc.getTaxInputs(returnId);
-      setInputs(fresh ?? buildDefaultInputs(returnData));
-      setLastRefresh(new Date());
-    } catch (e) {
-      console.error('TaxSummary refresh error', e);
-    } finally {
-      setLoading(false);
-    }
-  }, [returnId, returnData]);
+  const refresh = useCallback(() => {
+    setInputs(buildDefaultInputs(returnData));
+    setLastRefresh(new Date());
+  }, [returnData]);
 
   useEffect(() => { refresh(); }, [refresh]);
 
@@ -301,8 +286,8 @@ export default function TaxSummary({ returnId, returnData }: Props) {
             )}
           </p>
         </div>
-        <button className="btn btn-secondary btn-sm" onClick={refresh} disabled={loading}>
-          {loading ? 'Refreshingâ€¦' : 'â†» Refresh'}
+        <button className="btn btn-secondary btn-sm" onClick={refresh}>
+          ↻ Refresh
         </button>
       </div>
 

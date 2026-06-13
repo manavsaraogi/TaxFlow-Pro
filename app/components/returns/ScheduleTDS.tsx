@@ -122,11 +122,6 @@ const EMPTY_STATE: TDSState = {
 // ─── IPC ──────────────────────────────────────────────────────────────────────
 
 const ipc = {
-  getTDS: async (returnId: string) => {
-    const res = await fetch(`/api/returns/${returnId}`);
-    const j = await res.json();
-    return j.data?.scheduleTDS ?? null;
-  },
   upsertTDS: async (returnId: string, data: unknown) => {
     const res = await fetch(`/api/returns/${returnId}/schedule/tds`, {
       method: 'PUT',
@@ -137,9 +132,12 @@ const ipc = {
     return { ok: true };
   },
   getPortalData: async (returnId: string): Promise<ParsedPortalData | null> => {
-    const res = await fetch(`/api/returns/${returnId}/portal-data`);
-    const j = await res.json();
-    return j.data ?? null;
+    try {
+      const res = await fetch(`/api/returns/${returnId}/portal-data`);
+      if (!res.ok) return null;
+      const j = await res.json();
+      return j.data ?? null;
+    } catch { return null; }
   },
   savePortalData: async (returnId: string, data: ParsedPortalData) => {
     const res = await fetch(`/api/returns/${returnId}/portal-data`, {
@@ -150,11 +148,39 @@ const ipc = {
     if (!res.ok) throw new Error('Failed to save portal data');
   },
   getMismatches: async (returnId: string): Promise<MismatchItem[]> => {
-    const res = await fetch(`/api/returns/${returnId}/portal-mismatch`);
-    const j = await res.json();
-    return j.data ?? [];
+    try {
+      const res = await fetch(`/api/returns/${returnId}/portal-mismatch`);
+      if (!res.ok) return [];
+      const j = await res.json();
+      return j.data ?? [];
+    } catch { return []; }
   },
 };
+
+// ── Map DB tdsEntries rows → TDSState ─────────────────────────────────────────
+function dbEntriesToState(entries: any[]): TDSState {
+  if (!Array.isArray(entries) || entries.length === 0) return EMPTY_STATE;
+  const state: TDSState = { salarySources: [], otherSources: [], propertySources: [], rentSources: [], tcsSources: [] };
+  for (const e of entries) {
+    switch (e.entryType) {
+      case 'SALARY':
+        state.salarySources.push({ id: String(e.id ?? uuid()), employerName: e.nameOfDeductor ?? '', employerTAN: e.tanOfDeductor ?? '', grossSalary: e.incomeChargeable ?? 0, tdsDeducted: e.tdsDeducted ?? 0 });
+        break;
+      case 'PROPERTY':
+        state.propertySources.push({ id: String(e.id ?? uuid()), buyerName: e.nameOfDeductor ?? '', buyerPAN: e.panOfTenant ?? '', considerationAmount: e.amtForTaxDeduct ?? 0, tdsDeducted: e.tdsDeducted ?? 0 });
+        break;
+      case 'RENT':
+        state.rentSources.push({ id: String(e.id ?? uuid()), tenantName: e.nameOfTenant ?? e.nameOfDeductor ?? '', tenantPAN: e.panOfTenant ?? '', rentPaid: e.grossRentReceived ?? 0, tdsDeducted: e.tdsDeducted ?? 0 });
+        break;
+      case 'TCS':
+        state.tcsSources.push({ id: String(e.id ?? uuid()), collectorName: e.nameOfDeductor ?? '', collectorTAN: e.tanOfDeductor ?? '', amountPaid: e.amtOnWhichTCS ?? 0, tcsCollected: e.tcsCollected ?? 0 });
+        break;
+      default:
+        state.otherSources.push({ id: String(e.id ?? uuid()), deductorName: e.nameOfDeductor ?? '', deductorTAN: e.tanOfDeductor ?? '', incomeType: e.tdsSection ?? 'Other (specify)', incomeCredited: e.incomeChargeable ?? 0, tdsDeducted: e.tdsDeducted ?? 0 });
+    }
+  }
+  return state;
+}
 
 // ─── Portal parsers ───────────────────────────────────────────────────────────
 
@@ -330,20 +356,17 @@ export default function ScheduleTDS({ returnId, clientId, returnData, onSaved, s
 
   // ── Load ────────────────────────────────────────────────────────────────────
   useEffect(() => {
-    (async () => {
-      try {
-        const [saved, portal] = await Promise.all([
-          ipc.getTDS(returnId),
-          ipc.getPortalData(returnId),
-        ]);
-        if (saved) setState(saved as TDSState);
-        if (portal) setPortalData(portal);
-      } catch (e) {
-        console.error('ScheduleTDS load error', e);
-      } finally {
-        setLoaded(true);
-      }
-    })();
+    // Populate TDS state from returnData prop (no extra fetch needed)
+    const entries = (returnData as any)?.tdsEntries;
+    if (entries?.length) {
+      setState(dbEntriesToState(entries));
+    }
+    setLoaded(true);
+
+    // Load portal data in background — non-blocking, failures are silent
+    ipc.getPortalData(returnId).then((portal) => {
+      if (portal) setPortalData(portal);
+    });
   }, [returnId]);
 
   // ── Portal helpers ──────────────────────────────────────────────────────────
