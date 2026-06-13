@@ -336,42 +336,40 @@ function parse26ASText(text: string): ParsedPortalData {
   const tcsEntries: ParsedPortalData['tcsEntries'] = [];
 
   const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
-  const split = (line: string) => line.split('^').map((c) => c.trim());
-
-  // TRACES 26AS format (^ delimited):
-  // PART-I header row starts with "Sr. No." and columns include TAN, Name, Total Amount, Total TDS
-  // Deductor rows: first col is a number (1, 2, ...) → SrNo^Name^TAN^...^TotalAmt^TotalTDS^TotalDeposited
-  // Transaction sub-rows: first col is empty → ^SrNo^Section^Date^...^Amt^TDS^Deposited
-  // PART-VI for TCS
-
-  // Detect whether this is TRACES ^ format
   const isTraces = lines.some(l => l.includes('^PART-') || l.includes('^Annual Tax Statement'));
-  // Also handle tab/pipe format (old TRACES HTML extract)
-  const delim = isTraces ? '^' : null;
   const splitLine = (line: string) =>
-    delim ? line.split('^').map(c => c.trim()) : line.split(/\t|\|/).map(c => c.trim());
+    isTraces ? line.split('^').map(c => c.trim()) : line.split(/\t|\|/).map(c => c.trim());
 
   if (isTraces) {
-    // TRACES ^ format — parse by PART sections
+    // TRACES ^ delimited format.
+    // Deductor rows:    cols[0]=SrNo (integer)  → name, TAN, totals
+    // Transaction rows: cols[0]=''              → cols[2]=Section code
+    // We collect sections from sub-rows to know 194 (dividend) vs 194A (FD interest) etc.
+
     let currentPart: 'TDS' | 'TCS' | null = null;
-    // Column indices for the deductor header row in each part
     let nameIdx = -1, tanIdx = -1, amtIdx = -1, tdsIdx = -1;
-    // For TCS: collector, tan, amount, tcs
     let tcsNameIdx = -1, tcsTanIdx = -1, tcsAmtIdx = -1, tcsTaxIdx = -1;
 
-    for (const line of lines) {
-      // Part detection
-      if (/PART-I\b.*tax deducted at source/i.test(line)) { currentPart = 'TDS'; continue; }
-      if (/PART-VI\b.*tax collected/i.test(line)) { currentPart = 'TCS'; continue; }
-      // Other parts reset (PART-II through PART-X are not TDS/TCS deductor data we need)
-      if (/\^PART-(?:II|III|IV|V|VII|VIII|IX|X)\b/i.test(line)) { currentPart = null; continue; }
+    // Pending deductor: we buffer it until we see sub-rows to pick up section codes
+    let pending: { tan: string; name: string; incomeAmount: number; tdsDeducted: number; sections: string[] } | null = null;
 
-      if (!currentPart) continue;
-      if (/No Transactions Present/i.test(line)) continue;
+    const flushPending = () => {
+      if (!pending) return;
+      // Primary section = first seen section code
+      const section = pending.sections[0] ?? '';
+      tdsEntries.push({ tan: pending.tan, name: pending.name, incomeAmount: pending.incomeAmount, tdsDeducted: pending.tdsDeducted, section, entryType: 'OTHER' });
+      pending = null;
+    };
+
+    for (const line of lines) {
+      if (/PART-I\b.*tax deducted at source/i.test(line)) { flushPending(); currentPart = 'TDS'; continue; }
+      if (/PART-VI\b.*tax collected/i.test(line)) { flushPending(); currentPart = 'TCS'; continue; }
+      if (/\^PART-(?:II|III|IV|V|VII|VIII|IX|X)\b/i.test(line)) { flushPending(); currentPart = null; continue; }
+      if (!currentPart || /No Transactions Present/i.test(line)) continue;
 
       const cols = splitLine(line);
 
-      // Deductor header row: cols[0] is "Sr. No." (sub-header rows have cols[0]='' — skip those)
+      // Column header row (cols[0] = "Sr. No.") — only the deductor-level header (not sub-header)
       if (/^sr\.?\s*no\.?$/i.test(cols[0] ?? '')) {
         const h = cols.map(c => c.toLowerCase());
         if (currentPart === 'TDS') {
@@ -379,36 +377,35 @@ function parse26ASText(text: string): ParsedPortalData {
           tanIdx  = h.findIndex(c => c.includes('tan of deduct'));
           amtIdx  = h.findIndex(c => c.includes('total amount paid'));
           tdsIdx  = h.findIndex(c => c.includes('total tax deducted'));
-          // fallbacks
           if (nameIdx === -1) nameIdx = h.findIndex(c => c.includes('name'));
           if (tanIdx  === -1) tanIdx  = h.findIndex(c => c.includes('tan'));
           if (amtIdx  === -1) amtIdx  = h.findIndex(c => c.includes('amount'));
           if (tdsIdx  === -1) tdsIdx  = h.findIndex(c => c.includes('tax deducted') || (c.includes('tds') && !c.includes('deposited')));
         } else {
-          tcsNameIdx = h.findIndex(c => c.includes('name of collect'));
-          tcsTanIdx  = h.findIndex(c => c.includes('tan of collect'));
-          tcsAmtIdx  = h.findIndex(c => c.includes('total amount'));
-          tcsTaxIdx  = h.findIndex(c => c.includes('total tax collected'));
-          if (tcsNameIdx === -1) tcsNameIdx = h.findIndex(c => c.includes('name'));
-          if (tcsTanIdx  === -1) tcsTanIdx  = h.findIndex(c => c.includes('tan'));
-          if (tcsAmtIdx  === -1) tcsAmtIdx  = h.findIndex(c => c.includes('amount'));
-          if (tcsTaxIdx  === -1) tcsTaxIdx  = h.findIndex(c => c.includes('tax collected'));
+          tcsNameIdx = h.findIndex(c => c.includes('name of collect')); if (tcsNameIdx === -1) tcsNameIdx = h.findIndex(c => c.includes('name'));
+          tcsTanIdx  = h.findIndex(c => c.includes('tan of collect'));  if (tcsTanIdx  === -1) tcsTanIdx  = h.findIndex(c => c.includes('tan'));
+          tcsAmtIdx  = h.findIndex(c => c.includes('total amount'));    if (tcsAmtIdx  === -1) tcsAmtIdx  = h.findIndex(c => c.includes('amount'));
+          tcsTaxIdx  = h.findIndex(c => c.includes('total tax collected')); if (tcsTaxIdx === -1) tcsTaxIdx = h.findIndex(c => c.includes('tax collected'));
         }
         continue;
       }
 
-      // Deductor data row: first col is a positive integer (sr no), not empty, not a sub-row
       const srNo = parseInt(cols[0] ?? '', 10);
-      if (!isNaN(srNo) && srNo > 0 && cols[0] !== '') {
+
+      if (!isNaN(srNo) && srNo > 0 && (cols[0] ?? '') !== '') {
+        // Deductor summary row
         const get = (i: number) => (i >= 0 && i < cols.length ? cols[i] : '');
         const getNum = (i: number) => parseFloat(get(i).replace(/,/g, '')) || 0;
 
         if (currentPart === 'TDS') {
-          const name = get(nameIdx !== -1 ? nameIdx : 1);
-          const tan  = get(tanIdx  !== -1 ? tanIdx  : 2);
-          const amt  = getNum(amtIdx !== -1 ? amtIdx : cols.length - 3);
-          const tds  = getNum(tdsIdx !== -1 ? tdsIdx : cols.length - 2);
-          if (name) tdsEntries.push({ tan, name, incomeAmount: amt, tdsDeducted: tds, entryType: 'OTHER' });
+          flushPending();
+          pending = {
+            tan:  get(tanIdx  !== -1 ? tanIdx  : 2),
+            name: get(nameIdx !== -1 ? nameIdx : 1),
+            incomeAmount: getNum(amtIdx !== -1 ? amtIdx : cols.length - 3),
+            tdsDeducted:  getNum(tdsIdx !== -1 ? tdsIdx : cols.length - 2),
+            sections: [],
+          };
         } else {
           const name = get(tcsNameIdx !== -1 ? tcsNameIdx : 1);
           const tan  = get(tcsTanIdx  !== -1 ? tcsTanIdx  : 2);
@@ -416,46 +413,46 @@ function parse26ASText(text: string): ParsedPortalData {
           const tax  = getNum(tcsTaxIdx !== -1 ? tcsTaxIdx : cols.length - 2);
           if (name) tcsEntries.push({ tan, name, amount: amt, tcsCollected: tax });
         }
+        continue;
+      }
+
+      // Transaction sub-row: cols[0]='' → cols[1]=srNo, cols[2]=section code
+      if ((cols[0] ?? '') === '' && /^\d+$/.test(cols[1] ?? '') && pending) {
+        const sectionCode = (cols[2] ?? '').trim();
+        if (sectionCode && !pending.sections.includes(sectionCode)) {
+          pending.sections.push(sectionCode);
+        }
       }
     }
+    flushPending();
+
   } else {
-    // Legacy tab/pipe format (old TRACES HTML copy-paste)
-    let currentPart = '';
+    // Legacy tab/pipe format
     let inDataSection = false;
     let headers: string[] = [];
 
     for (const line of lines) {
-      if (/PART\s+[AI]/i.test(line)) { currentPart = 'TDS'; inDataSection = false; continue; }
-      if (/PART\s+[BJ]/i.test(line)) { currentPart = 'TDS'; inDataSection = false; continue; }
-      if (/PART\s+[CK]/i.test(line)) { currentPart = 'PROPERTY'; inDataSection = false; continue; }
-      if (/PART\s+[DL]/i.test(line)) { currentPart = 'RENT'; inDataSection = false; continue; }
-
       if (/^(SNo|Sr\.?\s*No|S\.?No)/i.test(line)) {
         headers = splitLine(line).map(h => h.toLowerCase());
         inDataSection = true;
         continue;
       }
-
-      if (!inDataSection || !currentPart) continue;
+      if (!inDataSection) continue;
       const cols = splitLine(line);
       if (cols.length < 4) continue;
-
       const h = headers;
       const nameIdx = h.findIndex(c => c.includes('name') || c.includes('deduct'));
       const tanIdx  = h.findIndex(c => c.includes('tan'));
       const amtIdx  = h.findIndex(c => c.includes('paid') || c.includes('credited') || c.includes('amount'));
       const tdsIdx  = h.findIndex(c => c.includes('tax deducted') || (c.includes('tds') && !c.includes('deposited')));
-
       const get = (i: number) => (i >= 0 && cols[i] ? cols[i] : '');
       const getNum = (i: number) => parseFloat(get(i).replace(/,/g, '')) || 0;
-
-      const name   = get(nameIdx !== -1 ? nameIdx : 2);
-      const tan    = get(tanIdx  !== -1 ? tanIdx  : 1);
+      const name = get(nameIdx !== -1 ? nameIdx : 2);
+      const tan  = get(tanIdx  !== -1 ? tanIdx  : 1);
       const income = getNum(amtIdx !== -1 ? amtIdx : cols.length - 3);
       const tds    = getNum(tdsIdx !== -1 ? tdsIdx : cols.length - 2);
-
-      if (name && tds > 0) {
-        tdsEntries.push({ tan, name, incomeAmount: income, tdsDeducted: tds, entryType: currentPart });
+      if (name && (tds > 0 || income > 0)) {
+        tdsEntries.push({ tan, name, incomeAmount: income, tdsDeducted: tds, entryType: 'OTHER' });
       }
     }
   }
@@ -725,11 +722,19 @@ export default function ScheduleTDS({ returnId, clientId, returnData, onSaved, s
             if (parsed) {
               await ipc.savePortalData(returnId, parsed);
               setPortalData(parsed);
+              await populateOSFromPortal(parsed.tdsEntries);
               const mm = await ipc.getMismatches(returnId);
               setMismatches(mm);
-              setAgent26ASLog(prev => [...prev, `Done! ${parsed!.tdsEntries.length} TDS + ${parsed!.tcsEntries.length} TCS entries from 26AS.`]);
+              const divCount = parsed.tdsEntries.filter(e => /^194(K|LBA)?$|^194$/.test(e.section ?? '')).length;
+              const fdCount  = parsed.tdsEntries.filter(e => /^194A/.test(e.section ?? '')).length;
+              setAgent26ASLog(prev => [
+                ...prev,
+                `Done! ${parsed!.tdsEntries.length} TDS + ${parsed!.tcsEntries.length} TCS entries imported.`,
+                ...(fdCount  > 0 ? [`↳ ${fdCount} FD/interest entries added to Other Sources`]  : []),
+                ...(divCount > 0 ? [`↳ ${divCount} dividend entries added to Other Sources`] : []),
+              ]);
             } else {
-              setAgent26ASError('26AS fetched but no TDS/TCS entries found. Try uploading the 26AS text file manually.');
+              setAgent26ASError('26AS fetched but no TDS/TCS entries found.');
             }
           } else if (s.status === 'error') {
             clearInterval(agent26ASPollRef.current!);
@@ -859,6 +864,8 @@ export default function ScheduleTDS({ returnId, clientId, returnData, onSaved, s
       }
       await ipc.savePortalData(returnId, parsed);
       setPortalData(parsed);
+      await populateOSFromPortal(parsed.tdsEntries);
+      populateFromPortalData(parsed);
       const mm = await ipc.getMismatches(returnId);
       setMismatches(mm);
     } catch (e: any) {
@@ -878,13 +885,12 @@ export default function ScheduleTDS({ returnId, clientId, returnData, onSaved, s
     }
   }
 
-  function populateFromPortal() {
-    if (!portalData) return;
+  function populateFromPortalData(data: ParsedPortalData) {
     const newSalarySources: TDSState['salarySources'] = [];
     const newOtherSources: TDSState['otherSources'] = [];
     const newTcsSources: TDSState['tcsSources'] = [];
 
-    for (const e of portalData.tdsEntries) {
+    for (const e of data.tdsEntries) {
       const isSalary = (e.section ?? '').startsWith('192') || e.entryType === 'SALARY';
       if (isSalary) {
         newSalarySources.push({
@@ -906,7 +912,7 @@ export default function ScheduleTDS({ returnId, clientId, returnData, onSaved, s
       }
     }
 
-    for (const t of portalData.tcsEntries) {
+    for (const t of data.tcsEntries) {
       newTcsSources.push({
         id: uuid(),
         collectorName: t.name,
@@ -924,6 +930,69 @@ export default function ScheduleTDS({ returnId, clientId, returnData, onSaved, s
     };
     setState(next);
     persist(next);
+  }
+
+  function populateFromPortal() {
+    if (!portalData) return;
+    populateFromPortalData(portalData);
+  }
+
+  // Populate ScheduleOS from 26AS entries based on section codes.
+  // section 194 / 194K / 194LBA = dividend → dividendEntries
+  // section 194A / 194LC / 194LD = interest on deposits → fdEntries
+  // section 194I = rent → otherEntries (can't auto-split into HP schedule)
+  // everything else stays in TDS schedule only
+  async function populateOSFromPortal(entries: PortalTDSEntry[]) {
+    const dividendSections = /^194(K|LBA|LBB|LBC)?$/i;
+    const fdInterestSections = /^194(A|LC|LD|EE)?$/i;
+
+    const newDividends: Array<{ companyName: string; amount: number }> = [];
+    const newFDEntries: Array<{ bankName: string; interestAmount: number; tdsDeducted: number }> = [];
+
+    for (const e of entries) {
+      const sec = (e.section ?? '').replace(/\s/g, '');
+      if (dividendSections.test(sec) || sec === '194') {
+        newDividends.push({ companyName: e.name, amount: e.incomeAmount ?? 0 });
+      } else if (fdInterestSections.test(sec)) {
+        newFDEntries.push({ bankName: e.name, interestAmount: e.incomeAmount ?? 0, tdsDeducted: e.tdsDeducted });
+      }
+    }
+
+    if (newDividends.length === 0 && newFDEntries.length === 0) return;
+
+    // Read existing ScheduleOS and merge
+    const existing = (returnData as any)?.scheduleOS;
+    const existingFD: Array<{ bankName: string; interestAmount: number; tdsDeducted: number }> =
+      Array.isArray(existing?._fdEntries) ? existing._fdEntries : [];
+    const existingDiv: Array<{ companyName: string; amount: number }> =
+      Array.isArray(existing?._dividendEntries) ? existing._dividendEntries : [];
+
+    // Replace existing 26AS-sourced entries (don't double-add on re-import)
+    const mergedFD = [
+      ...existingFD.filter((f: any) => !newFDEntries.some(n => n.bankName === f.bankName)),
+      ...newFDEntries,
+    ];
+    const mergedDiv = [
+      ...existingDiv.filter((d: any) => !newDividends.some(n => n.companyName === d.companyName)),
+      ...newDividends,
+    ];
+
+    const fdInterest = mergedFD.reduce((s, f) => s + f.interestAmount, 0);
+    const dividends = mergedDiv.reduce((s, d) => s + d.amount, 0);
+
+    const payload = {
+      ...(existing ?? {}),
+      fdInterest,
+      dividends,
+      _fdEntries: mergedFD,
+      _dividendEntries: mergedDiv,
+    };
+
+    await fetch(`/api/returns/${returnId}/schedule/otherSources`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
   }
 
   function sectionToIncomeType(section?: string): string {
@@ -1051,22 +1120,6 @@ export default function ScheduleTDS({ returnId, clientId, returnData, onSaved, s
             >
               {agent26ASFetching ? '⏳ Fetching 26AS…' : '📄 Fetch 26AS'}
             </button>
-            {/* AIS JSON upload */}
-            <label style={{ cursor: 'pointer' }}>
-              <input type="file" accept=".json" style={{ display: 'none' }}
-                onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileImport(f); e.target.value = ''; }} />
-              <span className="btn btn-secondary btn-sm">
-                {importLoading ? '⏳ Importing…' : '⬆ Upload AIS'}
-              </span>
-            </label>
-            {/* 26AS upload — accepts TRACES .txt or .zip */}
-            <label style={{ cursor: 'pointer' }}>
-              <input type="file" accept=".txt,.zip" style={{ display: 'none' }}
-                onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile26ASImport(f); e.target.value = ''; }} />
-              <span className="btn btn-secondary btn-sm">
-                {import26ASLoading ? '⏳ Importing…' : '⬆ Upload 26AS'}
-              </span>
-            </label>
           </div>
         </div>
 
