@@ -22,12 +22,20 @@ export function LoginPage() {
     setLoading(true);
     setError('');
 
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-
-    if (error) {
-      setError(error.message);
+    try {
+      const timeout = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Sign in timed out. Please try again.')), 15000)
+      );
+      const { error } = await Promise.race([
+        supabase.auth.signInWithPassword({ email, password }),
+        timeout,
+      ]);
+      if (error) setError(error.message);
+    } catch (err: any) {
+      setError(err.message ?? 'Sign in failed. Please try again.');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   async function handleRegister(e: React.FormEvent) {

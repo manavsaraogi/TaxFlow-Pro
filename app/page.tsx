@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { useAuthStore } from '@/store/authStore';
 import { createClient } from '@/lib/supabase';
 import { LoginPage } from './components/auth/LoginPage';
@@ -23,24 +23,28 @@ export default function RootPage() {
 
       // Provision firm record on first sign-in
       if (event === 'SIGNED_IN') {
-        const res = await fetch('/api/firm', { method: 'POST' });
-        if (res.ok) {
-          const { data } = await res.json();
-          // Force-refresh the session so the new firm_id propagates into the JWT/cookie
-          await supabase.auth.refreshSession();
-          if (data) {
-            // Re-read user to pick up updated metadata
-            const { data: { user: refreshed } } = await supabase.auth.getUser();
-            const meta = refreshed?.user_metadata ?? {};
-            setUser({
-              id: refreshed?.id ?? '',
-              email: refreshed?.email ?? '',
-              name: meta.display_name ?? refreshed?.email ?? '',
-              role: meta.role ?? 'ADMIN',
-              firmId: data.firmId,
-              firmName: data.firmName,
-            });
+        try {
+          const controller = new AbortController();
+          const t = setTimeout(() => controller.abort(), 8000);
+          const res = await fetch('/api/firm', { method: 'POST', signal: controller.signal });
+          clearTimeout(t);
+          if (res.ok) {
+            const { data } = await res.json();
+            if (data) {
+              setUser({
+                id: '',
+                email: '',
+                name: data.firmName,
+                role: 'ADMIN',
+                firmId: data.firmId,
+                firmName: data.firmName,
+              });
+              // Re-read full user info
+              await refreshUser();
+            }
           }
+        } catch {
+          // firm provisioning failed — user can still use the app if already in DB
         }
       }
     });
