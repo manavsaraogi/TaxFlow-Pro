@@ -197,15 +197,35 @@ export async function PUT(request: NextRequest, { params }: Params) {
       break;
     }
     case 'houseProperty': {
-      // Replace all HP schedules
+      // Accept both cases; component sends lowercase `properties`
+      const hpProps: Record<string, unknown>[] =
+        Array.isArray(body.properties) ? body.properties as Record<string, unknown>[]
+        : Array.isArray(body.Properties) ? body.Properties as Record<string, unknown>[]
+        : [];
+      const hpRaw: Record<string, unknown>[] =
+        Array.isArray(body._raw) ? body._raw as Record<string, unknown>[] : [];
       await prisma.hPSchedule.deleteMany({ where: { returnId } });
-      if (Array.isArray(body.Properties) && body.Properties.length > 0) {
+      if (hpProps.length > 0) {
         await prisma.hPSchedule.createMany({
-          data: body.Properties.map((p: Record<string, unknown>, i: number) => ({
-            returnId,
-            seqNo: i + 1,
-            ...sanitizeSchedule(p),
-          })),
+          data: hpProps.map((p, i) => {
+            const raw = hpRaw[i] ?? p;
+            const pt = String(p.propertyType ?? raw.propertyType ?? '');
+            const ifLetOut = pt === 'let_out' ? 'L' : pt === 'deemed_let_out' ? 'D' : 'S';
+            return {
+              returnId,
+              seqNo: i + 1,
+              ifLetOut,
+              addrDetail: String(p.address ?? raw.address ?? '').slice(0, 200),
+              annualLetableValue: Number(raw.annualRentReceived ?? 0),
+              localTaxes: Number(raw.municipalTaxesPaid ?? 0),
+              intOnBorwCap: Number(raw.interestOnLoan ?? 0),
+              incomeOfHP: Number(p.incomeFromHP ?? 0),
+              propCoOwnedFlg: (raw.coOwned || p.coOwned) ? 'YES' : 'NO',
+              asseseeShareProperty: Number(raw.ownerSharePercent ?? p.ownerSharePercent ?? 100),
+              // Store full raw input for round-trip hydration on page reload
+              section24BJson: JSON.stringify(raw),
+            };
+          }),
         });
       }
       break;

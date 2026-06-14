@@ -116,8 +116,14 @@ export default function ScheduleAL({ returnId, returnData, grossTotalIncome, onS
   const autoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    const al = (returnData as any).assetsLiabilities;
-    if (!al) return;
+    // In-session format set by onSaved (assetsLiabilities object)
+    // API format: assetsLiabJson is a JSON string stored directly on the Return row
+    let al = (returnData as any).assetsLiabilities;
+    if (!al) {
+      const raw = (returnData as any).assetsLiabJson;
+      if (!raw) return;
+      try { al = typeof raw === 'string' ? JSON.parse(raw) : raw; } catch { return; }
+    }
     setState({
       immovable:   al.immovable   ?? [],
       movable:     { ...defaultMovable(), ...(al.movable ?? {}) },

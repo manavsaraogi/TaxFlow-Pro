@@ -60,8 +60,12 @@ export default function ScheduleCG({ returnId, returnData, onSaved, setDirty }: 
   const [msg, setMsg] = useState('');
 
   useEffect(() => {
+    // In-session format set by onSaved (PascalCase Entries)
     const lg = (returnData as any).ltcg112A;
     const sg = (returnData as any).stcg;
+    // Raw API format from Prisma relation (flat arrays with entryType discriminator)
+    const lgRaw: any[] = (returnData as any).ltcg112AEntries ?? [];
+    const sgRaw: any[] = (returnData as any).stcgEntries ?? [];
 
     setState({
       ltcg112A: lg?.Entries?.length
@@ -75,7 +79,16 @@ export default function ScheduleCG({ returnId, returnData, onSaved, setDirty }: 
             expenditure: e.Expenditure ?? 0,
             gainLoss: e.GainLoss ?? 0,
           }))
-        : [],
+        : lgRaw.map((e: any) => ({
+            id: uid(),
+            isin: e.isin ?? '',
+            shareOrUnitName: e.shareOrUnitName ?? '',
+            salesValue: e.salesValue ?? 0,
+            purchaseCost: e.purchaseCost ?? 0,
+            fmvAsOn31Jan2018: e.fmvAsOn31Jan2018 ?? 0,
+            expenditure: e.expenditure ?? 0,
+            gainLoss: e.gainLoss ?? 0,
+          })),
       stcg111A: sg?.Entries111A?.length
         ? sg.Entries111A.map((e: any) => ({
             id: uid(),
@@ -86,7 +99,15 @@ export default function ScheduleCG({ returnId, returnData, onSaved, setDirty }: 
             expenditure: e.expenditure ?? 0,
             gainLoss: e.gainLoss ?? 0,
           }))
-        : [],
+        : sgRaw.filter((e: any) => e.entryType === '111A').map((e: any) => ({
+            id: uid(),
+            isin: e.isin ?? '',
+            shareOrUnitName: e.shareOrUnitName ?? '',
+            salesValue: e.salesValue ?? 0,
+            purchaseCost: e.purchaseCost ?? 0,
+            expenditure: e.expenditure ?? 0,
+            gainLoss: e.gainLoss ?? 0,
+          })),
       stcgOther: sg?.OtherEntries?.length
         ? sg.OtherEntries.map((e: any) => ({
             id: uid(),
@@ -96,7 +117,14 @@ export default function ScheduleCG({ returnId, returnData, onSaved, setDirty }: 
             expenditure: e.expenditure ?? 0,
             gainLoss: e.gainLoss ?? 0,
           }))
-        : [],
+        : sgRaw.filter((e: any) => e.entryType === 'OTHER').map((e: any) => ({
+            id: uid(),
+            assetDesc: e.assetDesc ?? '',
+            salesValue: e.salesValue ?? 0,
+            purchaseCost: e.purchaseCost ?? 0,
+            expenditure: e.expenditure ?? 0,
+            gainLoss: e.gainLoss ?? 0,
+          })),
     });
   }, [returnData]);
 

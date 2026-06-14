@@ -110,15 +110,33 @@ export default function ScheduleBP({ returnId, returnData, regime, onSaved, setD
   const [saveMsg, setSaveMsg] = useState('');
   const autoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Hydrate from returnData
+  // Hydrate from returnData — handles both:
+  //   - in-session format set by onSaved (presumptiveIncome with parsed arrays)
+  //   - raw API format (presumptiveSchedule with JSON strings from DB)
   useEffect(() => {
-    const pi = (returnData as any).presumptiveIncome;
+    const pi = (returnData as any).presumptiveIncome
+            ?? (returnData as any).presumptiveSchedule;
     if (!pi) return;
+
+    const parseArr = (v: unknown): any[] => {
+      if (Array.isArray(v)) return v;
+      if (typeof v === 'string') { try { return JSON.parse(v); } catch { return []; } }
+      return [];
+    };
+    const parseObj = (v: unknown, def: object): object => {
+      if (!v) return def;
+      if (typeof v === 'string') { try { return JSON.parse(v); } catch { return def; } }
+      return v as object;
+    };
+
     setState({
-      business44AD:     pi.Business44AD     ?? [],
-      profession44ADA:  pi.Profession44ADA  ?? [],
-      goodsCarriage44AE: pi.GoodsCarriage44AE ?? [],
-      form10IEA: pi.Form10IEA ?? { optOut: false, ackNo: '', dateOfFiling: '' },
+      business44AD:      parseArr(pi.Business44AD      ?? pi.business44ADJson),
+      profession44ADA:   parseArr(pi.Profession44ADA   ?? pi.profession44ADAJson),
+      goodsCarriage44AE: parseArr(pi.GoodsCarriage44AE ?? pi.goodsCarriage44AEJson),
+      form10IEA: parseObj(
+        pi.Form10IEA ?? pi.form10IEAJson,
+        { optOut: false, ackNo: '', dateOfFiling: '' }
+      ) as Form10IEA,
     });
   }, [returnData]);
 
@@ -182,7 +200,7 @@ export default function ScheduleBP({ returnId, returnData, regime, onSaved, setD
           <span style={{ fontSize: '12px', color: 'var(--text-muted)', marginLeft: '8px' }}>Presumptive income u/s 44AD / 44ADA / 44AE</span>
         </div>
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '10px' }}>
-          {saveMsg && <span style={{ fontSize: '11px', color: saveMsg === 'Saved' ? 'var(--success)' : 'var(--error)' }}>{saveMsg}</span>}
+          {saveMsg && <span style={{ fontSize: '11px', color: saveMsg === 'Saved' ? 'var(--status-success)' : 'var(--status-error)' }}>{saveMsg}</span>}
           <button className="btn btn-primary btn-sm" onClick={handleSave} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
         </div>
       </div>
@@ -243,7 +261,7 @@ export default function ScheduleBP({ returnId, returnData, regime, onSaved, setD
                     <NumInput value={e.presumptiveIncome} onChange={v => update(p => ({ ...p, business44AD: p.business44AD.map((x, j) => j === i ? { ...x, presumptiveIncome: v } : x) }))} />
                   </td>
                   <td style={{ textAlign: 'center' }}>
-                    <button className="btn btn-ghost btn-sm" style={{ color: 'var(--error)', padding: '0 4px' }} onClick={() => update(p => ({ ...p, business44AD: p.business44AD.filter((_, j) => j !== i) }))}>✕</button>
+                    <button className="btn btn-ghost btn-sm" style={{ color: 'var(--status-error)', padding: '0 4px' }} onClick={() => update(p => ({ ...p, business44AD: p.business44AD.filter((_, j) => j !== i) }))}>✕</button>
                   </td>
                 </tr>
               ))}
@@ -299,7 +317,7 @@ export default function ScheduleBP({ returnId, returnData, regime, onSaved, setD
                     <NumInput value={e.presumptiveIncome} onChange={v => update(p => ({ ...p, profession44ADA: p.profession44ADA.map((x, j) => j === i ? { ...x, presumptiveIncome: v } : x) }))} />
                   </td>
                   <td style={{ textAlign: 'center' }}>
-                    <button className="btn btn-ghost btn-sm" style={{ color: 'var(--error)', padding: '0 4px' }} onClick={() => update(p => ({ ...p, profession44ADA: p.profession44ADA.filter((_, j) => j !== i) }))}>✕</button>
+                    <button className="btn btn-ghost btn-sm" style={{ color: 'var(--status-error)', padding: '0 4px' }} onClick={() => update(p => ({ ...p, profession44ADA: p.profession44ADA.filter((_, j) => j !== i) }))}>✕</button>
                   </td>
                 </tr>
               ))}
@@ -370,7 +388,7 @@ export default function ScheduleBP({ returnId, returnData, regime, onSaved, setD
                     <NumInput value={e.presumptiveIncome} onChange={v => update(p => ({ ...p, goodsCarriage44AE: p.goodsCarriage44AE.map((x, j) => j === i ? { ...x, presumptiveIncome: v } : x) }))} />
                   </td>
                   <td style={{ textAlign: 'center' }}>
-                    <button className="btn btn-ghost btn-sm" style={{ color: 'var(--error)', padding: '0 4px' }} onClick={() => update(p => ({ ...p, goodsCarriage44AE: p.goodsCarriage44AE.filter((_, j) => j !== i) }))}>✕</button>
+                    <button className="btn btn-ghost btn-sm" style={{ color: 'var(--status-error)', padding: '0 4px' }} onClick={() => update(p => ({ ...p, goodsCarriage44AE: p.goodsCarriage44AE.filter((_, j) => j !== i) }))}>✕</button>
                   </td>
                 </tr>
               ))}

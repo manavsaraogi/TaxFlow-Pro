@@ -454,14 +454,44 @@ export default function ScheduleHPComponent({ returnId, returnData, onSaved, set
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Hydrate
+  // Hydrate — handles:
+  //   - in-session format (scheduleHP set by onSaved, has _raw with full input data)
+  //   - API format (hpSchedule from Prisma relation, section24BJson stores raw input)
   useEffect(() => {
-    const s = (returnData as any).scheduleHP;
-    if (!s || !Array.isArray(s.properties) || s.properties.length === 0) return;
-    setProperties(
-      s.properties.map((p: any) => ({ id: crypto.randomUUID(), ...p }))
-    );
-  }, [returnId]);
+    const saved = (returnData as any).scheduleHP;
+    if (saved) {
+      const raw: any[] = Array.isArray(saved._raw) ? saved._raw
+        : Array.isArray(saved.properties) ? saved.properties : [];
+      if (raw.length > 0) {
+        setProperties(raw.map((p: any) => ({ id: crypto.randomUUID(), ...p })));
+        return;
+      }
+    }
+
+    const dbRecords: any[] = (returnData as any).hpSchedule ?? [];
+    if (dbRecords.length === 0) return;
+
+    const mapped = dbRecords.map((rec: any) => {
+      if (rec.section24BJson) {
+        try { return { id: crypto.randomUUID(), ...JSON.parse(rec.section24BJson) }; } catch {}
+      }
+      const propType: PropertyType =
+        rec.ifLetOut === 'L' ? 'let_out' : rec.ifLetOut === 'D' ? 'deemed_let_out' : 'self_occupied';
+      return {
+        id: crypto.randomUUID(),
+        propertyType: propType,
+        address: rec.addrDetail ?? '',
+        annualRentReceived: rec.annualLetableValue ?? 0,
+        municipalTaxesPaid: rec.localTaxes ?? 0,
+        interestOnLoan: rec.intOnBorwCap ?? 0,
+        preConstructionInterest: 0,
+        coOwned: rec.propCoOwnedFlg === 'YES',
+        coOwners: [],
+        ownerSharePercent: rec.asseseeShareProperty ?? 100,
+      };
+    });
+    setProperties(mapped);
+  }, [returnData]);
 
   // Build payload
   const buildPayload = useCallback((props: PropertyEntry[]): ScheduleHP => {
