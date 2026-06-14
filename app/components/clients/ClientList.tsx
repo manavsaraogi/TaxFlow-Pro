@@ -100,21 +100,18 @@ export function ClientList({ onNavigate }: ClientListProps) {
     <div className="animate-in" style={{ padding: '24px', height: '100%', overflowY: 'auto' }}>
 
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+      <div className="page-header">
         <div>
-          <h1 style={{ fontSize: '20px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
-            Client Master
-          </h1>
-          <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '2px 0 0' }}>
+          <div className="page-eyebrow">Client Management</div>
+          <h1 className="page-title">Client Master</h1>
+          <div className="page-subtitle">
             {clients.length} client{clients.length !== 1 ? 's' : ''} · AY {CURRENT_AY}
-          </p>
+          </div>
         </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
           <label style={{ cursor: 'pointer' }}>
             <input
-              type="file"
-              accept=".json"
-              style={{ display: 'none' }}
+              type="file" accept=".json" style={{ display: 'none' }}
               onChange={async (e) => {
                 const file = e.target.files?.[0];
                 if (!file) return;
@@ -136,61 +133,55 @@ export function ClientList({ onNavigate }: ClientListProps) {
                 e.target.value = '';
               }}
             />
-            <span className="btn btn-secondary">📂 Import JSON</span>
+            <span className="btn btn-secondary btn-sm">
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M6.5 1v7M4 6l2.5 2.5L9 6"/><path d="M1 10.5v.5a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-.5"/>
+              </svg>
+              Import JSON
+            </span>
           </label>
-          <button
-            className="btn btn-primary"
-            onClick={() => onNavigate({ name: 'client-new' })}
-          >
-            + New Client
+          <button className="btn btn-secondary btn-sm" onClick={loadClients}>
+            <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 2v4H8"/><path d="M1 11v-4h4"/>
+              <path d="M10.6 5A5 5 0 0 0 2.4 5"/><path d="M2.4 8a5 5 0 0 0 8.2 0"/>
+            </svg>
+            Refresh
+          </button>
+          <button className="btn btn-primary" onClick={() => onNavigate({ name: 'client-new' })}>
+            <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <line x1="6.5" y1="1" x2="6.5" y2="12"/><line x1="1" y1="6.5" x2="12" y2="6.5"/>
+            </svg>
+            New Client
           </button>
         </div>
       </div>
 
       {/* Filters */}
       <div style={{ display: 'flex', gap: '10px', marginBottom: '16px', alignItems: 'center' }}>
-        <div style={{ position: 'relative', flex: 1, maxWidth: '360px' }}>
-          <span style={{
-            position: 'absolute', left: '10px', top: '50%',
-            transform: 'translateY(-50%)', color: 'var(--text-muted)',
-            fontSize: '14px', pointerEvents: 'none',
-          }}>🔍</span>
+        <div style={{ position: 'relative', flex: 1, maxWidth: '380px' }}>
+          <svg style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none' }}
+            width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
+            <circle cx="6" cy="6" r="4.5"/><line x1="9.5" y1="9.5" x2="13" y2="13"/>
+          </svg>
           <input
             className="form-input"
             style={{ paddingLeft: '32px' }}
-            placeholder="Search by name, PAN, mobile..."
+            placeholder="Search by name, PAN, mobile…"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
           />
         </div>
-
-        <select
-          className="form-select"
-          style={{ width: '180px' }}
-          value={filterType}
-          onChange={(e) => setFilterType(e.target.value)}
-        >
+        <select className="form-select" style={{ width: '180px' }} value={filterType} onChange={(e) => setFilterType(e.target.value)}>
           <option value="">All Types</option>
           {Object.entries(ASSESSEE_LABELS).map(([value, label]) => (
             <option key={value} value={value}>{label}</option>
           ))}
         </select>
-
         {(search || filterType) && (
-          <button className="btn btn-ghost btn-sm" onClick={() => {
-            setSearchInput(''); setSearch(''); setFilterType('');
-          }}>
-            ✕ Clear
+          <button className="btn btn-ghost btn-sm" onClick={() => { setSearchInput(''); setSearch(''); setFilterType(''); }}>
+            Clear
           </button>
         )}
-
-        <button
-          className="btn btn-secondary btn-sm"
-          style={{ marginLeft: 'auto' }}
-          onClick={loadClients}
-        >
-          ↻ Refresh
-        </button>
       </div>
 
       {/* Table */}
@@ -202,7 +193,12 @@ export function ClientList({ onNavigate }: ClientListProps) {
           </div>
         ) : clients.length === 0 ? (
           <div className="empty-state" style={{ padding: '64px' }}>
-            <div className="empty-state-icon">◎</div>
+            <div className="empty-state-icon">
+              <svg width="48" height="48" viewBox="0 0 48 48" fill="none" stroke="var(--border-default)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="20" cy="16" r="8"/><path d="M4 44c0-8.8 7.2-16 16-16s16 7.2 16 16"/>
+                <path d="M36 22a6 6 0 1 0 0-12"/><path d="M44 44c0-5.3-2.7-9.9-6.7-12.6"/>
+              </svg>
+            </div>
             <div className="empty-state-title">
               {search || filterType ? 'No clients found' : 'No clients yet'}
             </div>
@@ -299,7 +295,12 @@ export function ClientList({ onNavigate }: ClientListProps) {
                     </td>
                     <td>
                       {client.hasPortalPassword && (
-                        <span title="Portal password stored">🔐</span>
+                        <span title="Portal password stored" style={{ color: 'var(--status-success)', display: 'flex', alignItems: 'center' }}>
+                          <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                            <rect x="3" y="5.5" width="7" height="6" rx="1"/><path d="M4.5 5.5V4a2 2 0 0 1 4 0v1.5"/>
+                            <circle cx="6.5" cy="8.5" r=".7" fill="currentColor"/>
+                          </svg>
+                        </span>
                       )}
                     </td>
                   </tr>

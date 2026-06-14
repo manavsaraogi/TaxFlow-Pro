@@ -4,15 +4,15 @@
 
 /* ── Design Tokens ──────────────────────────────────────────────────────── */
 :root {
-  --bg-base: #0D1117;
-  --bg-surface: #161B22;
-  --bg-elevated: #1E2530;
-  --bg-overlay: #252D3A;
-  --bg-hover: #2A3341;
+  --bg-base: #0B1120;
+  --bg-surface: #111827;
+  --bg-elevated: #1C2840;
+  --bg-overlay: #243050;
+  --bg-hover: #1F3058;
 
-  --border-subtle: #21262D;
-  --border-default: #30363D;
-  --border-emphasis: #3D4555;
+  --border-subtle: #1E2D45;
+  --border-default: #2D3F5A;
+  --border-emphasis: #3D5270;
 
   --text-primary: #E6EDF3;
   --text-secondary: #8B949E;
@@ -163,6 +163,11 @@ input, textarea, [data-selectable] {
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   padding: var(--space-lg);
+  transition: border-color 0.15s;
+}
+
+.card:hover {
+  border-color: var(--border-default);
 }
 
 .card-elevated {
@@ -182,9 +187,29 @@ input, textarea, [data-selectable] {
 }
 
 .card-title {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--text-primary);
+  letter-spacing: 0.01em;
+}
+
+/* ── Page Header ────────────────────────────────────────────────────────── */
+.page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 24px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.page-eyebrow {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--brand-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 4px;
 }
 
 /* ── Buttons ────────────────────────────────────────────────────────────── */
@@ -454,20 +479,39 @@ input, textarea, [data-selectable] {
   display: flex;
   flex-direction: column;
   gap: var(--space-sm);
+  position: relative;
+  overflow: hidden;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.stat-card:hover {
+  border-color: var(--border-default);
+  box-shadow: var(--shadow-md);
+}
+
+.stat-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: var(--stat-accent, var(--brand-primary));
+  opacity: 0.7;
 }
 
 .stat-value {
-  font-size: 32px;
+  font-size: 30px;
   font-weight: 700;
   color: var(--text-primary);
   line-height: 1;
   font-variant-numeric: tabular-nums;
+  letter-spacing: -0.5px;
 }
 
 .stat-label {
   font-size: 12px;
   color: var(--text-muted);
   font-weight: 500;
+  letter-spacing: 0.01em;
 }
 
 .stat-delta {
@@ -475,6 +519,17 @@ input, textarea, [data-selectable] {
   display: inline-flex;
   align-items: center;
   gap: 3px;
+}
+
+.stat-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 4px;
+  flex-shrink: 0;
 }
 
 /* ── Workflow Status Pill ────────────────────────────────────────────────── */
