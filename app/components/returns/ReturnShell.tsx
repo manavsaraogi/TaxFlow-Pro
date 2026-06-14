@@ -425,10 +425,10 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate, fo
         </div>
 
         {/* Row 2: Client + return info strip */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0', background: '#1B2E4B', padding: '0 20px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0', background: '#0F172A', padding: '0 20px' }}>
           {/* Form type */}
           <div style={{ padding: '7px 16px 7px 0', borderRight: '1px solid rgba(255,255,255,0.1)', marginRight: '16px' }}>
-            <span style={{ fontSize: '12px', fontWeight: 800, color: '#C89A10', fontFamily: 'var(--font-mono)', letterSpacing: '0.04em', background: 'rgba(200,154,16,0.15)', padding: '3px 10px', borderRadius: '5px' }}>
+            <span style={{ fontSize: '12px', fontWeight: 800, color: '#93C5FD', fontFamily: 'var(--font-mono)', letterSpacing: '0.04em', background: 'rgba(59,130,246,0.2)', padding: '3px 10px', borderRadius: '5px' }}>
               {returnMeta.formType}
             </span>
           </div>
@@ -565,14 +565,14 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate, fo
         <nav style={{
           width: '212px',
           flexShrink: 0,
-          borderRight: '1px solid #D1D9E6',
-          background: '#F4F6FB',
+          borderRight: '1px solid #0F172A',
+          background: '#1E293B',
           overflowY: 'auto',
           display: 'flex',
           flexDirection: 'column',
         }}>
           {/* Section: Income Heads */}
-          <div style={{ padding: '10px 14px 4px', fontSize: '10px', fontWeight: 800, letterSpacing: '0.1em', color: '#8B9AB2', textTransform: 'uppercase' }}>
+          <div style={{ padding: '10px 14px 4px', fontSize: '10px', fontWeight: 800, letterSpacing: '0.1em', color: '#475569', textTransform: 'uppercase' }}>
             Income Heads
           </div>
           {(['salary','house_property','business_profession','capital_gains','other_sources'] as const).map(tabId => (
@@ -592,7 +592,7 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate, fo
           ))}
 
           {/* Section: Deductions & Credits */}
-          <div style={{ padding: '10px 14px 4px', fontSize: '10px', fontWeight: 800, letterSpacing: '0.1em', color: '#8B9AB2', textTransform: 'uppercase', marginTop: '4px' }}>
+          <div style={{ padding: '10px 14px 4px', fontSize: '10px', fontWeight: 800, letterSpacing: '0.1em', color: '#475569', textTransform: 'uppercase', marginTop: '4px' }}>
             Deductions & Credits
           </div>
           {(['deductions','assets_liabilities','tds','tax_payments'] as const).map(tabId => (
@@ -608,7 +608,7 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate, fo
           ))}
 
           {/* Section: Summary & Filing */}
-          <div style={{ padding: '10px 14px 4px', fontSize: '10px', fontWeight: 800, letterSpacing: '0.1em', color: '#8B9AB2', textTransform: 'uppercase', marginTop: '4px' }}>
+          <div style={{ padding: '10px 14px 4px', fontSize: '10px', fontWeight: 800, letterSpacing: '0.1em', color: '#475569', textTransform: 'uppercase', marginTop: '4px' }}>
             Summary & Filing
           </div>
           {(['tax_summary','verification'] as const).map(tabId => (
@@ -626,7 +626,7 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate, fo
 
         {/* Content panel */}
         <ValidationProvider value={{ fieldErrors: validation?.fieldErrors ?? {}, fieldWarnings: validation?.fieldWarnings ?? {} }}>
-        <div style={{ flex: 1, overflow: 'auto', padding: '24px', background: '#F5F7FB' }}>
+        <div style={{ flex: 1, overflow: 'auto', padding: '24px', background: '#F0F4FA' }}>
           {isFiledOrAcknowledged && (
             <div
               className="badge badge-success"
@@ -831,22 +831,21 @@ function ScheduleNavItem({
         display: 'flex', alignItems: 'center', gap: '10px',
         width: '100%', padding: '8px 14px 8px 12px',
         border: 'none',
-        borderLeft: isActive ? '3px solid #C89A10' : '3px solid transparent',
-        background: isActive ? '#fff' : 'transparent',
+        borderLeft: isActive ? '3px solid #3B82F6' : '3px solid transparent',
+        background: isActive ? 'rgba(59,130,246,0.15)' : 'transparent',
         cursor: 'pointer', textAlign: 'left',
         transition: 'all 0.1s',
-        boxShadow: isActive ? 'inset -1px 0 0 #E2E8F0' : 'none',
       }}
-      onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLButtonElement).style.background = '#EBF0F9'; }}
+      onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.05)'; }}
       onMouseLeave={e => { if (!isActive) (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
     >
       {/* Schedule code badge */}
       <span style={{
         fontFamily: 'var(--font-mono)', fontSize: '10px', fontWeight: 800,
         width: '32px', textAlign: 'center', padding: '2px 0', borderRadius: '4px', flexShrink: 0,
-        background: isActive ? '#1B2E4B' : '#E2E8F0',
-        color: isActive ? '#C89A10' : '#64748B',
-        border: `1px solid ${isActive ? '#1B2E4B' : '#CBD5E1'}`,
+        background: isActive ? '#1E3A8A' : '#334155',
+        color: isActive ? '#93C5FD' : '#94A3B8',
+        border: `1px solid ${isActive ? '#1E40AF' : '#475569'}`,
         letterSpacing: '0.01em',
       }}>
         {tab.icon}
@@ -855,7 +854,7 @@ function ScheduleNavItem({
       <span style={{
         flex: 1, fontSize: '13px', lineHeight: 1.3,
         fontWeight: isActive ? 600 : 400,
-        color: isActive ? '#1B2E4B' : '#475569',
+        color: isActive ? '#E2E8F0' : '#94A3B8',
       }}>
         {tab.label}
       </span>
@@ -868,7 +867,7 @@ function ScheduleNavItem({
       )}
       {/* Applicability tag (REQ / IEA) */}
       {tag && badge === 0 && (
-        <span style={{ fontSize: '9px', fontWeight: 700, background: tagColor ?? '#92700A', color: '#fff', padding: '1px 5px', borderRadius: '3px', letterSpacing: '0.04em', flexShrink: 0 }}>
+        <span style={{ fontSize: '9px', fontWeight: 700, background: tagColor ?? '#92400E', color: '#fff', padding: '1px 5px', borderRadius: '3px', letterSpacing: '0.04em', flexShrink: 0 }}>
           {tag}
         </span>
       )}

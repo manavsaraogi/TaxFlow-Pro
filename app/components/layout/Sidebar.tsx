@@ -96,24 +96,24 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
   return (
     <div className="sidebar">
       {/* Firm Logo / Name */}
-      <div style={{ padding: '16px 14px 14px', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
+      <div style={{ padding: '16px 14px 14px', borderBottom: '1px solid #1E293B', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <div style={{
             width: '34px', height: '34px',
-            background: 'linear-gradient(135deg, var(--brand-primary) 0%, #B8860B 100%)',
+            background: 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)',
             borderRadius: '9px',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: '15px', fontWeight: '800', color: '#0D1117',
+            fontSize: '15px', fontWeight: '800', color: '#FFFFFF',
             flexShrink: 0, letterSpacing: '-0.5px',
-            boxShadow: '0 2px 6px rgba(212,160,23,0.35)',
+            boxShadow: '0 2px 8px rgba(37,99,235,0.45)',
           }}>
             {initial}
           </div>
           <div style={{ minWidth: 0 }}>
-            <div className="truncate" style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-primary)', lineHeight: 1.25 }}>
+            <div className="truncate" style={{ fontSize: '13px', fontWeight: '600', color: '#F1F5F9', lineHeight: 1.25 }}>
               {firmName || 'TaxFlow Pro'}
             </div>
-            <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '2px', letterSpacing: '0.02em' }}>
+            <div style={{ fontSize: '10px', color: '#475569', marginTop: '2px', letterSpacing: '0.02em' }}>
               ITR Filing Software
             </div>
           </div>
@@ -126,7 +126,7 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
           <div key={section.label} style={{ padding: '6px 8px 2px' }}>
             <div style={{
               fontSize: '10px', fontWeight: '700',
-              color: 'var(--text-muted)', textTransform: 'uppercase',
+              color: '#475569', textTransform: 'uppercase',
               letterSpacing: '0.08em', padding: '4px 6px 6px',
             }}>
               {section.label}
@@ -141,8 +141,8 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
                     display: 'flex', alignItems: 'center', gap: '9px',
                     width: '100%', padding: '7px 10px',
                     border: 'none', borderRadius: '6px',
-                    background: isActive ? 'rgba(212,160,23,0.12)' : 'transparent',
-                    color: isActive ? 'var(--brand-text)' : 'var(--text-secondary)',
+                    background: isActive ? 'rgba(59,130,246,0.18)' : 'transparent',
+                    color: isActive ? '#93C5FD' : '#94A3B8',
                     fontSize: '13px', fontWeight: isActive ? 500 : 400,
                     cursor: 'pointer', textAlign: 'left',
                     transition: 'all 0.12s',
@@ -150,21 +150,21 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
                   }}
                   onMouseEnter={e => {
                     if (!isActive) {
-                      (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-elevated)';
-                      (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-primary)';
+                      (e.currentTarget as HTMLButtonElement).style.background = '#1E293B';
+                      (e.currentTarget as HTMLButtonElement).style.color = '#E2E8F0';
                     }
                   }}
                   onMouseLeave={e => {
                     if (!isActive) {
                       (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
-                      (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-secondary)';
+                      (e.currentTarget as HTMLButtonElement).style.color = '#94A3B8';
                     }
                   }}
                 >
                   <span style={{
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     width: '24px', height: '24px', flexShrink: 0,
-                    color: isActive ? 'var(--brand-primary)' : 'var(--text-muted)',
+                    color: isActive ? '#60A5FA' : '#475569',
                     transition: 'color 0.12s',
                   }}>
                     {item.icon}
@@ -172,14 +172,14 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
                   <span style={{ flex: 1 }}>{item.label}</span>
                   {item.badge !== undefined && item.badge > 0 && (
                     <span style={{
-                      background: 'var(--bg-overlay)', color: 'var(--text-muted)',
+                      background: '#1E293B', color: '#64748B',
                       fontSize: '10px', padding: '1px 6px', borderRadius: '10px',
                     }}>{item.badge}</span>
                   )}
                   {isActive && (
                     <span style={{
                       width: '4px', height: '4px', borderRadius: '50%',
-                      background: 'var(--brand-primary)', flexShrink: 0,
+                      background: '#3B82F6', flexShrink: 0,
                     }} />
                   )}
                 </button>
@@ -190,29 +190,34 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
       </div>
 
       {/* User Footer */}
-      <div style={{ padding: '10px 12px 12px', borderTop: '1px solid var(--border-subtle)', flexShrink: 0 }}>
+      <div style={{ padding: '10px 12px 12px', borderTop: '1px solid #1E293B', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '9px', marginBottom: '8px' }}>
           <div style={{
             width: '30px', height: '30px', borderRadius: '50%',
-            background: 'var(--bg-overlay)', border: '1px solid var(--border-default)',
+            background: '#1E293B', border: '1px solid #334155',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: '12px', fontWeight: '600', color: 'var(--brand-text)', flexShrink: 0,
+            fontSize: '12px', fontWeight: '600', color: '#60A5FA', flexShrink: 0,
           }}>
             {user?.name?.charAt(0).toUpperCase() || 'A'}
           </div>
           <div style={{ minWidth: 0, flex: 1 }}>
-            <div className="truncate" style={{ fontSize: '12px', fontWeight: '500', color: 'var(--text-primary)' }}>
+            <div className="truncate" style={{ fontSize: '12px', fontWeight: '500', color: '#F1F5F9' }}>
               {user?.name || 'Admin'}
             </div>
-            <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'capitalize' }}>
+            <div style={{ fontSize: '10px', color: '#475569', textTransform: 'capitalize' }}>
               {user?.role?.toLowerCase() || 'admin'}
             </div>
           </div>
         </div>
         <button
-          className="btn btn-ghost"
-          style={{ width: '100%', fontSize: '11px', justifyContent: 'center', padding: '5px', color: 'var(--text-muted)' }}
           onClick={logout}
+          style={{
+            width: '100%', fontSize: '11px', padding: '5px',
+            background: 'transparent', border: 'none', cursor: 'pointer',
+            color: '#475569', borderRadius: '4px',
+          }}
+          onMouseEnter={e => (e.currentTarget.style.color = '#94A3B8')}
+          onMouseLeave={e => (e.currentTarget.style.color = '#475569')}
         >
           Sign Out
         </button>
