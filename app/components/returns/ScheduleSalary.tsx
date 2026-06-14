@@ -399,41 +399,35 @@ export default function ScheduleSalaryComponent({ returnId, returnData, onSaved,
         </div>
       </div>
 
-      <div className="itr-row">
+      <div className="itr-row-full">
         <div className="itr-num"></div>
-        <div className="itr-label">Employer Category</div>
-        <div className="itr-amount">
-          <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+        <div className="itr-full-content">
+          <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            Employer Category
+          </span>
+          <div className="itr-chip-group">
             {([
-              { value: 'govt',       label: 'Govt. (Central / State)', hint: 'CGOV / SGOV' },
-              { value: 'psu',        label: 'PSU',                     hint: 'Public Sector' },
-              { value: 'pensioners', label: 'Pensioners',              hint: 'Includes ex-employees' },
-              { value: 'others',     label: 'Others',                   hint: 'Private sector' },
+              { value: 'govt',       label: 'Govt. (Central / State)', hint: 'Maps to CGOV / SGOV in ITR' },
+              { value: 'psu',        label: 'PSU',                     hint: 'Maps to PSU in ITR' },
+              { value: 'pensioners', label: 'Pensioners',              hint: 'Maps to PE/PESG/PEPS/PEO in ITR' },
+              { value: 'others',     label: 'Others',                  hint: 'Maps to OTH in ITR — private sector' },
             ] as const).map(({ value: cat, label, hint }) => (
               <button
                 key={cat}
                 type="button"
                 title={hint}
+                className={`itr-chip${emp.employerCategory === cat ? ' active' : ''}`}
                 onClick={() => updateEmp(emp.id, { employerCategory: cat })}
-                style={{
-                  padding: '5px 12px', fontSize: '0.78rem', borderRadius: '6px',
-                  border: '1.5px solid',
-                  borderColor: emp.employerCategory === cat ? 'var(--brand-primary)' : 'var(--border-color)',
-                  background: emp.employerCategory === cat ? 'var(--brand-primary)' : 'var(--bg-surface)',
-                  color: emp.employerCategory === cat ? '#fff' : 'var(--text-secondary)',
-                  cursor: 'pointer', fontWeight: emp.employerCategory === cat ? 700 : 400,
-                  transition: 'all 0.12s',
-                }}
               >
                 {label}
               </button>
             ))}
           </div>
-          <span style={{ fontSize: '0.71rem', color: 'var(--text-muted)', marginTop: '3px', display: 'block' }}>
-            {emp.employerCategory === 'govt' ? 'Maps to CGOV/SGOV in ITR' :
+          <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+            {emp.employerCategory === 'govt' ? 'Maps to CGOV / SGOV in ITR' :
              emp.employerCategory === 'psu' ? 'Maps to PSU in ITR' :
-             emp.employerCategory === 'pensioners' ? 'Maps to PE/PESG/PEPS/PEO in ITR' :
-             'Maps to OTH in ITR'}
+             emp.employerCategory === 'pensioners' ? 'Maps to PE / PESG / PEPS / PEO in ITR' :
+             'Maps to OTH in ITR — private / corporate sector'}
           </span>
         </div>
       </div>
@@ -591,26 +585,21 @@ export default function ScheduleSalaryComponent({ returnId, returnData, onSaved,
               <AmtInput value={state.hraInputs.rentPaid} onChange={(v) => update({ hraInputs: { ...state.hraInputs, rentPaid: v } })} />
             </div>
           </div>
-          <div className="itr-row">
+          <div className="itr-row-full">
             <div className="itr-num"></div>
-            <div className="itr-label">City Type</div>
-            <div className="itr-amount">
-              <div style={{ display: 'flex', gap: '0.4rem' }}>
+            <div className="itr-full-content">
+              <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                City Type
+              </span>
+              <div className="itr-chip-group">
                 {[
-                  { label: 'Metro City (50%)', value: true, hint: 'Delhi, Mumbai, Chennai, Kolkata' },
+                  { label: 'Metro City (50%)', value: true,  hint: 'Delhi, Mumbai, Chennai, Kolkata' },
                   { label: 'Non-Metro (40%)',  value: false, hint: 'All other cities' },
                 ].map(({ label, value, hint }) => (
                   <button
                     key={String(value)} type="button" title={hint}
+                    className={`itr-chip${state.hraInputs.isMetroCity === value ? ' active' : ''}`}
                     onClick={() => update({ hraInputs: { ...state.hraInputs, isMetroCity: value } })}
-                    style={{
-                      padding: '5px 12px', fontSize: '0.78rem', borderRadius: '6px',
-                      border: '1.5px solid',
-                      borderColor: state.hraInputs.isMetroCity === value ? 'var(--brand-primary)' : 'var(--border-color)',
-                      background: state.hraInputs.isMetroCity === value ? 'var(--brand-primary)' : 'var(--bg-surface)',
-                      color: state.hraInputs.isMetroCity === value ? '#fff' : 'var(--text-secondary)',
-                      cursor: 'pointer', fontWeight: state.hraInputs.isMetroCity === value ? 700 : 400,
-                    }}
                   >{label}</button>
                 ))}
               </div>
@@ -695,46 +684,52 @@ export default function ScheduleSalaryComponent({ returnId, returnData, onSaved,
 
       <style>{`
         .itr-amount-display {
-          font-size: 0.85rem;
+          font-size: 14px;
+          font-family: var(--font-mono);
           font-variant-numeric: tabular-nums;
-          color: var(--text-secondary, #C9D1D9);
+          font-weight: 500;
+          color: var(--text-secondary);
           text-align: right;
-          padding: 0.3rem 0.5rem;
+          padding: 8px 14px;
+          width: 100%;
         }
-        .itr-amount-zero { color: var(--text-muted, #8B949E); }
+        .itr-amount-zero { color: var(--text-muted); font-weight: 400; }
         .itr-amount-input {
           width: 100%;
           background: transparent;
           border: none;
-          border-bottom: 1px solid var(--border-subtle, #30363D);
-          color: var(--text-primary, #E6EDF3);
-          font-size: 0.85rem;
+          color: var(--text-primary);
+          font-size: 14px;
+          font-family: var(--font-mono);
           font-variant-numeric: tabular-nums;
+          font-weight: 500;
           text-align: right;
-          padding: 0.3rem 0.5rem;
+          padding: 8px 14px;
           outline: none;
+          min-height: 44px;
         }
         .itr-amount-input:focus {
-          border-bottom-color: var(--brand-primary, #D4A017);
-          background: rgba(212,160,23,0.05);
+          background: rgba(200,154,16,0.07);
+          box-shadow: inset 0 -2px 0 var(--brand-primary);
         }
         .itr-text-input {
           width: 100%;
           background: transparent;
           border: none;
-          border-bottom: 1px solid var(--border-subtle, #30363D);
-          color: var(--text-primary, #E6EDF3);
-          font-size: 0.83rem;
-          padding: 0.3rem 0.5rem;
+          color: var(--text-primary);
+          font-size: 13.5px;
+          padding: 8px 14px;
           outline: none;
+          min-height: 44px;
         }
-        .itr-text-input:focus { border-bottom-color: var(--brand-primary, #D4A017); }
+        .itr-text-input:focus { box-shadow: inset 0 -2px 0 var(--brand-primary); background: rgba(200,154,16,0.04); }
         .add-tab {
-          color: var(--brand-text, #F0C040) !important;
+          color: var(--brand-text) !important;
           border-color: transparent !important;
           background: transparent !important;
+          font-weight: 600 !important;
         }
-        .add-tab:hover { background: rgba(212,160,23,0.08) !important; }
+        .add-tab:hover { background: var(--brand-subtle) !important; }
       `}</style>
     </div>
   );

@@ -685,114 +685,129 @@ input, textarea, [data-selectable] {
   font-size: 14px;
 }
 
-/* ══ Computax-style ITR Schedule Form ════════════════════════════════════════
-   Dense 2-column row layout: [seq] [field label] [amount]
-   Matches the look and feel of CA software like Computax / Winman.
+/* ══ ITR Schedule Form ════════════════════════════════════════════════════════
+   Clean card layout for income tax schedules.
    ═══════════════════════════════════════════════════════════════════════════*/
 
 .itr-form {
   background: var(--bg-surface);
   border: 1px solid var(--border-default);
-  border-radius: 8px;
+  border-radius: 12px;
   overflow: hidden;
-  margin-bottom: 20px;
+  margin-bottom: 24px;
+  box-shadow: var(--shadow-sm);
 }
 
-/* Blue-gold header band — schedule name */
+/* Gold header band */
 .itr-schedule-header {
   background: var(--brand-subtle);
   border-bottom: 2px solid var(--brand-primary);
-  padding: 8px 14px;
+  padding: 12px 18px;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
 .itr-schedule-header .schedule-code {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   color: var(--brand-primary);
-  background: rgba(212,160,23,0.15);
-  padding: 2px 8px;
-  border-radius: 4px;
+  background: rgba(200,154,16,0.18);
+  padding: 3px 10px;
+  border-radius: 6px;
   font-family: var(--font-mono);
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
+  min-width: 28px;
+  text-align: center;
 }
 .itr-schedule-header .schedule-title {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   color: var(--brand-text);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.05em;
 }
 
-/* Gray section sub-header inside a schedule */
+/* Section sub-header */
 .itr-section-head {
   background: var(--bg-elevated);
-  border-bottom: 1px solid var(--border-subtle);
-  border-top: 1px solid var(--border-subtle);
-  padding: 5px 14px 5px 44px;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-default);
+  border-top: 1px solid var(--border-default);
+  border-left: 3px solid var(--brand-primary);
+  padding: 7px 16px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--text-secondary);
   text-transform: uppercase;
-  letter-spacing: 0.07em;
+  letter-spacing: 0.06em;
+  display: flex;
+  align-items: center;
 }
 
-/* One form row: [num cell] [label cell] [amount cell] */
+/* One form row: [num] [label] [amount] */
 .itr-row {
   display: grid;
-  grid-template-columns: 36px 1fr 176px;
+  grid-template-columns: 44px 1fr 200px;
   border-bottom: 1px solid var(--border-subtle);
-  min-height: 34px;
+  min-height: 44px;
   align-items: stretch;
+  transition: background 0.1s;
 }
 .itr-row:last-child { border-bottom: none; }
+.itr-row:hover { background: var(--bg-hover); }
 
-.itr-row.computed  { background: rgba(241,245,249,0.6); }
-.itr-row.subtotal  { background: rgba(212,160,23,0.04); }
+.itr-row.computed  { background: var(--bg-elevated); }
+.itr-row.computed:hover { background: #E8EDF5; }
+.itr-row.subtotal  { background: rgba(200,154,16,0.05); }
+.itr-row.subtotal:hover { background: rgba(200,154,16,0.09); }
 .itr-row.total     {
-  background: rgba(212,160,23,0.07);
-  border-top: 1px solid var(--brand-primary);
-  border-bottom: 1px solid var(--brand-primary);
+  background: rgba(200,154,16,0.08);
+  border-top: 1.5px solid var(--brand-primary);
+  border-bottom: 1.5px solid var(--brand-primary);
 }
-.itr-row.deduction { background: rgba(63,185,80,0.04); }
-.itr-row.indent    { grid-template-columns: 36px 1fr 176px; }
+.itr-row.total:hover { background: rgba(200,154,16,0.12); }
+.itr-row.deduction { background: rgba(22,163,74,0.04); }
+.itr-row.indent    { grid-template-columns: 44px 1fr 200px; }
 
 /* Sequence number cell */
 .itr-num {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 10px;
+  font-size: 11px;
+  font-weight: 500;
   color: var(--text-muted);
   border-right: 1px solid var(--border-subtle);
   background: var(--bg-elevated);
   font-family: var(--font-mono);
-  padding: 2px;
+  padding: 4px 2px;
   flex-shrink: 0;
+  letter-spacing: 0;
 }
 
 /* Description / label cell */
 .itr-label {
   display: flex;
   align-items: center;
-  padding: 5px 12px 5px 10px;
-  font-size: 12.5px;
-  color: var(--text-secondary);
+  padding: 8px 16px 8px 14px;
+  font-size: 13.5px;
+  font-weight: 450;
+  color: var(--text-primary);
   border-right: 1px solid var(--border-subtle);
-  line-height: 1.4;
-  gap: 6px;
+  line-height: 1.45;
+  gap: 8px;
 }
 .itr-label .hint {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--text-muted);
   font-style: italic;
+  font-weight: 400;
 }
-.itr-row.indent .itr-label  { padding-left: 28px; color: var(--text-muted); font-size: 12px; }
-.itr-row.total  .itr-label  { font-weight: 700; color: var(--text-primary); }
-.itr-row.subtotal .itr-label { font-weight: 600; color: var(--text-secondary); }
+.itr-row.indent .itr-label  { padding-left: 32px; color: var(--text-secondary); font-size: 13px; }
+.itr-row.total  .itr-label  { font-weight: 700; color: var(--text-primary); font-size: 14px; }
+.itr-row.subtotal .itr-label { font-weight: 600; color: var(--text-primary); }
+.itr-row.computed .itr-label { color: var(--text-secondary); font-style: italic; }
 
-/* Amount cell — contains either an <input> or a display span */
+/* Amount cell */
 .itr-amount {
   display: flex;
   align-items: center;
@@ -804,33 +819,49 @@ input, textarea, [data-selectable] {
   border: none;
   background: transparent;
   text-align: right;
-  padding: 5px 12px;
-  font-size: 13px;
+  padding: 8px 14px;
+  font-size: 14px;
   font-family: var(--font-mono);
+  font-weight: 500;
   color: var(--text-primary);
   outline: none;
-  min-height: 34px;
+  min-height: 44px;
 }
 .itr-amount input:focus {
-  background: rgba(212,160,23,0.07);
-  outline: 1px solid var(--brand-primary);
-  outline-offset: -1px;
+  background: rgba(200,154,16,0.07);
+  box-shadow: inset 0 -2px 0 var(--brand-primary);
 }
 .itr-amount input:read-only,
 .itr-amount input[readonly] {
-  color: var(--text-muted);
+  color: var(--text-secondary);
   cursor: default;
+  font-weight: 400;
 }
-.itr-amount input:read-only:focus { background: transparent; outline: none; }
-.itr-row.total   .itr-amount input { font-weight: 700; color: var(--brand-text); }
+.itr-amount input:read-only:focus { background: transparent; box-shadow: none; }
+.itr-row.total   .itr-amount input { font-weight: 700; color: var(--brand-text); font-size: 15px; }
 .itr-row.subtotal .itr-amount input { font-weight: 600; }
 
-/* Text input spanning 2 columns (label spans amount col too) */
+/* Full-width row — for things like category pickers that don't fit in amount col */
+.itr-row-full {
+  display: grid;
+  grid-template-columns: 44px 1fr;
+  border-bottom: 1px solid var(--border-subtle);
+  min-height: 44px;
+  align-items: stretch;
+}
+.itr-row-full .itr-full-content {
+  padding: 10px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Text input spanning 2 columns */
 .itr-row-text {
   display: grid;
-  grid-template-columns: 36px 1fr;
+  grid-template-columns: 44px 1fr;
   border-bottom: 1px solid var(--border-subtle);
-  min-height: 34px;
+  min-height: 44px;
   align-items: stretch;
 }
 .itr-row-text .itr-label { border-right: none; flex-direction: column; align-items: flex-start; gap: 2px; }
@@ -840,21 +871,20 @@ input, textarea, [data-selectable] {
   border: none;
   border-left: 1px solid var(--border-subtle);
   background: transparent;
-  padding: 5px 12px;
-  font-size: 12.5px;
+  padding: 8px 14px;
+  font-size: 13.5px;
   color: var(--text-primary);
   outline: none;
   font-family: var(--font-sans);
 }
 .itr-row-text input:focus,
 .itr-row-text select:focus {
-  background: rgba(212,160,23,0.05);
-  outline: 1px solid var(--brand-primary);
-  outline-offset: -1px;
+  background: rgba(200,154,16,0.05);
+  box-shadow: inset 0 -2px 0 var(--brand-primary);
 }
-.itr-row-text select option { background: var(--bg-elevated); }
+.itr-row-text select option { background: var(--bg-surface); }
 
-/* Employer / entity selector tabs above a form */
+/* Employer / entity selector tabs */
 .itr-entity-tabs {
   display: flex;
   gap: 0;
@@ -863,10 +893,10 @@ input, textarea, [data-selectable] {
   overflow-x: auto;
 }
 .itr-entity-tab {
-  padding: 7px 16px;
-  font-size: 12px;
+  padding: 9px 18px;
+  font-size: 13px;
   font-weight: 500;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   cursor: pointer;
   border: none;
   background: transparent;
@@ -875,26 +905,59 @@ input, textarea, [data-selectable] {
   white-space: nowrap;
   transition: color 0.12s;
 }
-.itr-entity-tab:hover { color: var(--text-secondary); }
+.itr-entity-tab:hover { color: var(--text-primary); }
 .itr-entity-tab.active {
   color: var(--brand-text);
   border-bottom-color: var(--brand-primary);
   font-weight: 600;
+  background: var(--brand-subtle);
 }
 .itr-entity-tab.add-btn {
   color: var(--brand-primary);
   font-weight: 600;
 }
 
-/* Action bar at bottom of a schedule form */
+/* Category chip selector */
+.itr-chip-group {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.itr-chip {
+  padding: 6px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 20px;
+  border: 1.5px solid var(--border-default);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.12s;
+  white-space: nowrap;
+}
+.itr-chip:hover {
+  border-color: var(--brand-primary);
+  color: var(--brand-text);
+  background: var(--brand-subtle);
+}
+.itr-chip.active {
+  border-color: var(--brand-primary);
+  background: var(--brand-primary);
+  color: #fff;
+  font-weight: 600;
+  box-shadow: 0 2px 6px rgba(200,154,16,0.35);
+}
+
+/* Action bar */
 .itr-action-bar {
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 12px;
-  padding: 10px 14px;
+  padding: 12px 16px;
   background: var(--bg-elevated);
-  border-top: 1px solid var(--border-subtle);
+  border-top: 1px solid var(--border-default);
 }
 
 /* Sidebar nav — schedule fill indicators */
