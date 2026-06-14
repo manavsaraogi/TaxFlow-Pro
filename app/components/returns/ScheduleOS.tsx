@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import type { ScheduleOS, ReturnData } from '@/shared/types/itr';
+import { OTHER_INCOME_TYPES } from '@/app/lib/itrCodes';
 
 // ─── Dev mock ────────────────────────────────────────────────────────────────
 const isMock = false;
@@ -240,18 +241,49 @@ interface OtherRowProps {
   onRemove: (id: string) => void;
 }
 function OtherRow({ entry, onChange, onRemove }: OtherRowProps) {
+  const preset = OTHER_INCOME_TYPES.find(t => t.value === entry.description || t.label === entry.description);
+  const [customDesc, setCustomDesc] = useState(preset ? '' : entry.description);
+
   return (
     <div className="os-entry-row card">
       <div className="form-grid-2">
         <div className="form-group">
-          <label className="form-label">Nature / Description</label>
-          <input
-            type="text"
+          <label className="form-label">Nature of Income</label>
+          <select
             className="form-input"
-            value={entry.description}
-            placeholder="Gift received, sub-letting income…"
-            onChange={(e) => onChange(entry.id, { description: e.target.value })}
-          />
+            value={preset?.value ?? (entry.description ? 'custom' : '')}
+            onChange={(e) => {
+              const val = e.target.value;
+              if (val === 'custom' || val === '') {
+                onChange(entry.id, { description: customDesc });
+              } else {
+                const found = OTHER_INCOME_TYPES.find(t => t.value === val);
+                onChange(entry.id, { description: found ? found.label : val });
+              }
+            }}
+            style={{ fontSize: '0.82rem' }}
+          >
+            <option value="">— Select income type —</option>
+            {OTHER_INCOME_TYPES.map(t => (
+              <option key={t.value} value={t.value}>
+                {t.label}{t.section ? ` [${t.section}]` : ''}
+              </option>
+            ))}
+            <option value="custom">Other (describe below)…</option>
+          </select>
+          {(preset?.value === 'other' || (!preset && entry.description) || (entry.description === customDesc && customDesc)) && (
+            <input
+              type="text"
+              className="form-input"
+              style={{ marginTop: '4px', fontSize: '0.82rem' }}
+              value={customDesc || (preset?.value === 'other' ? (entry.description === preset.label ? '' : entry.description) : entry.description)}
+              placeholder="Describe the nature of income…"
+              onChange={(e) => {
+                setCustomDesc(e.target.value);
+                onChange(entry.id, { description: e.target.value });
+              }}
+            />
+          )}
         </div>
         <NumField
           label="Amount"

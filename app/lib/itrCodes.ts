@@ -1,4 +1,4 @@
-// ITR business / profession nature codes — sourced from ITR-4 AY 2026-27 Excel utility (DB sheet)
+// ITR lookup code tables — sourced from ITR-1, ITR-2, ITR-4 AY 2026-27 Excel utilities
 
 export interface NatureCode {
   code: string;
@@ -6,7 +6,20 @@ export interface NatureCode {
   group: string;
 }
 
-// Groups used for 44AD (business income)
+export interface StateCode {
+  code: string;
+  name: string;
+}
+
+export interface TDSSectionCode {
+  code: string;
+  description: string;
+  group: string;
+}
+
+// ── Business / nature codes for 44AD ─────────────────────────────────────────
+// Source: ITR-4 AY 2026-27 Excel utility — DB sheet (column DX / shared strings)
+
 export const BUSINESS_CODES_44AD: NatureCode[] = [
   // Manufacturing
   { code: '0101', description: 'Agro-based industries', group: 'Manufacturing' },
@@ -51,7 +64,7 @@ export const BUSINESS_CODES_44AD: NatureCode[] = [
   { code: '0503', description: 'Forest Contractors', group: 'Contractors' },
   { code: '0504', description: 'Mining Contractors', group: 'Contractors' },
   { code: '0505', description: 'Contractors – Others', group: 'Contractors' },
-  // Professionals (listed under business)
+  // Professionals
   { code: '0601', description: 'Chartered Accountants, Auditors, etc.', group: 'Professionals' },
   { code: '0602', description: 'Fashion designers', group: 'Professionals' },
   { code: '0603', description: 'Legal professionals', group: 'Professionals' },
@@ -96,9 +109,11 @@ export const BUSINESS_CODES_44AD: NatureCode[] = [
   { code: '9999', description: 'Others', group: 'Others' },
 ];
 
-// Profession codes for 44ADA — specified professions u/s 44AA(1)
+// ── Profession codes for 44ADA ────────────────────────────────────────────────
+// Specified professions u/s 44AA(1) of the Income Tax Act
+
 export const PROFESSION_CODES_44ADA: NatureCode[] = [
-  { code: '0601', description: 'Chartered Accountants, Auditors, etc.', group: 'Accounting' },
+  { code: '0601', description: 'Chartered Accountants, Auditors, etc.', group: 'Accounting & Finance' },
   { code: '0603', description: 'Legal professionals', group: 'Legal' },
   { code: '0604', description: 'Medical professionals', group: 'Medical' },
   { code: '0605', description: 'Nursing Homes', group: 'Medical' },
@@ -112,7 +127,209 @@ export const PROFESSION_CODES_44ADA: NatureCode[] = [
   { code: '9999', description: 'Others', group: 'Others' },
 ];
 
+// ── TDS section codes ─────────────────────────────────────────────────────────
+// Source: ITR-4 AY 2026-27 Excel utility — DB sheet (column DX)
+// Used in Schedule TDS — deductor section field
+
+export const TDS_SECTION_CODES: TDSSectionCode[] = [
+  // Salary
+  { code: '192', description: 'Salary — payment to employees (non-government)', group: 'Salary' },
+  { code: '192A', description: 'TDS on PF withdrawal', group: 'Salary' },
+  // Interest
+  { code: '193', description: 'Interest on securities', group: 'Interest' },
+  { code: '194', description: 'Dividends', group: 'Dividends' },
+  { code: '194A', description: "Interest other than 'Interest on securities' (FD, RD, etc.)", group: 'Interest' },
+  // Lottery & Games
+  { code: '194B', description: 'Winning from lottery or crossword puzzle', group: 'Lottery & Games' },
+  { code: '194BA', description: 'Winnings from online games', group: 'Lottery & Games' },
+  { code: '194BB', description: 'Winning from horse race', group: 'Lottery & Games' },
+  // Contracts & Commission
+  { code: '194C', description: 'Payments to contractors and sub-contractors', group: 'Contracts' },
+  { code: '194D', description: 'Insurance commission', group: 'Commission' },
+  { code: '194DA', description: 'Payment in respect of life insurance policy', group: 'Insurance' },
+  { code: '194E', description: 'Payments to non-resident sportsmen or sports associations', group: 'Non-Resident' },
+  { code: '194EE', description: 'Payments in respect of deposits under National Savings', group: 'Savings' },
+  { code: '194F', description: 'Payments on account of repurchase of units by Mutual Fund / UTI', group: 'Mutual Fund' },
+  { code: '194G', description: 'Commission, price, etc. on sale of lottery tickets', group: 'Commission' },
+  { code: '194H', description: 'Commission or brokerage', group: 'Commission' },
+  { code: '194I(a)', description: 'Rent on hiring of plant and machinery', group: 'Rent' },
+  { code: '194I(b)', description: 'Rent on land, building or furniture', group: 'Rent' },
+  { code: '194IA', description: 'TDS on sale of immovable property (buyer deducts)', group: 'Property' },
+  { code: '194IB', description: 'Payment of rent by certain individuals or HUF (tenant deducts)', group: 'Rent' },
+  { code: '194IC', description: 'Payment under joint development agreement', group: 'Property' },
+  { code: '194J(a)', description: 'Fees for technical services', group: 'Professional' },
+  { code: '194J(b)', description: 'Fees for professional services or royalty', group: 'Professional' },
+  { code: '194K', description: 'Income payable to resident in respect of units of mutual fund', group: 'Mutual Fund' },
+  { code: '194LA', description: 'Payment of compensation on acquisition of immovable property', group: 'Property' },
+  { code: '194LB', description: 'Income by way of interest from infrastructure debt fund', group: 'Infrastructure' },
+  { code: '194LC', description: 'Income by way of interest from Indian company — non-resident', group: 'Non-Resident' },
+  { code: '194LD', description: 'TDS on interest on bonds / government securities — FII/QFI', group: 'Bonds' },
+  { code: '194M', description: 'Payment of certain sums by certain individuals or HUF (>₹50 L)', group: 'Contracts' },
+  { code: '194N', description: 'Payment of certain amounts in cash', group: 'Cash' },
+  { code: '194O', description: 'Payment of certain sums by e-commerce operator to participant', group: 'E-Commerce' },
+  { code: '194P', description: 'Deduction of tax in case of specified senior citizen', group: 'Salary' },
+  { code: '194Q', description: 'TDS on purchase of goods above ₹50 lakh', group: 'Goods' },
+  { code: '194R', description: 'Benefits or perquisites of business or profession', group: 'Business' },
+  { code: '194S', description: 'Payment for transfer of virtual digital assets (VDA / crypto)', group: 'VDA' },
+  { code: '195', description: 'Other sums payable to non-resident', group: 'Non-Resident' },
+  { code: '196B', description: 'Income from units / long-term capital gain — offshore fund', group: 'Non-Resident' },
+  { code: '196C', description: 'Income from foreign currency bonds or GDR', group: 'Non-Resident' },
+  { code: '196D', description: 'Income of Foreign Institutional Investors from securities', group: 'Non-Resident' },
+  { code: '206C(1)', description: 'TCS on sale of alcoholic liquor for human consumption', group: 'TCS' },
+  { code: '206C(1H)', description: 'TCS on sale of goods (above ₹50 lakh, buyer to collect)', group: 'TCS' },
+  { code: '206C(1F)', description: 'TCS on sale of motor vehicle above ₹10 lakh', group: 'TCS' },
+  { code: '206C(1G)', description: 'TCS on foreign remittance under LRS / overseas tour package', group: 'TCS' },
+  { code: '206CCA', description: 'TCS at higher rate for non-filers', group: 'TCS' },
+  { code: '206AB', description: 'TDS at higher rate for non-filers of ITR', group: 'Higher Rate' },
+  { code: '206AA', description: 'TDS at higher rate for non-furnishing of PAN', group: 'Higher Rate' },
+];
+
+// ── State / UT codes ──────────────────────────────────────────────────────────
+// Source: ITR-4 AY 2026-27 Excel utility — DB sheet (column EX)
+
+export const STATE_CODES: StateCode[] = [
+  { code: '01', name: 'Andaman And Nicobar Islands' },
+  { code: '02', name: 'Andhra Pradesh' },
+  { code: '03', name: 'Arunachal Pradesh' },
+  { code: '04', name: 'Assam' },
+  { code: '05', name: 'Bihar' },
+  { code: '06', name: 'Chandigarh' },
+  { code: '07', name: 'Dadra & Nagar Haveli And Daman & Diu' },
+  { code: '09', name: 'Delhi' },
+  { code: '10', name: 'Goa' },
+  { code: '11', name: 'Gujarat' },
+  { code: '12', name: 'Haryana' },
+  { code: '13', name: 'Himachal Pradesh' },
+  { code: '14', name: 'Jammu And Kashmir' },
+  { code: '15', name: 'Karnataka' },
+  { code: '16', name: 'Kerala' },
+  { code: '17', name: 'Lakshadweep' },
+  { code: '18', name: 'Madhya Pradesh' },
+  { code: '19', name: 'Maharashtra' },
+  { code: '20', name: 'Manipur' },
+  { code: '21', name: 'Meghalaya' },
+  { code: '22', name: 'Mizoram' },
+  { code: '23', name: 'Nagaland' },
+  { code: '24', name: 'Odisha' },
+  { code: '25', name: 'Puducherry' },
+  { code: '26', name: 'Punjab' },
+  { code: '27', name: 'Rajasthan' },
+  { code: '28', name: 'Sikkim' },
+  { code: '29', name: 'Tamil Nadu' },
+  { code: '30', name: 'Tripura' },
+  { code: '31', name: 'Uttar Pradesh' },
+  { code: '32', name: 'West Bengal' },
+  { code: '33', name: 'Chhattisgarh' },
+  { code: '34', name: 'Uttarakhand' },
+  { code: '35', name: 'Jharkhand' },
+  { code: '36', name: 'Telangana' },
+  { code: '37', name: 'Ladakh' },
+];
+
+// ── Employer categories (Schedule S / ITR-1, ITR-2) ──────────────────────────
+// Source: ITR-2 AY 2026-27 Excel utility — Schedule S sheet dropdown
+
+export interface EmployerCategory {
+  value: string;
+  label: string;
+  dbCode: string;  // maps to natureOfEmployment in DB
+}
+
+export const EMPLOYER_CATEGORIES: EmployerCategory[] = [
+  { value: 'govt',       label: 'Government (Central / State)',  dbCode: 'CGOV' },
+  { value: 'psu',        label: 'PSU (Public Sector Undertaking)', dbCode: 'PSU' },
+  { value: 'pensioners', label: 'Pensioners',                    dbCode: 'PE' },
+  { value: 'others',     label: 'Others (Private sector etc.)',  dbCode: 'OTH' },
+];
+
+// ── House property types ──────────────────────────────────────────────────────
+// Source: ITR-2 AY 2026-27 — House Property sheet
+
+export interface PropertyType {
+  value: string;
+  label: string;
+  hint: string;
+  dbCode: string;
+}
+
+export const PROPERTY_TYPES: PropertyType[] = [
+  {
+    value: 'self_occupied',
+    label: 'Self Occupied',
+    hint: 'Property used by you for your own residence. Annual value is NIL; interest on home loan capped at ₹2 lakh.',
+    dbCode: 'S',
+  },
+  {
+    value: 'let_out',
+    label: 'Let Out',
+    hint: 'Property given on rent. Actual / expected rent is Annual Value; no cap on interest deduction.',
+    dbCode: 'L',
+  },
+  {
+    value: 'deemed_let_out',
+    label: 'Deemed Let Out',
+    hint: 'A second+ property not actually rented out. Treated as if let out at market rent. No cap on interest.',
+    dbCode: 'D',
+  },
+];
+
+// ── Nature of Other Income (Schedule OS) ─────────────────────────────────────
+// Predefined categories matching ITR-2 / ITR-4 Schedule OS heads
+
+export interface OtherIncomeType {
+  value: string;
+  label: string;
+  section?: string;
+}
+
+export const OTHER_INCOME_TYPES: OtherIncomeType[] = [
+  { value: 'gift_cash',       label: 'Gift received in cash (from non-relative)', section: '56(2)(x)' },
+  { value: 'gift_immovable',  label: 'Gift of immovable property', section: '56(2)(x)' },
+  { value: 'gift_movable',    label: 'Gift of movable property (jewellery, shares etc.)', section: '56(2)(x)' },
+  { value: 'subletting',      label: 'Sub-letting of house property', section: '56(2)' },
+  { value: 'director_fees',   label: 'Director sitting fees / remuneration', section: '56(2)' },
+  { value: 'royalty',         label: 'Royalty income', section: '56(2)' },
+  { value: 'annuity',         label: 'Annuity received', section: '56(2)' },
+  { value: 'interest_it',     label: 'Interest on income tax refund', section: '56(2)' },
+  { value: 'nsc_interest',    label: 'NSC accrued interest (not being accumulated)', section: '56(2)' },
+  { value: 'agricultural_other', label: 'Agricultural income from outside India', section: '56(2)' },
+  { value: 'esop_unlisted',   label: 'ESOP income (unlisted company) u/s 17(2)(vi)', section: '17(2)' },
+  { value: 'keyman_policy',   label: 'Keyman Insurance policy proceeds', section: '56(2)(xi)' },
+  { value: 'bullion_prize',   label: 'Cash prize on bullion / jewellery scheme', section: '56(2)' },
+  { value: 'vda_other',       label: 'Income from Virtual Digital Assets (VDA/Crypto)', section: '115BBH' },
+  { value: 'other',           label: 'Any other income not covered above', section: '56(2)' },
+];
+
+// ── Capital gains asset types for STCG — Other ───────────────────────────────
+
+export interface CGAssetType {
+  value: string;
+  label: string;
+  hint?: string;
+}
+
+export const STCG_OTHER_ASSET_TYPES: CGAssetType[] = [
+  { value: 'land_building',    label: 'Land / Building', hint: 'Held for < 24 months' },
+  { value: 'gold_bullion',     label: 'Gold / Bullion / Jewellery', hint: 'Held for < 36 months' },
+  { value: 'debt_mf',          label: 'Debt Mutual Fund units (post Apr 2023)', hint: 'No indexation — taxed at slab' },
+  { value: 'unlisted_shares',  label: 'Unlisted equity shares', hint: 'Held for < 24 months' },
+  { value: 'foreign_shares',   label: 'Foreign shares / ADR / GDR', hint: 'Held for < 24 months' },
+  { value: 'bonds_debentures', label: 'Bonds / Debentures (listed or unlisted)', hint: 'Taxed at slab' },
+  { value: 'vda',              label: 'Virtual Digital Assets (VDA / Crypto)', hint: 'Taxed at 30% u/s 115BBH' },
+  { value: 'other',            label: 'Any other capital asset', hint: '' },
+];
+
+// ── Helper utilities ──────────────────────────────────────────────────────────
+
 export function getCodeLabel(code: string, list: NatureCode[]): string {
   const found = list.find(c => c.code === code);
   return found ? `${found.code} – ${found.description}` : code;
+}
+
+export function getStateName(code: string): string {
+  return STATE_CODES.find(s => s.code === code)?.name ?? code;
+}
+
+export function getTDSDescription(code: string): string {
+  return TDS_SECTION_CODES.find(t => t.code === code)?.description ?? code;
 }

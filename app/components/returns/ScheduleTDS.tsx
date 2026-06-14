@@ -3,6 +3,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import JSZip from 'jszip';
 import type { ReturnData } from '@/shared/types/itr';
+import { CodeSelect } from '@/app/components/ui/CodeSelect';
+import { TDS_SECTION_CODES } from '@/app/lib/itrCodes';
 
 // ─── Portal import types ──────────────────────────────────────────────────────
 
@@ -125,17 +127,7 @@ const isValidTAN = (s: string) => /^[A-Z]{4}[0-9]{5}[A-Z]$/i.test(s.trim());
 const isValidPAN = (s: string) => /^[A-Z]{5}[0-9]{4}[A-Z]$/i.test(s.trim());
 const uuid = () => crypto.randomUUID();
 
-const INCOME_TYPES = [
-  'Interest on FD',
-  'Interest on RD',
-  'Interest on Savings',
-  'Dividend',
-  'Commission',
-  'Professional Fees',
-  'Rent (194I)',
-  'Contractor Payment',
-  'Other (specify)',
-];
+// TDS_SECTION_CODES imported from itrCodes — replaces old free-text INCOME_TYPES list
 
 const EMPTY_STATE: TDSState = {
   salarySources: [],
@@ -245,7 +237,7 @@ function dbEntriesToState(entries: any[]): TDSState {
         state.tcsSources.push({ id: String(e.id ?? uuid()), collectorName: e.nameOfDeductor ?? '', collectorTAN: e.tanOfDeductor ?? '', amountPaid: e.amtOnWhichTCS ?? 0, tcsCollected: e.tcsCollected ?? 0 });
         break;
       default:
-        state.otherSources.push({ id: String(e.id ?? uuid()), deductorName: e.nameOfDeductor ?? '', deductorTAN: e.tanOfDeductor ?? '', incomeType: e.tdsSection ?? 'Other (specify)', incomeCredited: e.incomeChargeable ?? 0, tdsDeducted: e.tdsDeducted ?? 0 });
+        state.otherSources.push({ id: String(e.id ?? uuid()), deductorName: e.nameOfDeductor ?? '', deductorTAN: e.tanOfDeductor ?? '', incomeType: e.tdsSection ?? '', incomeCredited: e.incomeChargeable ?? 0, tdsDeducted: e.tdsDeducted ?? 0 });
     }
   }
   return state;
@@ -1296,12 +1288,13 @@ export default function ScheduleTDS({ returnId, clientId, returnData, onSaved, s
   }
 
   function sectionToIncomeType(section?: string): string {
-    if (!section) return 'Other (specify)';
-    if (section.startsWith('194A')) return 'Interest on FD';
-    if (section.startsWith('194I')) return 'Rent (194I)';
-    if (section.startsWith('194J')) return 'Professional Fees';
-    if (section.startsWith('194')) return 'Other (specify)';
-    return 'Other (specify)';
+    if (!section) return '';
+    // Return actual section code if it matches a known code, otherwise as-is
+    const known = TDS_SECTION_CODES.find(t => t.code === section);
+    if (known) return section;
+    // Try prefix match for codes like 194A → 194A
+    const prefix = TDS_SECTION_CODES.find(t => t.code.startsWith(section) || section.startsWith(t.code));
+    return prefix?.code ?? section;
   }
 
   // ── Auto-save ───────────────────────────────────────────────────────────────
@@ -1663,12 +1656,18 @@ export default function ScheduleTDS({ returnId, clientId, returnData, onSaved, s
                 )}
               </div>
               <div className="form-group">
-                <label className="form-label">Nature of Income</label>
-                <select className="form-input" value={row.incomeType}
-                  onChange={(e) => update({ otherSources: state.otherSources.map((r) => r.id === row.id ? { ...r, incomeType: e.target.value } : r) })}>
-                  <option value="">— Select —</option>
-                  {INCOME_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-                </select>
+                <label className="form-label">TDS Section / Nature of Income</label>
+                <CodeSelect
+                  value={row.incomeType}
+                  onChange={(code) => update({ otherSources: state.otherSources.map((r) => r.id === row.id ? { ...r, incomeType: code } : r) })}
+                  codes={TDS_SECTION_CODES}
+                  placeholder="Select TDS section (e.g. 194A — FD interest)…"
+                />
+                {row.incomeType && (
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '2px', display: 'block' }}>
+                    {TDS_SECTION_CODES.find(t => t.code === row.incomeType)?.description ?? row.incomeType}
+                  </span>
+                )}
               </div>
               <div className="form-group">
                 <label className="form-label">Income Credited (₹)</label>
@@ -1687,7 +1686,7 @@ export default function ScheduleTDS({ returnId, clientId, returnData, onSaved, s
         ))}
         <button className="btn btn-secondary btn-sm"
           onClick={() => update({ otherSources: [...state.otherSources, { id: uuid(), deductorName: '', deductorTAN: '', incomeType: '', incomeCredited: 0, tdsDeducted: 0 }] })}>
-          + Add Entry
+          + Add TDS Entry
         </button>
         {state.otherSources.length > 0 && (
           <TotalsRow label="Total Income" income={state.otherSources.reduce((s, r) => s + r.incomeCredited, 0)} tds={totalTDSOther} />

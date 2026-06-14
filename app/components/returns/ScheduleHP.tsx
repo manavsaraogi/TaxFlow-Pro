@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import type { ScheduleHP, ReturnData } from '@/shared/types/itr';
+import { STATE_CODES, PROPERTY_TYPES } from '@/app/lib/itrCodes';
 
 // ─── Dev mock ────────────────────────────────────────────────────────────────
 const isMock = false;
@@ -264,26 +265,42 @@ function PropertyCard({ prop, index, total, soCount, onChange, onRemove }: Prope
         <div className="hp-card-body">
           {/* Property type */}
           <div className="hp-subhead">Property Type</div>
-          <div className="radio-group">
-            {(['self_occupied', 'let_out', 'deemed_let_out'] as PropertyType[]).map((t) => {
-              const disabled = t === 'self_occupied' && soCount >= 1 && prop.propertyType !== 'self_occupied';
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '8px' }}>
+            {PROPERTY_TYPES.map((pt) => {
+              const isActive = prop.propertyType === pt.value;
+              const disabled = pt.value === 'self_occupied' && soCount >= 1 && prop.propertyType !== 'self_occupied';
               return (
-                <label key={t} className={`radio-label${disabled ? ' disabled' : ''}`}>
-                  <input
-                    type="radio"
-                    name={`ptype-${prop.id}`}
-                    value={t}
-                    checked={prop.propertyType === t}
-                    disabled={disabled}
-                    onChange={() => set({ propertyType: t })}
-                  />
-                  <span className="radio-text">
-                    {t === 'self_occupied' ? 'Self-Occupied' : t === 'let_out' ? 'Let Out' : 'Deemed Let Out'}
-                  </span>
-                </label>
+                <button
+                  key={pt.value}
+                  type="button"
+                  disabled={disabled}
+                  title={pt.hint}
+                  onClick={() => !disabled && set({ propertyType: pt.value as PropertyType })}
+                  style={{
+                    padding: '6px 14px', fontSize: '0.8rem', borderRadius: '7px',
+                    border: '1.5px solid',
+                    borderColor: isActive
+                      ? (pt.value === 'self_occupied' ? 'var(--brand-primary)' : pt.value === 'let_out' ? '#16a34a' : '#d97706')
+                      : 'var(--border-color)',
+                    background: isActive
+                      ? (pt.value === 'self_occupied' ? 'var(--brand-primary)' : pt.value === 'let_out' ? '#16a34a' : '#d97706')
+                      : 'var(--bg-surface)',
+                    color: isActive ? '#fff' : disabled ? 'var(--text-muted)' : 'var(--text-secondary)',
+                    cursor: disabled ? 'not-allowed' : 'pointer',
+                    fontWeight: isActive ? 700 : 400, opacity: disabled ? 0.5 : 1,
+                    transition: 'all 0.12s',
+                  }}
+                >
+                  {pt.label}
+                </button>
               );
             })}
           </div>
+          {prop.propertyType && (
+            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '8px' }}>
+              {PROPERTY_TYPES.find(p => p.value === prop.propertyType)?.hint}
+            </div>
+          )}
           {soCount >= 1 && prop.propertyType !== 'self_occupied' && (
             <div className="hp-so-note">Only one self-occupied property allowed per ITR</div>
           )}
@@ -298,6 +315,20 @@ function PropertyCard({ prop, index, total, soCount, onChange, onRemove }: Prope
               placeholder="Flat / Plot No., Building, Street, City, PIN"
               onChange={(e) => set({ address: e.target.value })}
             />
+          </div>
+          <div className="form-group" style={{ maxWidth: '260px' }}>
+            <label className="form-label">State / UT</label>
+            <select
+              className="form-input"
+              value={(prop as any).stateCode ?? ''}
+              onChange={(e) => set({ stateCode: e.target.value } as any)}
+              style={{ fontSize: '0.82rem' }}
+            >
+              <option value="">— Select state —</option>
+              {STATE_CODES.map(s => (
+                <option key={s.code} value={s.code}>{s.code} — {s.name}</option>
+              ))}
+            </select>
           </div>
 
           {/* Let-out fields */}

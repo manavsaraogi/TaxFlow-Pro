@@ -402,19 +402,39 @@ export default function ScheduleSalaryComponent({ returnId, returnData, onSaved,
       <div className="itr-row">
         <div className="itr-num"></div>
         <div className="itr-label">Employer Category</div>
-        <div className="itr-amount" style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-          {(['govt', 'psu', 'pensioners', 'others'] as const).map((cat) => (
-            <label key={cat} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem', cursor: 'pointer' }}>
-              <input
-                type="radio"
-                name={`empcat-${emp.id}`}
-                checked={emp.employerCategory === cat}
-                onChange={() => updateEmp(emp.id, { employerCategory: cat })}
-                style={{ accentColor: 'var(--brand-primary)' }}
-              />
-              {empCatLabel[cat]}
-            </label>
-          ))}
+        <div className="itr-amount">
+          <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+            {([
+              { value: 'govt',       label: 'Govt. (Central / State)', hint: 'CGOV / SGOV' },
+              { value: 'psu',        label: 'PSU',                     hint: 'Public Sector' },
+              { value: 'pensioners', label: 'Pensioners',              hint: 'Includes ex-employees' },
+              { value: 'others',     label: 'Others',                   hint: 'Private sector' },
+            ] as const).map(({ value: cat, label, hint }) => (
+              <button
+                key={cat}
+                type="button"
+                title={hint}
+                onClick={() => updateEmp(emp.id, { employerCategory: cat })}
+                style={{
+                  padding: '5px 12px', fontSize: '0.78rem', borderRadius: '6px',
+                  border: '1.5px solid',
+                  borderColor: emp.employerCategory === cat ? 'var(--brand-primary)' : 'var(--border-color)',
+                  background: emp.employerCategory === cat ? 'var(--brand-primary)' : 'var(--bg-surface)',
+                  color: emp.employerCategory === cat ? '#fff' : 'var(--text-secondary)',
+                  cursor: 'pointer', fontWeight: emp.employerCategory === cat ? 700 : 400,
+                  transition: 'all 0.12s',
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <span style={{ fontSize: '0.71rem', color: 'var(--text-muted)', marginTop: '3px', display: 'block' }}>
+            {emp.employerCategory === 'govt' ? 'Maps to CGOV/SGOV in ITR' :
+             emp.employerCategory === 'psu' ? 'Maps to PSU in ITR' :
+             emp.employerCategory === 'pensioners' ? 'Maps to PE/PESG/PEPS/PEO in ITR' :
+             'Maps to OTH in ITR'}
+          </span>
         </div>
       </div>
 
@@ -574,15 +594,26 @@ export default function ScheduleSalaryComponent({ returnId, returnData, onSaved,
           <div className="itr-row">
             <div className="itr-num"></div>
             <div className="itr-label">City Type</div>
-            <div className="itr-amount" style={{ display: 'flex', gap: '1.5rem' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem', cursor: 'pointer' }}>
-                <input type="radio" checked={state.hraInputs.isMetroCity} onChange={() => update({ hraInputs: { ...state.hraInputs, isMetroCity: true } })} style={{ accentColor: 'var(--brand-primary)' }} />
-                Metro (50%)
-              </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem', cursor: 'pointer' }}>
-                <input type="radio" checked={!state.hraInputs.isMetroCity} onChange={() => update({ hraInputs: { ...state.hraInputs, isMetroCity: false } })} style={{ accentColor: 'var(--brand-primary)' }} />
-                Non-Metro (40%)
-              </label>
+            <div className="itr-amount">
+              <div style={{ display: 'flex', gap: '0.4rem' }}>
+                {[
+                  { label: 'Metro City (50%)', value: true, hint: 'Delhi, Mumbai, Chennai, Kolkata' },
+                  { label: 'Non-Metro (40%)',  value: false, hint: 'All other cities' },
+                ].map(({ label, value, hint }) => (
+                  <button
+                    key={String(value)} type="button" title={hint}
+                    onClick={() => update({ hraInputs: { ...state.hraInputs, isMetroCity: value } })}
+                    style={{
+                      padding: '5px 12px', fontSize: '0.78rem', borderRadius: '6px',
+                      border: '1.5px solid',
+                      borderColor: state.hraInputs.isMetroCity === value ? 'var(--brand-primary)' : 'var(--border-color)',
+                      background: state.hraInputs.isMetroCity === value ? 'var(--brand-primary)' : 'var(--bg-surface)',
+                      color: state.hraInputs.isMetroCity === value ? '#fff' : 'var(--text-secondary)',
+                      cursor: 'pointer', fontWeight: state.hraInputs.isMetroCity === value ? 700 : 400,
+                    }}
+                  >{label}</button>
+                ))}
+              </div>
             </div>
           </div>
         </>
