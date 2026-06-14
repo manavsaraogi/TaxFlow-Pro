@@ -4,6 +4,17 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import type { AppPage } from '../layout/AppShell';
 
+/** Returns the current applicable Assessment Year, e.g. "2026-27".
+ *  AY starts April 1 each year: if month >= April, AY first year = current year;
+ *  otherwise AY first year = prior year. */
+function currentApplicableAY(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth() + 1; // 1-12
+  const ayStart = month >= 4 ? year : year - 1;
+  return `${ayStart}-${String(ayStart + 1).slice(-2)}`;
+}
+
 const ASSESSEE_LABELS: Record<string, string> = {
   INDIVIDUAL:       'Individual',
   HUF:              'HUF',
@@ -205,8 +216,16 @@ function PortalImportModal({ state, setState, onDone, onNavigate }: {
               <div className="form-group" style={{ flex: 1 }}>
                 <label className="form-label">Assessment Year</label>
                 <select className="form-input" value={state.assessmentYear} onChange={e => set({ assessmentYear: e.target.value })}>
-                  {['2026-27', '2025-26', '2024-25', '2023-24'].map(ay => (
-                    <option key={ay} value={ay}>{ay}</option>
+                  {(() => {
+                    const cur = currentApplicableAY();
+                    const curStart = parseInt(cur.split('-')[0]);
+                    // Show current AY + 3 previous years
+                    return Array.from({ length: 4 }, (_, i) => {
+                      const s = curStart - i;
+                      return `${s}-${String(s + 1).slice(-2)}`;
+                    });
+                  })().map(ay => (
+                    <option key={ay} value={ay}>{ay}{ay === currentApplicableAY() ? ' (current)' : ''}</option>
                   ))}
                 </select>
               </div>
@@ -322,7 +341,7 @@ export function ClientList({ onNavigate }: ClientListProps) {
   const [filterType, setFilterType] = useState('');
   const [searchInput, setSearchInput] = useState('');
   const [importState, setImportState] = useState<PortalImportState>({
-    open: false, step: 'form', pan: '', password: '', assessmentYear: '2026-27', formType: 'ITR-1',
+    open: false, step: 'form', pan: '', password: '', assessmentYear: currentApplicableAY(), formType: 'ITR-1',
     log: [], error: null, result: null,
   });
 

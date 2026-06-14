@@ -441,8 +441,20 @@ async function fetchAIS(page, context, { assessmentYear, pan, dob }, captured, l
 }
 
 async function waitDashboard(page, log) {
-  for (let i = 0; i < 90; i++) {
-    await page.waitForTimeout(1000);
+  // Fast path: wait for URL to match dashboard pattern
+  const urlReached = await page.waitForURL(
+    /dashboard|myaccount|home|landing|fileIncomeTaxReturn/i,
+    { timeout: 90000 }
+  ).then(() => true).catch(() => false);
+
+  if (urlReached) {
+    log('Dashboard reached: ' + page.url());
+    return;
+  }
+
+  // Slow path: may be stuck on dialog or captcha — poll for 90s
+  for (let i = 0; i < 45; i++) {
+    await page.waitForTimeout(2000);
     const url = page.url();
     if (/dashboard|myaccount|home|landing|fileIncomeTaxReturn/i.test(url)) {
       log('Dashboard reached: ' + url); return;
@@ -455,7 +467,7 @@ async function waitDashboard(page, log) {
     if (no && await no.isVisible().catch(() => false)) {
       await no.click(); log('Logout dialog — clicked No');
     }
-    if (i === 30) log('Still waiting... check browser for captcha or OTP.');
+    if (i === 15) log('Still waiting... check browser for captcha or OTP.');
   }
   throw new Error('Login timed out after 90 seconds.');
 }
@@ -540,7 +552,7 @@ async function fetch26AS({ pan, password, dob, assessmentYear, onStatus }) {
     log('Clicked login');
 
     for (let i = 0; i < 5; i++) {
-      await page.waitForTimeout(2000);
+      await page.waitForTimeout(800);
       const url = page.url();
       if (/dashboard|myaccount|home|landing|fileIncomeTaxReturn/i.test(url)) break;
       const notAuth = await page.evaluate(() => {
@@ -550,7 +562,7 @@ async function fetch26AS({ pan, password, dob, assessmentYear, onStatus }) {
       }).catch(() => null);
       if (!notAuth) break;
       log('Not authenticated — retrying (' + (i + 1) + ')...');
-      const btn = await waitFor(page, ['button:has-text("Continue")', 'button:has-text("Login")', 'button[type="submit"]'], 3000);
+      const btn = await waitFor(page, ['button:has-text("Continue")', 'button:has-text("Login")', 'button[type="submit"]'], 2000);
       if (btn) await btn.click(); else await page.keyboard.press('Enter');
     }
 
@@ -1029,7 +1041,7 @@ async function fetchPrefillJson({ pan, password, assessmentYear, formType, onSta
     log('Clicked login');
 
     for (let i = 0; i < 5; i++) {
-      await page.waitForTimeout(2000);
+      await page.waitForTimeout(800);
       const url = page.url();
       if (/dashboard|myaccount|home|landing|fileIncomeTaxReturn/i.test(url)) break;
       const notAuth = await page.evaluate(() => {
@@ -1039,68 +1051,76 @@ async function fetchPrefillJson({ pan, password, assessmentYear, formType, onSta
       }).catch(() => null);
       if (!notAuth) break;
       log('Not authenticated — retrying (' + (i + 1) + ')...');
-      const btn = await waitFor(page, ['button:has-text("Continue")', 'button:has-text("Login")', 'button[type="submit"]'], 3000);
+      const btn = await waitFor(page, ['button:has-text("Continue")', 'button:has-text("Login")', 'button[type="submit"]'], 2000);
       if (btn) await btn.click(); else await page.keyboard.press('Enter');
     }
 
     log('Waiting for dashboard...');
     await waitDashboard(page, log);
     log('Logged in!');
-    await page.screenshot({ path: path.join(SS_DIR, 'prefill-01-dashboard.png') }).catch(() => null);
 
     // ── Navigate: e-File → Income Tax Returns → File Income Tax Return ────────
     log('Navigating to File Income Tax Return...');
-    await clickMenuItem(page, /^e-file$/i, log, 'e-File menu');
-    await page.waitForTimeout(600);
-    await clickMenuItemVisible(page, /^income tax returns$/i, log, 'Income Tax Returns');
-    await page.waitForTimeout(600);
-    await clickMenuItemVisible(page, /file income tax return/i, log, 'File Income Tax Return');
-    await page.waitForTimeout(3000);
-    await page.screenshot({ path: path.join(SS_DIR, 'prefill-02-file-itr.png') }).catch(() => null);
+
+    // Try direct URL first — fastest path
+    await page.goto(
+      'https://eportal.incometax.gov.in/iec/foservices/#/fileIncomeTaxReturn',
+      { waitUntil: 'domcontentloaded', timeout: 15000 }
+    ).catch(() => null);
+    await page.waitForTimeout(1500);
+
+    // If direct URL didn't land on ITR filing page, fall back to menu navigation
+    if (!/fileIncomeTaxReturn|file.*itr/i.test(page.url())) {
+      log('Direct URL failed — using menu navigation...');
+      await clickMenuItem(page, /^e-file$/i, log, 'e-File menu');
+      await page.waitForTimeout(300);
+      await clickMenuItemVisible(page, /^income tax returns$/i, log, 'Income Tax Returns');
+      await page.waitForTimeout(300);
+      await clickMenuItemVisible(page, /file income tax return/i, log, 'File Income Tax Return');
+      // Wait for the filing page to load (up to 8s)
+      await page.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => null);
+    }
+
     log('After nav, URL: ' + page.url());
 
     // ── Select Assessment Year ────────────────────────────────────────────────
     log('Selecting AY: ' + ay);
-    await page.waitForTimeout(1000);
 
-    // Try to find AY selection cards or dropdown
+    // Wait for AY cards/dropdown to appear
+    await waitFor(page, [
+      `[class*="card"]:has-text("${ay}")`,
+      `div:has-text("${ay}")`,
+      'select',
+      'mat-select',
+    ], 6000);
+
     const ayClicked = await page.evaluate((ayLabel) => {
-      // The portal often shows AY as clickable cards
       const cards = [...document.querySelectorAll('div, li, td, span, button')]
         .filter(e => e.getBoundingClientRect().width > 0);
       const ayCard = cards.find(e => {
         const text = e.textContent?.trim() ?? '';
         return (text === ayLabel || text === 'AY ' + ayLabel || text.includes(ayLabel)) && text.length < 30;
       });
-      if (ayCard) {
-        ayCard.scrollIntoView({ block: 'center' });
-        ayCard.click();
-        return 'clicked: ' + ayCard.textContent?.trim();
-      }
-      // Try select dropdown
+      if (ayCard) { ayCard.scrollIntoView({ block: 'center' }); ayCard.click(); return 'card: ' + ayCard.textContent?.trim(); }
       const sel = document.querySelector('select');
       if (sel) {
         const opt = [...sel.options].find(o => o.text.includes(ayLabel) || o.value.includes(ayLabel));
-        if (opt) {
-          sel.value = opt.value;
-          sel.dispatchEvent(new Event('change', { bubbles: true }));
-          return 'dropdown: ' + opt.text;
-        }
+        if (opt) { sel.value = opt.value; sel.dispatchEvent(new Event('change', { bubbles: true })); return 'dropdown: ' + opt.text; }
       }
       return null;
     }, ay).catch(() => null);
 
     if (ayClicked) log('AY selected: ' + ayClicked);
-    await page.waitForTimeout(1000);
 
-    // Click Continue after AY selection
-    const continueBtn = await waitFor(page, ['button:has-text("Continue")', 'button:has-text("Proceed")', 'button[type="submit"]'], 5000);
+    // Click Continue after AY selection — wait for it to appear
+    const continueBtn = await waitFor(page, ['button:has-text("Continue")', 'button:has-text("Proceed")', 'button[type="submit"]'], 4000);
     if (continueBtn) { await continueBtn.click(); log('Clicked Continue'); }
-    await page.waitForTimeout(2000);
-    await page.screenshot({ path: path.join(SS_DIR, 'prefill-03-ay-selected.png') }).catch(() => null);
+    await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => null);
 
     // ── Select ITR Form type ──────────────────────────────────────────────────
     log('Selecting form: ' + form);
+    // Wait for form type options to load
+    await page.waitForTimeout(500);
     const formClicked = await page.evaluate((formLabel) => {
       const el = [...document.querySelectorAll('div, li, td, span, button, label, input[type="radio"]')]
         .find(e => {
@@ -1111,15 +1131,12 @@ async function fetchPrefillJson({ pan, password, assessmentYear, formType, onSta
       return false;
     }, form).catch(() => false);
     if (formClicked) log('Form selected: ' + form);
-    await page.waitForTimeout(800);
 
-    const cont2 = await waitFor(page, ['button:has-text("Continue")', 'button:has-text("Proceed")', 'button[type="submit"]'], 5000);
+    const cont2 = await waitFor(page, ['button:has-text("Continue")', 'button:has-text("Proceed")', 'button[type="submit"]'], 4000);
     if (cont2) { await cont2.click(); log('Clicked Continue (2)'); }
-    await page.waitForTimeout(2000);
-    await page.screenshot({ path: path.join(SS_DIR, 'prefill-04-form-selected.png') }).catch(() => null);
+    await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => null);
 
     // ── Trigger prefill download ──────────────────────────────────────────────
-    // The portal shows "Prefill my Return" or similar — click it
     log('Looking for "Prefill" option...');
     const prefillClicked = await page.evaluate(() => {
       const el = [...document.querySelectorAll('div, button, span, label, li')]
@@ -1129,24 +1146,21 @@ async function fetchPrefillJson({ pan, password, assessmentYear, formType, onSta
     }).catch(() => null);
     if (prefillClicked) log('Clicked prefill: ' + prefillClicked);
 
-    await page.waitForTimeout(1000);
     const cont3 = await waitFor(page, ['button:has-text("Continue")', 'button:has-text("Proceed")', 'button[type="submit"]'], 3000);
     if (cont3) { await cont3.click(); log('Clicked Continue (3)'); }
 
-    // Wait up to 30 seconds for the prefill JSON to be intercepted
+    // Wait for prefill JSON to be intercepted — check every 1s, up to 30s
     log('Waiting for prefill JSON to load (up to 30s)...');
-    for (let i = 0; i < 15; i++) {
+    for (let i = 0; i < 30; i++) {
       if (capturedPrefill) break;
-      await page.waitForTimeout(2000);
-      // Also try clicking any "Let's get started" or similar prompts that appear
+      await page.waitForTimeout(1000);
+      // Click any "get started" prompts that might be blocking
       await page.evaluate(() => {
         const btn = [...document.querySelectorAll('button')]
           .find(b => /get started|continue|proceed|load/i.test(b.textContent ?? '') && b.getBoundingClientRect().width > 0);
         if (btn) btn.click();
       }).catch(() => null);
     }
-
-    await page.screenshot({ path: path.join(SS_DIR, 'prefill-05-done.png') }).catch(() => null);
 
     if (capturedPrefill) {
       log('✓ Prefill JSON captured (' + JSON.stringify(capturedPrefill).length + ' bytes)');
