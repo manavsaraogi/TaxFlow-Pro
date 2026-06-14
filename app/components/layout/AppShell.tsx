@@ -88,7 +88,7 @@ export function AppShell() {
     <div className="app-shell">
       <Sidebar currentPage={page.name} onNavigate={navigate} />
       <div className="main-area">
-        <Topbar currentPage={page} onNavigate={navigate} />
+        {page.name !== 'return-detail' && <Topbar currentPage={page} onNavigate={navigate} />}
         {renderPage()}
       </div>
     </div>

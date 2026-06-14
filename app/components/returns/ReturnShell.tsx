@@ -321,68 +321,46 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate }: 
     <div className="animate-in" style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
 
       {/* ── Header ── */}
-      <div style={{
-        background: 'var(--bg-surface)',
-        borderBottom: '1px solid var(--border-subtle)',
-        padding: '12px 20px',
-        flexShrink: 0,
-      }}>
-        {/* Single compact row: back + client + badges + actions */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-          {/* Back link */}
+      <div style={{ background: 'var(--bg-surface)', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
+
+        {/* Row 1: Navigation + Actions */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 20px', borderBottom: '1px solid var(--border-subtle)' }}>
           <button
             className="btn btn-ghost btn-sm"
             onClick={onBack}
-            style={{ padding: '3px 8px', fontSize: '12px', color: 'var(--text-muted)', flexShrink: 0 }}
+            style={{ padding: '4px 8px', fontSize: '12px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '5px' }}
           >
-            ← {returnMeta.clientName}
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 2L4 7l5 5"/>
+            </svg>
+            {returnMeta.clientName}
           </button>
 
-          <span style={{ color: 'var(--border-default)', fontSize: '14px', flexShrink: 0 }}>/</span>
+          <span style={{ color: 'var(--border-emphasis)', fontSize: '16px', fontWeight: 300, flexShrink: 0 }}>›</span>
 
-          {/* Title + badges */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', flex: 1 }}>
-            <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
-              Income Tax Return
+          <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', flex: 1 }}>
+            Income Tax Return
+          </span>
+
+          {/* Save state */}
+          {saveState === 'saving' && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', color: 'var(--text-muted)' }}>
+              <div className="spinner" style={{ width: '12px', height: '12px', borderWidth: '1.5px' }} />
+              Saving…
+            </div>
+          )}
+          {saveState === 'saved' && (
+            <span style={{ fontSize: '11px', color: 'var(--status-success)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 6l3 3 5-5"/></svg>
+              Saved
             </span>
-            <span className={formTypeBadgeClass(returnMeta.formType)} style={{ fontSize: '11px' }}>
-              {returnMeta.formType}
-            </span>
-            <span className={statusBadgeClass(returnMeta.status)} style={{ fontSize: '11px' }}>
-              {statusLabel(returnMeta.status)}
-            </span>
-            <span className="badge badge-neutral" style={{ fontSize: '11px' }}>
-              {returnMeta.regime === 'NEW' ? 'New Regime' : 'Old Regime'}
-            </span>
-            <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-              {returnMeta.clientPAN}
-            </span>
-            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-              AY {returnMeta.assessmentYear}
-            </span>
-            {returnMeta.filedAt && (
-              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                Filed {new Date(returnMeta.filedAt).toLocaleDateString('en-IN')}
-              </span>
-            )}
-            {returnMeta.acknowledgementNumber && (
-              <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', background: 'var(--bg-elevated)', padding: '2px 6px', borderRadius: '3px' }}>
-                ACK: {returnMeta.acknowledgementNumber}
-              </span>
-            )}
-          </div>
+          )}
+          {saveState === 'error' && (
+            <span style={{ fontSize: '11px', color: 'var(--status-error)' }}>Save failed</span>
+          )}
 
           {/* Actions */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
-            {saveState === 'saving' && (
-              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Saving…</span>
-            )}
-            {saveState === 'saved' && (
-              <span style={{ fontSize: '11px', color: 'var(--status-success)' }}>✓ Saved</span>
-            )}
-            {saveState === 'error' && (
-              <span style={{ fontSize: '11px', color: 'var(--status-error)' }}>Save failed</span>
-            )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <button
               className="btn btn-secondary btn-sm"
               onClick={() => {
@@ -395,31 +373,79 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate }: 
               disabled={downloadingJson}
               style={{ position: 'relative' }}
             >
-              {downloadingJson ? 'Generating…' : 'Download ITR JSON'}
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M6.5 1v7M4 6l2.5 2.5L9 6"/>
+                <path d="M1 10.5v.5a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-.5"/>
+              </svg>
+              {downloadingJson ? 'Generating…' : 'Download JSON'}
               {validation && validation.errorCount > 0 && (
                 <span style={{
-                  position: 'absolute', top: '-6px', right: '-6px',
-                  background: 'var(--error, #e05c4b)', color: '#fff',
+                  position: 'absolute', top: '-5px', right: '-5px',
+                  background: '#e05c4b', color: '#fff',
                   fontSize: '9px', fontWeight: 700, lineHeight: 1,
                   padding: '2px 4px', borderRadius: '8px', minWidth: '14px', textAlign: 'center',
                 }}>{validation.errorCount}</span>
               )}
             </button>
-            <button
-              className="btn btn-secondary btn-sm"
-              onClick={() => setShowPortalModal(true)}
-            >
+            <button className="btn btn-secondary btn-sm" onClick={() => setShowPortalModal(true)}>
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M6.5 8V1M4 3.5L6.5 1 9 3.5"/>
+                <path d="M1 10.5v.5a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-.5"/>
+              </svg>
               Upload to Portal
             </button>
             {!isFiledOrAcknowledged && (
-              <button
-                className="btn btn-primary btn-sm"
-                onClick={() => setActiveTab('verification')}
-              >
-                Proceed to File →
+              <button className="btn btn-primary btn-sm" onClick={() => setActiveTab('verification')}>
+                File Return →
               </button>
             )}
           </div>
+        </div>
+
+        {/* Row 2: Return metadata strip */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '6px 20px', flexWrap: 'wrap' }}>
+          <span className={formTypeBadgeClass(returnMeta.formType)} style={{ fontSize: '11px', fontWeight: 700 }}>
+            {returnMeta.formType}
+          </span>
+          <span className={statusBadgeClass(returnMeta.status)} style={{ fontSize: '11px' }}>
+            {statusLabel(returnMeta.status)}
+          </span>
+          <span className="badge badge-neutral" style={{ fontSize: '11px' }}>
+            {returnMeta.regime === 'NEW' ? 'New Regime' : 'Old Regime'}
+          </span>
+
+          <span style={{ width: '1px', height: '12px', background: 'var(--border-subtle)', flexShrink: 0 }} />
+
+          <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', letterSpacing: '0.05em' }}>
+            {returnMeta.clientPAN}
+          </span>
+          <span style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>
+            AY {returnMeta.assessmentYear}
+          </span>
+          {returnMeta.filingSection && (
+            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+              §{returnMeta.filingSection}
+            </span>
+          )}
+          {returnMeta.acknowledgementNumber && (
+            <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', background: 'var(--bg-elevated)', padding: '2px 8px', borderRadius: '4px', border: '1px solid var(--border-subtle)' }}>
+              ACK: {returnMeta.acknowledgementNumber}
+            </span>
+          )}
+          {returnMeta.filedAt && (
+            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+              Filed {new Date(returnMeta.filedAt).toLocaleDateString('en-IN')}
+            </span>
+          )}
+          {detectedForm && !isFiledOrAcknowledged && (
+            <span style={{
+              fontSize: '11px', fontWeight: 600, color: 'var(--brand-text)',
+              background: 'rgba(212,160,23,0.12)', border: '1px solid var(--brand-primary)',
+              padding: '2px 8px', borderRadius: '4px', cursor: 'pointer',
+            }} onClick={() => handleSwitchFormType(detectedForm.formType)}>
+              {switchingForm ? 'Switching…' : `⚠ Switch to ${detectedForm.formType}`}
+            </span>
+          )}
         </div>
       </div>
 
@@ -602,31 +628,6 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate }: 
             </div>
           )}
 
-          {/* ── Auto ITR type detection banner ── */}
-          {detectedForm && !isFiledOrAcknowledged && (
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap',
-              padding: '12px 16px', marginBottom: '18px',
-              background: 'rgba(212,160,23,0.10)', border: '1px solid var(--brand-primary)',
-              borderRadius: '8px', fontSize: '13px',
-            }}>
-              <div style={{ flex: 1 }}>
-                <strong style={{ color: 'var(--brand-text)' }}>ITR type mismatch detected</strong>
-                <span style={{ color: 'var(--text-secondary)', marginLeft: '8px' }}>{detectedForm.reason}</span>
-              </div>
-              <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
-                <button
-                  className="btn btn-primary btn-sm"
-                  onClick={() => handleSwitchFormType(detectedForm.formType)}
-                  disabled={switchingForm}
-                >
-                  {switchingForm ? 'Switching…' : `Switch to ${detectedForm.formType}`}
-                </button>
-                <button className="btn btn-ghost btn-sm" onClick={() => setDetectedForm(null)}>Dismiss</button>
-              </div>
-            </div>
-          )}
-
           {activeTab === 'salary' && (
             <ScheduleSalary
               returnId={String(returnMeta.id)}
@@ -771,46 +772,75 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate }: 
         </div>
         </ValidationProvider>
       </div>
+
+      {/* ── Income Summary Footer ── */}
+      {summary && (
+        <div style={{
+          flexShrink: 0,
+          borderTop: '1px solid var(--border-subtle)',
+          background: 'var(--bg-surface)',
+          display: 'flex',
+          alignItems: 'stretch',
+          height: '48px',
+          overflow: 'hidden',
+        }}>
+          <SummaryCell label="Gross Total Income"  value={summary.GrossTotalIncome} />
+          <SummaryDivider />
+          <SummaryCell label="Deductions (VI-A)"   value={summary.TotalDeductions} positive />
+          <SummaryDivider />
+          <SummaryCell label="Total Taxable Income" value={summary.TotalIncome} highlight />
+          <SummaryDivider />
+          {taxComp && <SummaryCell label="Tax Payable"          value={taxComp.TotalTaxPayable} />}
+          {taxComp && <SummaryDivider />}
+          {taxComp && <SummaryCell label="TDS / Taxes Paid"     value={taxComp.TotalTaxesPaid} positive />}
+          {taxComp && <SummaryDivider />}
+          {taxComp && (
+            <SummaryCell
+              label={taxComp.BalTaxPayable >= 0 ? 'Balance Tax Payable' : 'Refund Due'}
+              value={taxComp.BalTaxPayable}
+              highlight
+              negative={taxComp.BalTaxPayable < 0}
+            />
+          )}
+        </div>
+      )}
     </div>
   );
 }
 
-// ─── Tax bar item ─────────────────────────────────────────────────────────────
+// ─── Summary footer helpers ────────────────────────────────────────────────────
 
-function TaxBarItem({
-  label,
-  value,
-  highlight = false,
-  positive = false,
-  negative = false,
+function SummaryDivider() {
+  return <div style={{ width: '1px', background: 'var(--border-subtle)', flexShrink: 0, alignSelf: 'stretch', margin: '8px 0' }} />;
+}
+
+function SummaryCell({
+  label, value, highlight = false, positive = false, negative = false,
 }: {
-  label: string;
-  value: number;
-  highlight?: boolean;
-  positive?: boolean;
-  negative?: boolean;
+  label: string; value: number; highlight?: boolean; positive?: boolean; negative?: boolean;
 }) {
-  const color = positive
-    ? 'var(--color-success)'
-    : negative
-    ? 'var(--color-error)'
+  const valColor = negative
+    ? 'var(--status-success)'
+    : positive
+    ? 'var(--status-success)'
     : highlight
     ? 'var(--brand-text)'
     : 'var(--text-primary)';
 
   return (
-    <div style={{ flexShrink: 0 }}>
-      <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '2px', whiteSpace: 'nowrap' }}>
+    <div style={{
+      flex: 1, display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center',
+      padding: '0 16px', minWidth: 0,
+    }}>
+      <div style={{ fontSize: '10px', color: 'var(--text-muted)', whiteSpace: 'nowrap', letterSpacing: '0.02em', marginBottom: '2px' }}>
         {label}
       </div>
-      <div
-        className="amount"
-        style={{
-          fontSize: '14px',
-          fontWeight: highlight ? 700 : 600,
-          color,
-        }}
-      >
+      <div style={{
+        fontSize: '13px', fontWeight: highlight ? 700 : 600,
+        color: valColor, fontFamily: 'var(--font-mono)',
+        fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap',
+      }}>
         {formatCurrency(value)}
       </div>
     </div>
