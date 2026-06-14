@@ -4,43 +4,43 @@
 
 /* ── Design Tokens ──────────────────────────────────────────────────────── */
 :root {
-  --bg-base: #0B1120;
-  --bg-surface: #111827;
-  --bg-elevated: #1C2840;
-  --bg-overlay: #243050;
-  --bg-hover: #1F3058;
+  --bg-base: #F5F6FA;
+  --bg-surface: #FFFFFF;
+  --bg-elevated: #F1F5F9;
+  --bg-overlay: #E8EDF5;
+  --bg-hover: #EFF6FF;
 
-  --border-subtle: #1E2D45;
-  --border-default: #2D3F5A;
-  --border-emphasis: #3D5270;
+  --border-subtle: #E8EDF5;
+  --border-default: #D1D9E6;
+  --border-emphasis: #9BADC4;
 
-  --text-primary: #E6EDF3;
-  --text-secondary: #8B949E;
-  --text-muted: #586069;
-  --text-inverse: #0D1117;
+  --text-primary: #0F172A;
+  --text-secondary: #475569;
+  --text-muted: #94A3B8;
+  --text-inverse: #FFFFFF;
 
-  --brand-primary: #D4A017;
-  --brand-hover: #E8B420;
-  --brand-subtle: #2A2214;
-  --brand-text: #F0C040;
+  --brand-primary: #C89A10;
+  --brand-hover: #B8890E;
+  --brand-subtle: #FEF9EC;
+  --brand-text: #7A5C00;
 
-  --status-success: #3FB950;
-  --status-success-bg: #0D2A14;
-  --status-warning: #D29922;
-  --status-warning-bg: #2A1E00;
-  --status-error: #F85149;
-  --status-error-bg: #2D0E0E;
-  --status-info: #58A6FF;
-  --status-info-bg: #0C1F3A;
+  --status-success: #16A34A;
+  --status-success-bg: #F0FDF4;
+  --status-warning: #CA8A04;
+  --status-warning-bg: #FEFCE8;
+  --status-error: #DC2626;
+  --status-error-bg: #FEF2F2;
+  --status-info: #2563EB;
+  --status-info-bg: #EFF6FF;
 
-  --status-not-started: #586069;
-  --status-data-imported: #58A6FF;
-  --status-data-entry: #D29922;
-  --status-computation: #A371F7;
-  --status-review: #F0883E;
-  --status-ready: #3FB950;
-  --status-filed: #238636;
-  --status-completed: #1A7F37;
+  --status-not-started: #94A3B8;
+  --status-data-imported: #3B82F6;
+  --status-data-entry: #EAB308;
+  --status-computation: #8B5CF6;
+  --status-review: #F97316;
+  --status-ready: #22C55E;
+  --status-filed: #16A34A;
+  --status-completed: #15803D;
 
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-mono: 'JetBrains Mono', 'Cascadia Code', 'Consolas', monospace;
@@ -57,9 +57,9 @@
   --radius-lg: 10px;
   --radius-xl: 16px;
 
-  --shadow-sm: 0 1px 3px rgba(0,0,0,0.4);
-  --shadow-md: 0 4px 12px rgba(0,0,0,0.5);
-  --shadow-lg: 0 8px 24px rgba(0,0,0,0.6);
+  --shadow-sm: 0 1px 3px rgba(15,23,42,0.08), 0 1px 2px rgba(15,23,42,0.06);
+  --shadow-md: 0 4px 12px rgba(15,23,42,0.10), 0 2px 4px rgba(15,23,42,0.06);
+  --shadow-lg: 0 8px 24px rgba(15,23,42,0.12), 0 4px 8px rgba(15,23,42,0.08);
 
   --sidebar-width: 220px;
   --topbar-height: 52px;
@@ -125,7 +125,8 @@ input, textarea, [data-selectable] {
   width: var(--sidebar-width);
   min-width: var(--sidebar-width);
   background: var(--bg-surface);
-  border-right: 1px solid var(--border-subtle);
+  border-right: 1px solid var(--border-default);
+  box-shadow: 2px 0 8px rgba(15,23,42,0.05);
   display: flex;
   flex-direction: column;
   overflow-y: auto;
@@ -143,12 +144,14 @@ input, textarea, [data-selectable] {
 .topbar {
   height: var(--topbar-height);
   background: var(--bg-surface);
-  border-bottom: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border-default);
+  box-shadow: 0 1px 4px rgba(15,23,42,0.06);
   display: flex;
   align-items: center;
   padding: 0 var(--space-lg);
   gap: var(--space-md);
   flex-shrink: 0;
+  z-index: 10;
 }
 
 .page-content {
@@ -745,7 +748,7 @@ input, textarea, [data-selectable] {
 }
 .itr-row:last-child { border-bottom: none; }
 
-.itr-row.computed  { background: rgba(255,255,255,0.015); }
+.itr-row.computed  { background: rgba(241,245,249,0.6); }
 .itr-row.subtotal  { background: rgba(212,160,23,0.04); }
 .itr-row.total     {
   background: rgba(212,160,23,0.07);
@@ -763,7 +766,7 @@ input, textarea, [data-selectable] {
   font-size: 10px;
   color: var(--text-muted);
   border-right: 1px solid var(--border-subtle);
-  background: rgba(0,0,0,0.08);
+  background: var(--bg-elevated);
   font-family: var(--font-mono);
   padding: 2px;
   flex-shrink: 0;

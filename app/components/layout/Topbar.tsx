@@ -104,7 +104,7 @@ function AYBadge() {
       }}
     >
       <span style={{ opacity: 0.7 }}>AY</span>
-      2024-25
+      2026-27
     </div>
   );
 }
