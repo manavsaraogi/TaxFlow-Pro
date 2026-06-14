@@ -74,6 +74,8 @@ interface ReturnShellProps {
   clientId: number;
   onBack: () => void;
   onNavigate: (page: import('@/app/components/layout/AppShell').AppPage) => void;
+  focusMode?: boolean;
+  onToggleFocusMode?: () => void;
 }
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -159,7 +161,7 @@ function formatCurrency(amount: number): string {
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-export default function ReturnShell({ returnId, clientId, onBack, onNavigate }: ReturnShellProps) {
+export default function ReturnShell({ returnId, clientId, onBack, onNavigate, focusMode, onToggleFocusMode }: ReturnShellProps) {
   const [returnMeta, setReturnMeta] = useState<ReturnMeta | null>(null);
   const [activeTab, setActiveTab] = useState<TabId>('salary');
   const [summary, setSummary] = useState<IncomeSummary | null>(null);
@@ -358,6 +360,26 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate }: 
           {saveState === 'error' && (
             <span style={{ fontSize: '11px', color: 'var(--status-error)' }}>Save failed</span>
           )}
+
+          {/* Focus mode toggle */}
+          <button
+            className="btn btn-ghost btn-sm"
+            onClick={onToggleFocusMode}
+            title={focusMode ? 'Exit focus mode (Esc)' : 'Focus mode — hide sidebar'}
+            style={{ padding: '4px 7px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}
+          >
+            {focusMode ? (
+              // Exit fullscreen icon
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M5 1H1v4M9 1h4v4M5 13H1V9M9 13h4V9"/>
+              </svg>
+            ) : (
+              // Enter fullscreen icon
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M1 5V1h4M9 1h4v4M13 9v4H9M5 13H1V9"/>
+              </svg>
+            )}
+          </button>
 
           {/* Actions */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>

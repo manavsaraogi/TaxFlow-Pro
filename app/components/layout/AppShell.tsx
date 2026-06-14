@@ -1,7 +1,7 @@
 'use client';
 // File: renderer/app/components/layout/AppShell.tsx
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
 import { Dashboard } from '../dashboard/Dashboard';
@@ -22,6 +22,22 @@ export type AppPage =
 
 export function AppShell() {
   const [page, setPage] = useState<AppPage>({ name: 'dashboard' });
+  // Focus mode: auto-hide sidebars when viewing a return
+  const [focusMode, setFocusMode] = useState(false);
+
+  // Auto-enter focus mode when navigating to a return
+  useEffect(() => {
+    setFocusMode(page.name === 'return-detail');
+  }, [page.name]);
+
+  // Escape key exits focus mode
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape' && focusMode) setFocusMode(false);
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [focusMode]);
 
   function navigate(p: AppPage) {
     setPage(p);
@@ -72,6 +88,8 @@ export function AppShell() {
                 : navigate({ name: 'clients' })
             }
             onNavigate={navigate}
+            focusMode={focusMode}
+            onToggleFocusMode={() => setFocusMode(f => !f)}
           />
         );
 
@@ -85,10 +103,10 @@ export function AppShell() {
   }
 
   return (
-    <div className="app-shell">
-      <Sidebar currentPage={page.name} onNavigate={navigate} />
+    <div className={`app-shell${focusMode ? ' app-shell--focus' : ''}`}>
+      {!focusMode && <Sidebar currentPage={page.name} onNavigate={navigate} />}
       <div className="main-area">
-        {page.name !== 'return-detail' && <Topbar currentPage={page} onNavigate={navigate} />}
+        {page.name !== 'return-detail' && !focusMode && <Topbar currentPage={page} onNavigate={navigate} />}
         {renderPage()}
       </div>
     </div>
