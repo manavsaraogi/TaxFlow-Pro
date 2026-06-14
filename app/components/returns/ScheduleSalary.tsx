@@ -350,7 +350,7 @@ export default function ScheduleSalaryComponent({ returnId, returnData, onSaved,
       <div className="itr-schedule-header">
         <span className="schedule-code">S</span>
         <span className="schedule-title">Schedule S — Income from Salary</span>
-        <span style={{ marginLeft: 'auto', fontSize: '0.75rem', opacity: 0.7 }}>u/s 15, 16 &amp; 17</span>
+        <span className="schedule-ref">u/s 15, 16 &amp; 17</span>
       </div>
 
       {/* Entity tabs — one per employer */}

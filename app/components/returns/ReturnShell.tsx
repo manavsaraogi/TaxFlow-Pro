@@ -323,10 +323,10 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate, fo
     <div className="animate-in" style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
 
       {/* ── Header ── */}
-      <div style={{ background: 'var(--bg-surface)', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
+      <div style={{ background: '#fff', borderBottom: '2px solid #D1D9E6', flexShrink: 0, boxShadow: '0 2px 6px rgba(15,23,42,0.05)' }}>
 
         {/* Row 1: Navigation + Actions */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 20px', borderBottom: '1px solid var(--border-subtle)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 20px', borderBottom: '1px solid #E8EDF5' }}>
           <button
             className="btn btn-ghost btn-sm"
             onClick={onBack}
@@ -424,48 +424,54 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate, fo
           </div>
         </div>
 
-        {/* Row 2: Return metadata strip */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '6px 20px', flexWrap: 'wrap' }}>
-          <span className={formTypeBadgeClass(returnMeta.formType)} style={{ fontSize: '11px', fontWeight: 700 }}>
-            {returnMeta.formType}
-          </span>
-          <span className={statusBadgeClass(returnMeta.status)} style={{ fontSize: '11px' }}>
-            {statusLabel(returnMeta.status)}
-          </span>
-          <span className="badge badge-neutral" style={{ fontSize: '11px' }}>
-            {returnMeta.regime === 'NEW' ? 'New Regime' : 'Old Regime'}
-          </span>
+        {/* Row 2: Client + return info strip */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0', background: '#1B2E4B', padding: '0 20px' }}>
+          {/* Form type */}
+          <div style={{ padding: '7px 16px 7px 0', borderRight: '1px solid rgba(255,255,255,0.1)', marginRight: '16px' }}>
+            <span style={{ fontSize: '12px', fontWeight: 800, color: '#C89A10', fontFamily: 'var(--font-mono)', letterSpacing: '0.04em', background: 'rgba(200,154,16,0.15)', padding: '3px 10px', borderRadius: '5px' }}>
+              {returnMeta.formType}
+            </span>
+          </div>
 
-          <span style={{ width: '1px', height: '12px', background: 'var(--border-subtle)', flexShrink: 0 }} />
+          {/* Client name + PAN */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', borderRight: '1px solid rgba(255,255,255,0.1)', paddingRight: '16px', marginRight: '16px' }}>
+            <span style={{ fontSize: '13px', fontWeight: 600, color: '#fff' }}>{returnMeta.clientName}</span>
+            <span style={{ fontSize: '12px', color: '#A0B0C8', fontFamily: 'var(--font-mono)', letterSpacing: '0.06em' }}>{returnMeta.clientPAN}</span>
+          </div>
 
-          <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', letterSpacing: '0.05em' }}>
-            {returnMeta.clientPAN}
-          </span>
-          <span style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>
-            AY {returnMeta.assessmentYear}
-          </span>
-          {returnMeta.filingSection && (
-            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-              §{returnMeta.filingSection}
-            </span>
-          )}
-          {returnMeta.acknowledgementNumber && (
-            <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', background: 'var(--bg-elevated)', padding: '2px 8px', borderRadius: '4px', border: '1px solid var(--border-subtle)' }}>
-              ACK: {returnMeta.acknowledgementNumber}
-            </span>
-          )}
-          {returnMeta.filedAt && (
-            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-              Filed {new Date(returnMeta.filedAt).toLocaleDateString('en-IN')}
-            </span>
-          )}
-          {detectedForm && !isFiledOrAcknowledged && (
+          {/* AY */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', borderRight: '1px solid rgba(255,255,255,0.1)', paddingRight: '16px', marginRight: '16px' }}>
+            <span style={{ fontSize: '10px', color: '#7A8FA8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>AY</span>
+            <span style={{ fontSize: '13px', fontWeight: 600, color: '#fff' }}>{returnMeta.assessmentYear}</span>
+          </div>
+
+          {/* Status + Regime */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span style={{
-              fontSize: '11px', fontWeight: 600, color: 'var(--brand-text)',
-              background: 'rgba(212,160,23,0.12)', border: '1px solid var(--brand-primary)',
-              padding: '2px 8px', borderRadius: '4px', cursor: 'pointer',
-            }} onClick={() => handleSwitchFormType(detectedForm.formType)}>
+              fontSize: '11px', fontWeight: 600, padding: '3px 10px', borderRadius: '12px',
+              background: returnMeta.status === 'FILED' ? '#166534' : returnMeta.status === 'IN_PROGRESS' ? '#92400E' : '#374151',
+              color: '#fff',
+            }}>
+              {statusLabel(returnMeta.status)}
+            </span>
+            <span style={{ fontSize: '11px', fontWeight: 500, padding: '3px 10px', borderRadius: '12px', background: 'rgba(255,255,255,0.1)', color: '#C5D0DC' }}>
+              {returnMeta.regime === 'NEW' ? 'New Regime' : 'Old Regime'}
+            </span>
+          </div>
+
+          {/* Form switch alert */}
+          {detectedForm && !isFiledOrAcknowledged && (
+            <button
+              style={{ marginLeft: '12px', fontSize: '11px', fontWeight: 600, color: '#FBBF24', background: 'rgba(251,191,36,0.15)', border: '1px solid rgba(251,191,36,0.4)', padding: '3px 10px', borderRadius: '12px', cursor: 'pointer' }}
+              onClick={() => handleSwitchFormType(detectedForm.formType)}
+            >
               {switchingForm ? 'Switching…' : `⚠ Switch to ${detectedForm.formType}`}
+            </button>
+          )}
+
+          {returnMeta.acknowledgementNumber && (
+            <span style={{ marginLeft: '12px', fontSize: '11px', color: '#A0B0C8', fontFamily: 'var(--font-mono)' }}>
+              ACK: {returnMeta.acknowledgementNumber}
             </span>
           )}
         </div>
@@ -555,92 +561,72 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate, fo
       {/* ── Vertical sidebar + content ── */}
       <div style={{ flex: 1, display: 'flex', minHeight: 0, overflow: 'hidden' }}>
 
-        {/* Sidebar */}
+        {/* Schedule sidebar — Computax-style grouped nav */}
         <nav style={{
-          width: '196px',
+          width: '212px',
           flexShrink: 0,
-          borderRight: '1px solid var(--border-subtle)',
-          background: 'var(--bg-surface)',
+          borderRight: '1px solid #D1D9E6',
+          background: '#F4F6FB',
           overflowY: 'auto',
-          padding: '12px 0',
+          display: 'flex',
+          flexDirection: 'column',
         }}>
-          <div style={{ padding: '0 12px 8px', fontSize: '10px', fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-            Schedules
+          {/* Section: Income Heads */}
+          <div style={{ padding: '10px 14px 4px', fontSize: '10px', fontWeight: 800, letterSpacing: '0.1em', color: '#8B9AB2', textTransform: 'uppercase' }}>
+            Income Heads
           </div>
-          {visibleTabs.map((tab) => {
-            const isActive = activeTab === tab.id;
-            // AL: required when GTI > 50L
-            const gti = summary?.GrossTotalIncome ?? 0;
-            const alRequired = tab.id === 'assets_liabilities' && gti > 5000000;
-            // 10-IEA: applicable when BP has entries and old regime
-            const bpHasIncome = (() => {
-              const pi = (returnData as any)?.presumptiveIncome;
-              return pi && ((pi.Business44AD?.length ?? 0) + (pi.Profession44ADA?.length ?? 0) + (pi.GoodsCarriage44AE?.length ?? 0)) > 0;
-            })();
-            const bpIEAApplicable = tab.id === 'business_profession' && bpHasIncome && returnMeta?.regime === 'OLD';
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id as TabId)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '10px',
-                  width: '100%',
-                  padding: '7px 12px',
-                  border: 'none',
-                  borderLeft: isActive ? '2px solid var(--brand-primary)' : '2px solid transparent',
-                  background: isActive ? 'rgba(212,160,23,0.08)' : 'transparent',
-                  color: isActive ? 'var(--brand-text)' : 'var(--text-secondary)',
-                  fontSize: '12.5px',
-                  fontWeight: isActive ? 600 : 400,
-                  cursor: 'pointer',
-                  textAlign: 'left',
-                  transition: 'all 0.1s',
-                  lineHeight: '1',
-                }}
-                onMouseEnter={e => { if (!isActive) { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.04)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-primary)'; } }}
-                onMouseLeave={e => { if (!isActive) { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-secondary)'; } }}
-              >
-                <span style={{
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: '10px',
-                  fontWeight: 700,
-                  letterSpacing: '0.02em',
-                  width: '30px',
-                  textAlign: 'center',
-                  padding: '2px 4px',
-                  borderRadius: '3px',
-                  flexShrink: 0,
-                  background: isActive ? 'var(--brand-primary)' : 'var(--bg-elevated)',
-                  color: isActive ? '#000' : 'var(--text-muted)',
-                  border: '1px solid ' + (isActive ? 'transparent' : 'var(--border-subtle)'),
-                }}>
-                  {tab.icon}
-                </span>
-                <span style={{ flex: 1 }}>{tab.label}</span>
-                {/* Validation error badge */}
-                {(() => {
-                  const count = validation ? tabErrorCount(validation, tab.id as any) : 0;
-                  if (count > 0) return (
-                    <span style={{ fontSize: '9px', fontWeight: 700, background: 'var(--error, #e05c4b)', color: '#fff', padding: '1px 5px', borderRadius: '8px', minWidth: '16px', textAlign: 'center', flexShrink: 0 }}>{count}</span>
-                  );
-                  return null;
-                })()}
-                {alRequired && (
-                  <span style={{ fontSize: '9px', fontWeight: 700, background: 'var(--error, #e05c4b)', color: '#fff', padding: '1px 5px', borderRadius: '3px', letterSpacing: '0.03em', flexShrink: 0 }}>REQ</span>
-                )}
-                {bpIEAApplicable && (
-                  <span style={{ fontSize: '9px', fontWeight: 700, background: 'rgba(212,160,23,0.25)', color: 'var(--brand-text)', padding: '1px 5px', borderRadius: '3px', letterSpacing: '0.03em', flexShrink: 0 }}>IEA</span>
-                )}
-              </button>
-            );
-          })}
+          {(['salary','house_property','business_profession','capital_gains','other_sources'] as const).map(tabId => (
+            <ScheduleNavItem
+              key={tabId}
+              tab={ALL_TABS.find(t => t.id === tabId)!}
+              isActive={activeTab === tabId}
+              onClick={() => setActiveTab(tabId)}
+              badge={validation ? tabErrorCount(validation, tabId as any) : 0}
+              tag={
+                tabId === 'business_profession' && (() => {
+                  const pi = (returnData as any)?.presumptiveIncome;
+                  return pi && ((pi.Business44AD?.length ?? 0) + (pi.Profession44ADA?.length ?? 0)) > 0 && returnMeta?.regime === 'OLD';
+                })() ? 'IEA' : undefined
+              }
+            />
+          ))}
+
+          {/* Section: Deductions & Credits */}
+          <div style={{ padding: '10px 14px 4px', fontSize: '10px', fontWeight: 800, letterSpacing: '0.1em', color: '#8B9AB2', textTransform: 'uppercase', marginTop: '4px' }}>
+            Deductions & Credits
+          </div>
+          {(['deductions','assets_liabilities','tds','tax_payments'] as const).map(tabId => (
+            <ScheduleNavItem
+              key={tabId}
+              tab={ALL_TABS.find(t => t.id === tabId)!}
+              isActive={activeTab === tabId}
+              onClick={() => setActiveTab(tabId)}
+              badge={validation ? tabErrorCount(validation, tabId as any) : 0}
+              tag={tabId === 'assets_liabilities' && (summary?.GrossTotalIncome ?? 0) > 5000000 ? 'REQ' : undefined}
+              tagColor={tabId === 'assets_liabilities' ? '#DC2626' : undefined}
+            />
+          ))}
+
+          {/* Section: Summary & Filing */}
+          <div style={{ padding: '10px 14px 4px', fontSize: '10px', fontWeight: 800, letterSpacing: '0.1em', color: '#8B9AB2', textTransform: 'uppercase', marginTop: '4px' }}>
+            Summary & Filing
+          </div>
+          {(['tax_summary','verification'] as const).map(tabId => (
+            <ScheduleNavItem
+              key={tabId}
+              tab={ALL_TABS.find(t => t.id === tabId)!}
+              isActive={activeTab === tabId}
+              onClick={() => setActiveTab(tabId)}
+              badge={validation ? tabErrorCount(validation, tabId as any) : 0}
+            />
+          ))}
+
+          <div style={{ flex: 1 }} />
         </nav>
 
         {/* Content panel */}
         <ValidationProvider value={{ fieldErrors: validation?.fieldErrors ?? {}, fieldWarnings: validation?.fieldWarnings ?? {} }}>
-        <div style={{ flex: 1, overflow: 'auto', padding: '24px' }}>
+        <div style={{ flex: 1, overflow: 'auto', padding: '24px', background: '#F5F7FB' }}>
           {isFiledOrAcknowledged && (
             <div
               className="badge badge-success"
@@ -827,6 +813,66 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate, fo
         </div>
       )}
     </div>
+  );
+}
+
+// ─── Schedule Nav Item ────────────────────────────────────────────────────────
+
+function ScheduleNavItem({
+  tab, isActive, onClick, badge = 0, tag, tagColor,
+}: {
+  tab: Tab; isActive: boolean; onClick: () => void;
+  badge?: number; tag?: string; tagColor?: string;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        display: 'flex', alignItems: 'center', gap: '10px',
+        width: '100%', padding: '8px 14px 8px 12px',
+        border: 'none',
+        borderLeft: isActive ? '3px solid #C89A10' : '3px solid transparent',
+        background: isActive ? '#fff' : 'transparent',
+        cursor: 'pointer', textAlign: 'left',
+        transition: 'all 0.1s',
+        boxShadow: isActive ? 'inset -1px 0 0 #E2E8F0' : 'none',
+      }}
+      onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLButtonElement).style.background = '#EBF0F9'; }}
+      onMouseLeave={e => { if (!isActive) (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
+    >
+      {/* Schedule code badge */}
+      <span style={{
+        fontFamily: 'var(--font-mono)', fontSize: '10px', fontWeight: 800,
+        width: '32px', textAlign: 'center', padding: '2px 0', borderRadius: '4px', flexShrink: 0,
+        background: isActive ? '#1B2E4B' : '#E2E8F0',
+        color: isActive ? '#C89A10' : '#64748B',
+        border: `1px solid ${isActive ? '#1B2E4B' : '#CBD5E1'}`,
+        letterSpacing: '0.01em',
+      }}>
+        {tab.icon}
+      </span>
+
+      <span style={{
+        flex: 1, fontSize: '13px', lineHeight: 1.3,
+        fontWeight: isActive ? 600 : 400,
+        color: isActive ? '#1B2E4B' : '#475569',
+      }}>
+        {tab.label}
+      </span>
+
+      {/* Error badge */}
+      {badge > 0 && (
+        <span style={{ fontSize: '10px', fontWeight: 700, background: '#DC2626', color: '#fff', padding: '1px 5px', borderRadius: '10px', minWidth: '18px', textAlign: 'center', flexShrink: 0 }}>
+          {badge}
+        </span>
+      )}
+      {/* Applicability tag (REQ / IEA) */}
+      {tag && badge === 0 && (
+        <span style={{ fontSize: '9px', fontWeight: 700, background: tagColor ?? '#92700A', color: '#fff', padding: '1px 5px', borderRadius: '3px', letterSpacing: '0.04em', flexShrink: 0 }}>
+          {tag}
+        </span>
+      )}
+    </button>
   );
 }
 
