@@ -17,6 +17,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { ITRFormType, TaxRegime, IncomeSummary, ITRTaxComputation } from '@/shared/types/itr';
 import { computeIncomeSummary, computeTaxLiability, detectFormTypeFromReturnData } from '@/shared/utils/itrBuilder';
+import { validateReturn, tabErrorCount, type ValidationResult } from '@/shared/utils/returnValidation';
+import { ValidationProvider } from './ValidationContext';
 
 // ─── Lazy schedule imports (each is a heavy form) ────────────────────────────
 import ScheduleSalary from './ScheduleSalary';
@@ -172,6 +174,8 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate }: 
   const [downloadingJson, setDownloadingJson] = useState(false);
   const [detectedForm, setDetectedForm] = useState<{ formType: ITRFormType; reason: string } | null>(null);
   const [switchingForm, setSwitchingForm] = useState(false);
+  const [validation, setValidation] = useState<ValidationResult | null>(null);
+  const [showValidationModal, setShowValidationModal] = useState(false);
 
   // Load return metadata
   useEffect(() => {
@@ -235,6 +239,12 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate }: 
       setDetectedForm(null);
     }
   }, [returnMeta]);
+
+  // Re-run validation whenever returnData or summary changes
+  useEffect(() => {
+    if (!returnData || !returnMeta) return;
+    setValidation(validateReturn(returnData, summary, returnMeta));
+  }, [returnData, summary, returnMeta]);
 
   // Switch form type on the server and update local state
   const handleSwitchFormType = useCallback(async (toType: ITRFormType) => {
@@ -375,10 +385,25 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate }: 
             )}
             <button
               className="btn btn-secondary btn-sm"
-              onClick={handleDownloadITR}
+              onClick={() => {
+                if (validation && validation.errorCount > 0) {
+                  setShowValidationModal(true);
+                } else {
+                  handleDownloadITR();
+                }
+              }}
               disabled={downloadingJson}
+              style={{ position: 'relative' }}
             >
               {downloadingJson ? 'Generating…' : 'Download ITR JSON'}
+              {validation && validation.errorCount > 0 && (
+                <span style={{
+                  position: 'absolute', top: '-6px', right: '-6px',
+                  background: 'var(--error, #e05c4b)', color: '#fff',
+                  fontSize: '9px', fontWeight: 700, lineHeight: 1,
+                  padding: '2px 4px', borderRadius: '8px', minWidth: '14px', textAlign: 'center',
+                }}>{validation.errorCount}</span>
+              )}
             </button>
             <button
               className="btn btn-secondary btn-sm"
@@ -425,6 +450,55 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate }: 
               >
                 Open IT Portal →
               </a>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Validation Modal ── */}
+      {showValidationModal && validation && (
+        <div className="modal-overlay" onClick={() => setShowValidationModal(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '560px', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexShrink: 0 }}>
+              <div>
+                <h3 style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>Validation Errors</h3>
+                <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '4px 0 0' }}>
+                  {validation.errorCount} error{validation.errorCount !== 1 ? 's' : ''} must be fixed before generating the ITR JSON
+                </p>
+              </div>
+              <button className="btn btn-ghost btn-sm" onClick={() => setShowValidationModal(false)}>✕</button>
+            </div>
+
+            <div style={{ overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {validation.tabs.filter(t => t.errors.length > 0).map(t => (
+                <div key={t.tabId} style={{ border: '1px solid rgba(224,92,75,0.3)', borderRadius: '6px', overflow: 'hidden' }}>
+                  <div
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: 'rgba(224,92,75,0.08)', cursor: 'pointer' }}
+                    onClick={() => { setActiveTab(t.tabId as TabId); setShowValidationModal(false); }}
+                  >
+                    <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' }}>{t.label}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '11px', color: 'var(--error, #e05c4b)', fontWeight: 700 }}>{t.errors.length} error{t.errors.length !== 1 ? 's' : ''}</span>
+                      <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Go to tab →</span>
+                    </div>
+                  </div>
+                  <ul style={{ margin: 0, padding: '8px 12px 8px 28px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    {t.errors.map((e, i) => (
+                      <li key={i} style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{e.message}</li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '14px', marginTop: '14px', display: 'flex', gap: '10px', justifyContent: 'flex-end', flexShrink: 0 }}>
+              <button className="btn btn-ghost btn-sm" onClick={() => setShowValidationModal(false)}>Close</button>
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={() => { setShowValidationModal(false); handleDownloadITR(); }}
+              >
+                Generate Anyway
+              </button>
             </div>
           </div>
         </div>
@@ -497,6 +571,14 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate }: 
                   {tab.icon}
                 </span>
                 <span style={{ flex: 1 }}>{tab.label}</span>
+                {/* Validation error badge */}
+                {(() => {
+                  const count = validation ? tabErrorCount(validation, tab.id as any) : 0;
+                  if (count > 0) return (
+                    <span style={{ fontSize: '9px', fontWeight: 700, background: 'var(--error, #e05c4b)', color: '#fff', padding: '1px 5px', borderRadius: '8px', minWidth: '16px', textAlign: 'center', flexShrink: 0 }}>{count}</span>
+                  );
+                  return null;
+                })()}
                 {alRequired && (
                   <span style={{ fontSize: '9px', fontWeight: 700, background: 'var(--error, #e05c4b)', color: '#fff', padding: '1px 5px', borderRadius: '3px', letterSpacing: '0.03em', flexShrink: 0 }}>REQ</span>
                 )}
@@ -509,6 +591,7 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate }: 
         </nav>
 
         {/* Content panel */}
+        <ValidationProvider value={{ fieldErrors: validation?.fieldErrors ?? {}, fieldWarnings: validation?.fieldWarnings ?? {} }}>
         <div style={{ flex: 1, overflow: 'auto', padding: '24px' }}>
           {isFiledOrAcknowledged && (
             <div
@@ -686,6 +769,7 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate }: 
             />
           )}
         </div>
+        </ValidationProvider>
       </div>
     </div>
   );

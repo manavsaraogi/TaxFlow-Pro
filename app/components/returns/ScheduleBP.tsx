@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import type { ReturnData } from '@/shared/types/itr';
+import { FieldMessage } from './ValidationContext';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -219,13 +220,17 @@ export default function ScheduleBP({ returnId, returnData, regime, onSaved, setD
               ) : state.business44AD.map((e, i) => (
                 <tr key={e.id} className="itr-row">
                   <td className="itr-num">{i + 1}</td>
-                  <td className="itr-label"><TxtInput value={e.tradeName} onChange={v => update(p => ({ ...p, business44AD: p.business44AD.map((x, j) => j === i ? { ...x, tradeName: v } : x) }))} placeholder="Business name" /></td>
+                  <td className="itr-label">
+                    <TxtInput value={e.tradeName} onChange={v => update(p => ({ ...p, business44AD: p.business44AD.map((x, j) => j === i ? { ...x, tradeName: v } : x) }))} placeholder="Business name" />
+                    <FieldMessage field={`bp.44ad.${i}.tradeName`} />
+                  </td>
                   <td><TxtInput value={e.natureCode} onChange={v => update(p => ({ ...p, business44AD: p.business44AD.map((x, j) => j === i ? { ...x, natureCode: v } : x) }))} placeholder="Code" /></td>
                   <td className="itr-amount">
                     <NumInput value={e.turnover} onChange={turnover => {
                       const rate = e.isDigital ? 0.06 : 0.08;
                       update(p => ({ ...p, business44AD: p.business44AD.map((x, j) => j === i ? { ...x, turnover, presumptiveIncome: Math.round(turnover * rate) } : x) }));
                     }} />
+                    <FieldMessage field={`bp.44ad.${i}.turnover`} />
                   </td>
                   <td style={{ textAlign: 'center' }}>
                     <input type="checkbox" checked={e.isDigital} onChange={ev => {
@@ -438,6 +443,7 @@ export default function ScheduleBP({ returnId, returnData, regime, onSaved, setD
                         placeholder="e.g. 12345678901234"
                         onChange={e => update(p => ({ ...p, form10IEA: { ...p.form10IEA, ackNo: e.target.value } }))}
                       />
+                      <FieldMessage field="bp.10iea.ackNo" />
                     </div>
                     <div>
                       <label style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '4px' }}>Date of Filing</label>
@@ -447,6 +453,7 @@ export default function ScheduleBP({ returnId, returnData, regime, onSaved, setD
                         value={state.form10IEA.dateOfFiling}
                         onChange={e => update(p => ({ ...p, form10IEA: { ...p.form10IEA, dateOfFiling: e.target.value } }))}
                       />
+                      <FieldMessage field="bp.10iea.dateOfFiling" />
                     </div>
                   </div>
                 )}

@@ -5,6 +5,7 @@ import type {
   ScheduleSalary,
   ReturnData,
 } from '@/shared/types/itr';
+import { FieldMessage } from './ValidationContext';
 
 // ─── Sub-types ────────────────────────────────────────────────────────────────
 
@@ -330,6 +331,7 @@ export default function ScheduleSalaryComponent({ returnId, returnData, onSaved,
   };
 
   const emp = state.employers.find((e) => e.id === activeEmpId) ?? state.employers[0];
+  const empIdx = state.employers.findIndex((e) => e.id === (emp?.id ?? ''));
   if (!emp) return null;
 
   const computedHra = computeHraExemption(state.hraInputs, emp.hraReceived);
@@ -377,6 +379,7 @@ export default function ScheduleSalaryComponent({ returnId, returnData, onSaved,
             onChange={(v) => updateEmp(emp.id, { employerName: v })}
             placeholder="ABC Pvt Ltd"
           />
+          <FieldMessage field={`employer.${empIdx}.name`} />
         </div>
       </div>
 
@@ -392,6 +395,7 @@ export default function ScheduleSalaryComponent({ returnId, returnData, onSaved,
             placeholder="AAAA99999A"
             onChange={(e) => updateEmp(emp.id, { tan: e.target.value.toUpperCase() })}
           />
+          <FieldMessage field={`employer.${empIdx}.tan`} />
         </div>
       </div>
 

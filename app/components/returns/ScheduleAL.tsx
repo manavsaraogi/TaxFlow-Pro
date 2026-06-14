@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import type { ReturnData } from '@/shared/types/itr';
+import { FieldMessage } from './ValidationContext';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -252,12 +253,16 @@ export default function ScheduleAL({ returnId, returnData, grossTotalIncome, onS
             </thead>
             <tbody>
               {state.immovable.length === 0 ? (
-                <tr><td colSpan={6} style={{ padding: '12px 8px', fontSize: '12px', color: 'var(--text-muted)', fontStyle: 'italic' }}>No immovable property added.</td></tr>
+                <tr><td colSpan={6} style={{ padding: '12px 8px', fontSize: '12px', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                  No immovable property added.
+                  <FieldMessage field="al.assets" />
+                </td></tr>
               ) : state.immovable.map((e, i) => (
                 <tr key={e.id} className="itr-row">
                   <td className="itr-num">{i + 1}</td>
                   <td className="itr-label">
                     <TxtInput value={e.description} onChange={v => update(p => ({ ...p, immovable: p.immovable.map((x, j) => j === i ? { ...x, description: v } : x) }))} placeholder="Plot no., address, building name…" />
+                    <FieldMessage field={`al.immovable.${i}.description`} />
                   </td>
                   <td style={{ textAlign: 'center' }}>
                     <select
