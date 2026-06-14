@@ -90,11 +90,19 @@ export async function PUT(request: NextRequest, { params }: Params) {
       break;
     }
     case 'presumptiveIncome': {
+      const { form10IEA, ...restBody } = body;
       await prisma.presumptiveSchedule.upsert({
         where: { returnId },
-        create: { returnId, ...sanitizeSchedule(body) },
-        update: sanitizeSchedule(body),
+        create: { returnId, ...sanitizeSchedule(restBody), form10IEAJson: form10IEA ? JSON.stringify(form10IEA) : null },
+        update: { ...sanitizeSchedule(restBody), form10IEAJson: form10IEA ? JSON.stringify(form10IEA) : null },
       });
+      break;
+    }
+    case 'assetsLiabilities': {
+      await prisma.$executeRaw`
+        UPDATE "Return" SET "assetsLiabJson" = ${JSON.stringify(body)}, "updatedAt" = NOW()
+        WHERE id = ${returnId}
+      `;
       break;
     }
     case 'verification': {

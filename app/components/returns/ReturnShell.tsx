@@ -27,6 +27,7 @@ import ScheduleTDS from './ScheduleTDS';
 import ScheduleTaxPayments from './ScheduleTaxPayments';
 import ScheduleBP from './ScheduleBP';
 import ScheduleCG from './ScheduleCG';
+import ScheduleAL from './ScheduleAL';
 import TaxSummary from './TaxSummary';
 import Verification from './Verification';
 
@@ -53,6 +54,7 @@ type TabId =
   | 'house_property'
   | 'other_sources'
   | 'deductions'
+  | 'assets_liabilities'
   | 'tds'
   | 'tax_payments'
   | 'tax_summary'
@@ -82,6 +84,7 @@ const ALL_TABS: Tab[] = [
   { id: 'capital_gains',       label: 'Capital Gains',         shortLabel: 'CG',   icon: 'CG'  },
   { id: 'other_sources',       label: 'Other Sources',         shortLabel: 'OS',   icon: 'OS'  },
   { id: 'deductions',          label: 'Deductions (VI-A)',      shortLabel: 'VIA',  icon: 'VIA' },
+  { id: 'assets_liabilities',  label: 'Assets & Liabilities',  shortLabel: 'AL',   icon: 'AL'  },
   { id: 'tds',                 label: 'TDS / TCS',             shortLabel: 'TDS',  icon: 'TDS' },
   { id: 'tax_payments',        label: 'Tax Payments',          shortLabel: 'ADV',  icon: 'ADV' },
   { id: 'tax_summary',         label: 'Tax Summary',           shortLabel: 'SUM',  icon: 'SUM' },
@@ -444,10 +447,19 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate }: 
           </div>
           {visibleTabs.map((tab) => {
             const isActive = activeTab === tab.id;
+            // AL: required when GTI > 50L
+            const gti = summary?.GrossTotalIncome ?? 0;
+            const alRequired = tab.id === 'assets_liabilities' && gti > 5000000;
+            // 10-IEA: applicable when BP has entries and old regime
+            const bpHasIncome = (() => {
+              const pi = (returnData as any)?.presumptiveIncome;
+              return pi && ((pi.Business44AD?.length ?? 0) + (pi.Profession44ADA?.length ?? 0) + (pi.GoodsCarriage44AE?.length ?? 0)) > 0;
+            })();
+            const bpIEAApplicable = tab.id === 'business_profession' && bpHasIncome && returnMeta?.regime === 'OLD';
             return (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => setActiveTab(tab.id as TabId)}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -484,7 +496,13 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate }: 
                 }}>
                   {tab.icon}
                 </span>
-                <span>{tab.label}</span>
+                <span style={{ flex: 1 }}>{tab.label}</span>
+                {alRequired && (
+                  <span style={{ fontSize: '9px', fontWeight: 700, background: 'var(--error, #e05c4b)', color: '#fff', padding: '1px 5px', borderRadius: '3px', letterSpacing: '0.03em', flexShrink: 0 }}>REQ</span>
+                )}
+                {bpIEAApplicable && (
+                  <span style={{ fontSize: '9px', fontWeight: 700, background: 'rgba(212,160,23,0.25)', color: 'var(--brand-text)', padding: '1px 5px', borderRadius: '3px', letterSpacing: '0.03em', flexShrink: 0 }}>IEA</span>
+                )}
               </button>
             );
           })}
@@ -546,6 +564,7 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate }: 
             <ScheduleBP
               returnId={String(returnMeta.id)}
               returnData={returnData ?? {} as any}
+              regime={returnMeta.regime}
               onSaved={(rd: any) => {
                 setReturnData(rd);
                 const newSummary = computeIncomeSummary(rd);
@@ -601,6 +620,18 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate }: 
                 setTaxComp(computeTaxLiability(newSummary, rd.regime ?? returnMeta?.regime ?? 'NEW'));
                 onScheduleChange(newSummary);
                 runDetection(rd);
+              }}
+              setDirty={setDirty}
+            />
+          )}
+
+          {activeTab === 'assets_liabilities' && (
+            <ScheduleAL
+              returnId={String(returnMeta.id)}
+              returnData={returnData ?? {} as any}
+              grossTotalIncome={summary?.GrossTotalIncome ?? 0}
+              onSaved={(rd: any) => {
+                setReturnData(rd);
               }}
               setDirty={setDirty}
             />
