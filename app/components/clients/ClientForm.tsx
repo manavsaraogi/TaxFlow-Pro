@@ -295,8 +295,6 @@ function validateForm(data: ClientFormData, isEdit: boolean): Record<string, str
   if (data.pinCode && !PINCODE_REGEX.test(data.pinCode))
     errors.pinCode = 'Pin code must be 6 digits';
   if (!data.city.trim()) errors.city = 'City is required';
-  if (!isEdit && !data.portalPassword)
-    errors.portalPassword = 'Portal password is required for new clients';
   return errors;
 }
 
