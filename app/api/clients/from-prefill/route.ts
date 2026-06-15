@@ -30,7 +30,8 @@ export async function POST(request: NextRequest) {
   // ── 1. Parse prefill JSON ──────────────────────────────────────────────────
   const parsed = parsePrefillJson(body.prefill);
   if (!parsed.pan) {
-    return NextResponse.json({ error: 'Could not extract PAN from prefill JSON' }, { status: 422 });
+    const preview = JSON.stringify(body.prefill).slice(0, 300);
+    return NextResponse.json({ error: `Could not extract PAN. Keys: ${Object.keys(body.prefill ?? {}).join(', ')}. Preview: ${preview}` }, { status: 422 });
   }
 
   // ── 2. Upsert client ───────────────────────────────────────────────────────
