@@ -25,13 +25,19 @@ type EmployerCategory = 'CGOV' | 'SGOV' | 'PSU' | 'PE' | 'PESG' | 'PEPS' | 'PEO'
 interface ClientFormData {
   pan: string;
   fullName: string;
+  fatherName: string;
+  gender: string;
   assesseeType: AssesseeType;
   dateOfBirth: string;
   residentialStatus: ResidentialStatus;
   employerCategory: EmployerCategory;
+  taxRegimePreference: TaxRegime;
   mobileNumber: string;
   email: string;
-  address: string;
+  flatDoorBlockNo: string;
+  nameBuildingVillage: string;
+  roadOrStreet: string;
+  localityOrArea: string;
   city: string;
   stateCode: string;
   pinCode: string;
@@ -160,7 +166,16 @@ function parsePrefillJson(raw: unknown): Partial<ClientFormData> & { _preview?: 
     if (iso) { out.dateOfBirth = iso; notes.push(`DOB: ${dobRaw}`); }
   }
 
+  // ── Father's Name ─────────────────────────────────────────────────────────────
+  const fatherName = (pi?.FatherName ?? pi?.fatherName ?? '').trim();
+  if (fatherName) { out.fatherName = fatherName; notes.push(`Father: ${fatherName}`); }
+
   // ── Gender / Assessee type ────────────────────────────────────────────────────
+  const genderRaw = (pi?.Gender ?? pi?.gender ?? '').toUpperCase();
+  if (genderRaw === 'M' || genderRaw === 'MALE') { out.gender = 'M'; }
+  else if (genderRaw === 'F' || genderRaw === 'FEMALE') { out.gender = 'F'; }
+  else if (genderRaw === 'T' || genderRaw === 'TRANSGENDER') { out.gender = 'T'; }
+
   const status: string = (pi?.Status ?? pi?.status ?? '').toUpperCase();
   const atMap: Record<string, AssesseeType> = {
     I: 'INDIVIDUAL', H: 'HUF', F: 'FIRM', C: 'DOMESTIC_COMPANY', B: 'BOI', A: 'AOP', J: 'AJP',
@@ -173,34 +188,42 @@ function parsePrefillJson(raw: unknown): Partial<ClientFormData> & { _preview?: 
   else if (res === 'NRI') { out.residentialStatus = 'NRI'; }
   else if (res === 'RNR') { out.residentialStatus = 'RNR'; }
 
-  // ── Address ───────────────────────────────────────────────────────────────────
-  const addr: any = pi?.Address ?? pi?.address ?? {};
-  const addrParts = [
-    addr?.ResidenceNo ?? addr?.residenceNo ?? addr?.FlatDoorBlockNo ?? addr?.flatDoorBlockNo ?? '',
-    addr?.ResidenceName ?? addr?.residenceName ?? addr?.NameBuildingVillageRoad ?? '',
-    addr?.RoadOrStreet ?? addr?.roadOrStreet ?? addr?.LocalityOrArea ?? addr?.localityOrArea ?? '',
-  ].filter(Boolean);
-  const addrStr = (pi?.address && typeof pi.address === 'string') ? pi.address : addrParts.join(', ');
-  if (addrStr) { out.address = addrStr; notes.push(`Address: ${addrStr.slice(0, 50)}`); }
+  // ── Address (separate IT Portal components) ──────────────────────────────────
+  const addr: any = typeof pi?.address === 'object' ? pi.address : pi?.Address ?? {};
+  const flatDoor   = (addr?.ResidenceNo ?? addr?.residenceNo ?? addr?.FlatDoorBlockNo ?? addr?.flatDoorBlockNo ?? '').trim();
+  const building   = (addr?.ResidenceName ?? addr?.residenceName ?? addr?.NameBuildingVillage ?? addr?.nameBuildingVillage ?? '').trim();
+  const road       = (addr?.RoadOrStreet ?? addr?.roadOrStreet ?? addr?.RoadStreet ?? addr?.roadStreet ?? '').trim();
+  const locality   = (addr?.LocalityOrArea ?? addr?.localityOrArea ?? '').trim();
+  if (flatDoor)  { out.flatDoorBlockNo = flatDoor; }
+  if (building)  { out.nameBuildingVillage = building; }
+  if (road)      { out.roadOrStreet = road; }
+  if (locality)  { out.localityOrArea = locality; }
+  const addrStr = [flatDoor, building, road, locality].filter(Boolean).join(', ');
+  if (addrStr) notes.push(`Address: ${addrStr.slice(0, 60)}`);
 
-  const city = addr?.CityOrTownOrDistrict ?? addr?.cityOrTownOrDistrict ?? addr?.city ?? pi?.city ?? '';
+  const city = (addr?.CityOrTownOrDistrict ?? addr?.cityOrTownOrDistrict ?? addr?.city ?? pi?.city ?? '').trim();
   if (city) { out.city = city; notes.push(`City: ${city}`); }
 
-  const pin = String(addr?.PinCode ?? addr?.pinCode ?? addr?.pincode ?? pi?.pinCode ?? pi?.pincode ?? '');
+  const pin = String(addr?.PinCode ?? addr?.pinCode ?? addr?.pincode ?? '').replace(/\D/g, '');
   if (/^\d{6}$/.test(pin)) { out.pinCode = pin; notes.push(`PIN: ${pin}`); }
 
-  const stateRaw = String(addr?.StateCode ?? addr?.stateCode ?? addr?.State ?? pi?.stateCode ?? '').padStart(2, '0');
+  const stateRaw = String(addr?.StateCode ?? addr?.stateCode ?? '').padStart(2, '0');
   if (/^\d{2}$/.test(stateRaw) && stateRaw !== '00') { out.stateCode = stateRaw; notes.push(`State: ${stateRaw}`); }
 
   // ── Contact ───────────────────────────────────────────────────────────────────
-  const mobile = String(addr?.MobileNo ?? addr?.mobileNo ?? addr?.Phone ?? addr?.phone ?? pi?.mobileNumber ?? pi?.mobile ?? '').replace(/\D/g, '').slice(-10);
+  const mobile = String(addr?.MobileNo ?? addr?.mobileNo ?? pi?.mobileNumber ?? pi?.mobile ?? '').replace(/\D/g, '').slice(-10);
   if (/^[6-9]\d{9}$/.test(mobile)) { out.mobileNumber = mobile; notes.push(`Mobile: ${mobile}`); }
 
-  const email = (addr?.EmailAddress ?? addr?.emailAddress ?? pi?.email ?? pi?.Email ?? '').trim();
+  const email = (addr?.EmailAddress ?? addr?.emailAddress ?? pi?.emailAddress ?? pi?.email ?? '').trim();
   if (email.includes('@')) { out.email = email; notes.push(`Email: ${email}`); }
 
   // ── Aadhaar ───────────────────────────────────────────────────────────────────
-  const aadhaar = String(pi?.AadhaarCardNo ?? pi?.aadhaarCardNo ?? pi?.aadhaar ?? pi?.Aadhaar ?? '').replace(/\D/g, '');
+  // Portal stores Aadhaar base64-encoded; decode it first
+  const rawAadhaar = String(pi?.AadhaarCardNo ?? pi?.aadhaarCardNo ?? '');
+  const decodedAadhaar = rawAadhaar.length > 12
+    ? (() => { try { return atob(rawAadhaar); } catch { return rawAadhaar; } })()
+    : rawAadhaar;
+  const aadhaar = decodedAadhaar.replace(/\D/g, '');
   if (/^\d{12}$/.test(aadhaar)) { out.aadhaarNumber = aadhaar; notes.push(`Aadhaar: ****${aadhaar.slice(-4)}`); }
 
   // ── Portal username defaults to PAN ──────────────────────────────────────────
@@ -229,13 +252,19 @@ const EMPLOYER_CATEGORIES: { value: EmployerCategory; label: string }[] = [
 const EMPTY_FORM: ClientFormData = {
   pan: '',
   fullName: '',
+  fatherName: '',
+  gender: '',
   assesseeType: 'INDIVIDUAL',
   dateOfBirth: '',
   residentialStatus: 'RES',
   employerCategory: 'OTH',
+  taxRegimePreference: 'NEW',
   mobileNumber: '',
   email: '',
-  address: '',
+  flatDoorBlockNo: '',
+  nameBuildingVillage: '',
+  roadOrStreet: '',
+  localityOrArea: '',
   city: '',
   stateCode: '11',
   pinCode: '',
@@ -258,7 +287,7 @@ function validateForm(data: ClientFormData, isEdit: boolean): Record<string, str
     errors.aadhaarNumber = 'Aadhaar must be 12 digits';
   if (data.pinCode && !PINCODE_REGEX.test(data.pinCode))
     errors.pinCode = 'Pin code must be 6 digits';
-  if (!data.address.trim()) errors.address = 'Address is required';
+  if (!data.roadOrStreet.trim()) errors.roadOrStreet = 'Road / Street is required';
   if (!data.city.trim()) errors.city = 'City is required';
   if (!isEdit && !data.portalPassword)
     errors.portalPassword = 'Portal password is required for new clients';
@@ -299,13 +328,19 @@ export default function ClientForm({ clientId, onSuccess, onCancel }: ClientForm
         setForm({
           pan: data.pan ?? '',
           fullName: data.fullName ?? data.name ?? '',
+          fatherName: data.fatherName ?? '',
+          gender: data.gender ?? '',
           assesseeType: data.assesseeType ?? 'INDIVIDUAL',
           dateOfBirth: (data.dateOfBirth ?? data.dateOfBirthOrIncorporation ?? '').split('T')[0],
           residentialStatus: data.residentialStatus ?? 'RES',
           employerCategory: data.employerCategory ?? 'OTH',
+          taxRegimePreference: data.taxRegimePreference ?? 'NEW',
           mobileNumber: data.mobileNumber ?? data.mobile ?? '',
           email: data.email ?? '',
-          address: data.address ?? data.addressLine1 ?? '',
+          flatDoorBlockNo: data.flatDoorBlockNo ?? '',
+          nameBuildingVillage: data.nameBuildingVillage ?? '',
+          roadOrStreet: data.roadOrStreet ?? '',
+          localityOrArea: data.localityOrArea ?? '',
           city: data.city ?? '',
           stateCode: data.stateCode ?? data.state ?? '11',
           pinCode: data.pinCode ? String(data.pinCode) : '',
@@ -482,12 +517,19 @@ export default function ClientForm({ clientId, onSuccess, onCancel }: ClientForm
         pan: form.pan.toUpperCase(),
         assesseeType: form.assesseeType,
         fullName: form.fullName,
+        fatherName: form.fatherName || undefined,
+        gender: form.gender || undefined,
         dateOfBirth: form.dateOfBirth || undefined,
         residentialStatus: form.residentialStatus,
         employerCategory: form.employerCategory,
+        taxRegimePreference: form.taxRegimePreference,
         mobileNumber: form.mobileNumber || undefined,
         email: form.email || undefined,
-        address: form.address,
+        flatDoorBlockNo: form.flatDoorBlockNo || undefined,
+        nameBuildingVillage: form.nameBuildingVillage || undefined,
+        roadOrStreet: form.roadOrStreet || undefined,
+        localityOrArea: form.localityOrArea || undefined,
+        address: [form.flatDoorBlockNo, form.nameBuildingVillage, form.roadOrStreet, form.localityOrArea].filter(Boolean).join(', ') || undefined,
         city: form.city,
         stateCode: form.stateCode,
         pinCode: form.pinCode ? parseInt(form.pinCode) : undefined,
@@ -640,9 +682,7 @@ export default function ClientForm({ clientId, onSuccess, onCancel }: ClientForm
               spellCheck={false}
             />
             {errors.pan && <span className="form-error">{errors.pan}</span>}
-            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 3 }}>
-              5 letters · 4 digits · 1 letter (auto-uppercased)
-            </span>
+            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 3 }}>5 letters · 4 digits · 1 letter</span>
           </div>
 
           <div className="form-group" id="field-fullName">
@@ -655,6 +695,29 @@ export default function ClientForm({ clientId, onSuccess, onCancel }: ClientForm
               onChange={handleChange}
             />
             {errors.fullName && <span className="form-error">{errors.fullName}</span>}
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Father's Name</label>
+            <input
+              name="fatherName"
+              className="form-input"
+              placeholder="As per PAN / Aadhaar records"
+              value={form.fatherName}
+              onChange={handleChange}
+            />
+            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 3 }}>ITR Verification → FatherName</span>
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Gender</label>
+            <select name="gender" className="form-select" value={form.gender} onChange={handleChange}>
+              <option value="">— Select —</option>
+              <option value="M">Male</option>
+              <option value="F">Female</option>
+              <option value="T">Transgender</option>
+            </select>
+            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 3 }}>ITR PersonalInfo → Gender</span>
           </div>
 
           <div className="form-group">
@@ -689,9 +752,16 @@ export default function ClientForm({ clientId, onSuccess, onCancel }: ClientForm
                 <option key={r.value} value={r.value}>{r.label}</option>
               ))}
             </select>
-            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 3 }}>
-              Used in ITR FilingStatus → ResidentialStatus
-            </span>
+            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 3 }}>ITR FilingStatus → ResidentialStatus</span>
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Tax Regime</label>
+            <select name="taxRegimePreference" className="form-select" value={form.taxRegimePreference} onChange={handleChange}>
+              <option value="NEW">New Regime (115BAC) — Lower rates, no deductions</option>
+              <option value="OLD">Old Regime — Higher rates, deductions allowed</option>
+            </select>
+            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 3 }}>ITR FilingStatus → OptingNewTaxRegime</span>
           </div>
 
           <div className="form-group">
@@ -701,9 +771,7 @@ export default function ClientForm({ clientId, onSuccess, onCancel }: ClientForm
                 <option key={c.value} value={c.value}>{c.label}</option>
               ))}
             </select>
-            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 3 }}>
-              ITR PersonalInfo → EmployerCategory (CGOV/SGOV/PSU/OTH/NA)
-            </span>
+            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 3 }}>ITR PersonalInfo → EmployerCategory</span>
           </div>
 
           <div className="form-group" id="field-aadhaarNumber">
@@ -717,15 +785,13 @@ export default function ClientForm({ clientId, onSuccess, onCancel }: ClientForm
               maxLength={12}
             />
             {errors.aadhaarNumber && <span className="form-error">{errors.aadhaarNumber}</span>}
-            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 3 }}>
-              Used in Verification section of ITR
-            </span>
+            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 3 }}>ITR Verification → AadhaarCardNo</span>
           </div>
 
         </div>
 
         {/* ── Contact ── */}
-        <Section title="Contact Details" subtitle="Used in ITR PersonalInfo → Address" />
+        <Section title="Contact Details" subtitle="ITR PersonalInfo → Address → MobileNo / EmailAddress" />
         <div className="form-grid form-grid-2" style={{ marginBottom: '1.25rem' }}>
           <div className="form-group" id="field-mobileNumber">
             <label className="form-label">Mobile Number</label>
@@ -754,23 +820,62 @@ export default function ClientForm({ clientId, onSuccess, onCancel }: ClientForm
         </div>
 
         {/* ── Address ── */}
-        <Section title="Address" subtitle="Maps to ITR PersonalInfo → Address → RoadOrStreet, City, StateCode, PinCode" />
+        <Section title="Address" subtitle="ITR PersonalInfo → Address — exact field names as required by IT Portal" />
         <div style={{ marginBottom: '1.25rem' }}>
-          <div className="form-group" id="field-address" style={{ marginBottom: '0.75rem' }}>
-            <label className="form-label">Address *</label>
-            <input
-              name="address"
-              className={`form-input${errors.address ? ' error' : ''}`}
-              placeholder="Flat / House No., Street, Area"
-              value={form.address}
-              onChange={handleChange}
-              maxLength={200}
-            />
-            {errors.address && <span className="form-error">{errors.address}</span>}
+          <div className="form-grid form-grid-2" style={{ marginBottom: '0.75rem' }}>
+            <div className="form-group" id="field-flatDoorBlockNo">
+              <label className="form-label">Flat / Door / Block No.</label>
+              <input
+                name="flatDoorBlockNo"
+                className="form-input"
+                placeholder="e.g. Flat 4B / House No. 12"
+                value={form.flatDoorBlockNo}
+                onChange={handleChange}
+                maxLength={50}
+              />
+              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 3 }}>Address → ResidenceNo / FlatDoorBlockNo</span>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Building / Village Name</label>
+              <input
+                name="nameBuildingVillage"
+                className="form-input"
+                placeholder="e.g. Sunrise Apartments"
+                value={form.nameBuildingVillage}
+                onChange={handleChange}
+                maxLength={50}
+              />
+              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 3 }}>Address → ResidenceName / NameBuildingVillage</span>
+            </div>
+            <div className="form-group" id="field-roadOrStreet">
+              <label className="form-label">Road / Street *</label>
+              <input
+                name="roadOrStreet"
+                className={`form-input${errors.roadOrStreet ? ' error' : ''}`}
+                placeholder="e.g. MG Road"
+                value={form.roadOrStreet}
+                onChange={handleChange}
+                maxLength={100}
+              />
+              {errors.roadOrStreet && <span className="form-error">{errors.roadOrStreet}</span>}
+              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 3 }}>Address → RoadOrStreet</span>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Locality / Area</label>
+              <input
+                name="localityOrArea"
+                className="form-input"
+                placeholder="e.g. Koramangala"
+                value={form.localityOrArea}
+                onChange={handleChange}
+                maxLength={100}
+              />
+              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 3 }}>Address → LocalityOrArea</span>
+            </div>
           </div>
           <div className="form-grid form-grid-3">
             <div className="form-group" id="field-city">
-              <label className="form-label">City *</label>
+              <label className="form-label">City / Town / District *</label>
               <input
                 name="city"
                 className={`form-input${errors.city ? ' error' : ''}`}
@@ -782,7 +887,7 @@ export default function ClientForm({ clientId, onSuccess, onCancel }: ClientForm
               {errors.city && <span className="form-error">{errors.city}</span>}
             </div>
             <div className="form-group">
-              <label className="form-label">State (ITD Code) *</label>
+              <label className="form-label">State *</label>
               <select name="stateCode" className="form-select" value={form.stateCode} onChange={handleChange}>
                 {STATE_CODES.map((s) => (
                   <option key={s.value} value={s.value}>{s.value} — {s.label}</option>
@@ -790,11 +895,11 @@ export default function ClientForm({ clientId, onSuccess, onCancel }: ClientForm
               </select>
             </div>
             <div className="form-group" id="field-pinCode">
-              <label className="form-label">Pin Code</label>
+              <label className="form-label">PIN Code</label>
               <input
                 name="pinCode"
                 className={`form-input font-mono${errors.pinCode ? ' error' : ''}`}
-                placeholder="6-digit pin"
+                placeholder="6-digit PIN"
                 value={form.pinCode}
                 onChange={handleChange}
                 maxLength={6}

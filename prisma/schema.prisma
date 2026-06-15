@@ -162,7 +162,13 @@ model Client {
   dateOfBirth             DateTime?
   mobileNumber            String?
   email                   String?
-  address                 String?
+  fatherName              String?
+  gender                  String?      // M / F / T
+  address                 String?      // combined fallback
+  flatDoorBlockNo         String?
+  nameBuildingVillage     String?
+  roadOrStreet            String?
+  localityOrArea          String?
   city                    String?
   stateCode               String?
   pinCode                 Int?

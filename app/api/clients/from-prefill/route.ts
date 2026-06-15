@@ -43,22 +43,29 @@ export async function POST(request: NextRequest) {
     where: { pan: parsed.pan.toUpperCase(), firmId: auth.firmId },
   });
 
+  const clientData = {
+    fullName: parsed.fullName || undefined,
+    ...(parsed.fatherName ? { fatherName: parsed.fatherName } : {}),
+    ...(parsed.gender ? { gender: parsed.gender } : {}),
+    dateOfBirth: parsed.dob ? new Date(parsed.dob) : undefined,
+    mobileNumber: parsed.mobile || undefined,
+    email: parsed.email || undefined,
+    flatDoorBlockNo: parsed.flatDoorBlockNo || undefined,
+    nameBuildingVillage: parsed.nameBuildingVillage || undefined,
+    roadOrStreet: parsed.roadOrStreet || undefined,
+    localityOrArea: parsed.localityOrArea || undefined,
+    address: parsed.address || undefined,
+    city: parsed.city || undefined,
+    stateCode: parsed.stateCode || undefined,
+    pinCode: parsed.pinCode ? Number(parsed.pinCode) : undefined,
+    aadhaarNumber: parsed.aadhaar || undefined,
+    residentialStatus: (parsed.residentialStatus as any) || undefined,
+  };
+
   if (client) {
-    // Update existing client with fresher portal data
     client = await prisma.client.update({
       where: { id: client.id },
-      data: {
-        fullName: parsed.fullName || client.fullName,
-        dateOfBirth: parsed.dob ? new Date(parsed.dob) : client.dateOfBirth,
-        mobileNumber: parsed.mobile || client.mobileNumber,
-        email: parsed.email || client.email,
-        address: parsed.address || client.address,
-        city: parsed.city || client.city,
-        stateCode: parsed.stateCode || client.stateCode,
-        pinCode: parsed.pinCode ? Number(parsed.pinCode) : client.pinCode,
-        aadhaarNumber: parsed.aadhaar || client.aadhaarNumber,
-        residentialStatus: (parsed.residentialStatus as any) || client.residentialStatus,
-      },
+      data: Object.fromEntries(Object.entries(clientData).filter(([, v]) => v !== undefined)) as any,
     });
   } else {
     try {
@@ -68,40 +75,20 @@ export async function POST(request: NextRequest) {
           pan: parsed.pan.toUpperCase(),
           fullName: parsed.fullName || parsed.pan,
           assesseeType: 'INDIVIDUAL',
-          dateOfBirth: parsed.dob ? new Date(parsed.dob) : null,
-          mobileNumber: parsed.mobile || null,
-          email: parsed.email || null,
-          address: parsed.address || null,
-          city: parsed.city || null,
-          stateCode: parsed.stateCode || null,
-          pinCode: parsed.pinCode ? Number(parsed.pinCode) : null,
-          aadhaarNumber: parsed.aadhaar || null,
-          residentialStatus: (parsed.residentialStatus as any) || 'RES',
           taxRegimePreference: parsed.regime || 'NEW',
           portalUsername: parsed.pan.toUpperCase(),
+          ...(Object.fromEntries(Object.entries(clientData).filter(([, v]) => v !== undefined)) as any),
         },
       });
     } catch (e: any) {
       if (e?.code === 'P2002') {
-        // Race condition — another request created the record; find and update it
         client = await prisma.client.findFirst({
           where: { pan: parsed.pan.toUpperCase(), firmId: auth.firmId },
         });
         if (!client) throw e;
         client = await prisma.client.update({
           where: { id: client.id },
-          data: {
-            fullName: parsed.fullName || client.fullName,
-            dateOfBirth: parsed.dob ? new Date(parsed.dob) : client.dateOfBirth,
-            mobileNumber: parsed.mobile || client.mobileNumber,
-            email: parsed.email || client.email,
-            address: parsed.address || client.address,
-            city: parsed.city || client.city,
-            stateCode: parsed.stateCode || client.stateCode,
-            pinCode: parsed.pinCode ? Number(parsed.pinCode) : client.pinCode,
-            aadhaarNumber: parsed.aadhaar || client.aadhaarNumber,
-            residentialStatus: (parsed.residentialStatus as any) || client.residentialStatus,
-          },
+          data: Object.fromEntries(Object.entries(clientData).filter(([, v]) => v !== undefined)) as any,
         });
       } else {
         throw e;
@@ -199,10 +186,16 @@ export async function POST(request: NextRequest) {
 interface ParsedPrefill {
   pan: string;
   fullName: string;
+  fatherName?: string;
+  gender?: string;
   dob?: string;        // ISO date
   mobile?: string;
   email?: string;
-  address?: string;
+  flatDoorBlockNo?: string;
+  nameBuildingVillage?: string;
+  roadOrStreet?: string;
+  localityOrArea?: string;
+  address?: string;    // combined fallback
   city?: string;
   stateCode?: string;
   pinCode?: string;
@@ -260,6 +253,15 @@ function parsePrefillJson(raw: unknown): ParsedPrefill {
   const last  = nm?.SurName ?? nm?.surName ?? nm?.surNameOrOrgName ?? nm?.lastName ?? '';
   out.fullName = [first, mid, last].filter(Boolean).join(' ').trim() || pi?.Name || pi?.assesseeVerName || '';
 
+  // Father's Name
+  out.fatherName = (pi?.FatherName ?? pi?.fatherName ?? '').trim() || undefined;
+
+  // Gender
+  const genderRaw = (pi?.Gender ?? pi?.gender ?? '').toUpperCase();
+  if (genderRaw === 'M' || genderRaw === 'MALE') out.gender = 'M';
+  else if (genderRaw === 'F' || genderRaw === 'FEMALE') out.gender = 'F';
+  else if (genderRaw === 'T') out.gender = 'T';
+
   // DOB
   const dobRaw: string = pi?.DOB ?? pi?.dob ?? '';
   if (dobRaw) {
@@ -281,14 +283,13 @@ function parsePrefillJson(raw: unknown): ParsedPrefill {
     : rawAadhaar;
   out.aadhaar = decodedAadhaar.replace(/\D/g, '') || undefined;
 
-  // Address
-  const addr: any = obj?.PartA?.Address ?? obj?.Address ?? pi?.Address ?? pi?.address ?? {};
-  const addrParts = [
-    addr?.FlatDoorBlockNo ?? addr?.flatDoorBlockNo ?? addr?.residenceNo ?? '',
-    addr?.NameBuildingVillage ?? addr?.nameBuildingVillage ?? addr?.residenceName ?? '',
-    addr?.RoadStreet ?? addr?.roadStreet ?? addr?.roadOrStreet ?? '',
-    addr?.LocalityOrArea ?? addr?.localityOrArea ?? '',
-  ].filter(Boolean);
+  // Address — separate IT Portal components
+  const addr: any = obj?.PartA?.Address ?? obj?.Address ?? (typeof pi?.address === 'object' ? pi.address : null) ?? {};
+  out.flatDoorBlockNo   = (addr?.FlatDoorBlockNo ?? addr?.flatDoorBlockNo ?? addr?.residenceNo ?? '').trim() || undefined;
+  out.nameBuildingVillage = (addr?.NameBuildingVillage ?? addr?.nameBuildingVillage ?? addr?.residenceName ?? '').trim() || undefined;
+  out.roadOrStreet      = (addr?.RoadOrStreet ?? addr?.roadOrStreet ?? addr?.RoadStreet ?? addr?.roadStreet ?? '').trim() || undefined;
+  out.localityOrArea    = (addr?.LocalityOrArea ?? addr?.localityOrArea ?? '').trim() || undefined;
+  const addrParts = [out.flatDoorBlockNo, out.nameBuildingVillage, out.roadOrStreet, out.localityOrArea].filter(Boolean);
   if (addrParts.length) out.address = addrParts.join(', ');
   out.city      = addr?.CityOrTownOrDistrict ?? addr?.cityOrTownOrDistrict ?? addr?.city ?? undefined;
   out.stateCode = String(addr?.StateCode ?? addr?.stateCode ?? '').padStart(2, '0') || undefined;
