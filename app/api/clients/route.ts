@@ -73,9 +73,15 @@ export async function POST(request: NextRequest) {
           pan: (body.pan as string).toUpperCase(),
           assesseeType: body.assesseeType,
           fullName: body.fullName ?? body.name,
+          ...(body.fatherName ? { fatherName: body.fatherName } : {}),
+          ...(body.gender ? { gender: body.gender } : {}),
           dateOfBirth: (body.dateOfBirth ?? body.dateOfBirthOrIncorporation) ? new Date(body.dateOfBirth ?? body.dateOfBirthOrIncorporation) : null,
           mobileNumber: body.mobileNumber ?? body.mobile ?? null,
           email: body.email ?? null,
+          flatDoorBlockNo: body.flatDoorBlockNo ?? null,
+          nameBuildingVillage: body.nameBuildingVillage ?? null,
+          roadOrStreet: body.roadOrStreet ?? null,
+          localityOrArea: body.localityOrArea ?? null,
           address: body.address ?? body.addressLine1 ?? null,
           city: body.city ?? null,
           stateCode: body.stateCode ?? body.state ?? null,
@@ -85,7 +91,7 @@ export async function POST(request: NextRequest) {
           employerCategory: body.employerCategory ?? 'OTH',
           taxRegimePreference: body.taxRegimePreference ?? 'NEW',
           portalUsername: body.portalUsername ?? null,
-        },
+        } as any,
       });
     } catch (e: any) {
       if (e?.code === 'P2002') {

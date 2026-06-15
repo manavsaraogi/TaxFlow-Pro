@@ -291,7 +291,13 @@ function parsePrefillJson(raw: unknown): ParsedPrefill {
   out.localityOrArea    = (addr?.LocalityOrArea ?? addr?.localityOrArea ?? '').trim() || undefined;
   const addrParts = [out.flatDoorBlockNo, out.nameBuildingVillage, out.roadOrStreet, out.localityOrArea].filter(Boolean);
   if (addrParts.length) out.address = addrParts.join(', ');
-  out.city      = addr?.CityOrTownOrDistrict ?? addr?.cityOrTownOrDistrict ?? addr?.city ?? undefined;
+  // localityOrArea = actual city ("Shillong"); cityOrTownOrDistrict = district ("EAST KHASI HILLS")
+  out.city = (addr?.localityOrArea ?? addr?.LocalityOrArea ?? addr?.CityOrTownOrDistrict ?? addr?.cityOrTownOrDistrict ?? undefined)?.trim() || undefined;
+  // if localityOrArea field isn't set yet, put the district there
+  if (!out.localityOrArea) {
+    const district = (addr?.CityOrTownOrDistrict ?? addr?.cityOrTownOrDistrict ?? '').trim();
+    if (district && district !== out.city) out.localityOrArea = district;
+  }
   out.stateCode = String(addr?.StateCode ?? addr?.stateCode ?? '').padStart(2, '0') || undefined;
   out.pinCode   = String(addr?.PinCode ?? addr?.pinCode ?? addr?.pincode ?? '').replace(/\D/g, '') || undefined;
 

@@ -201,8 +201,15 @@ function parsePrefillJson(raw: unknown): Partial<ClientFormData> & { _preview?: 
   const addrStr = [flatDoor, building, road, locality].filter(Boolean).join(', ');
   if (addrStr) notes.push(`Address: ${addrStr.slice(0, 60)}`);
 
-  const city = (addr?.CityOrTownOrDistrict ?? addr?.cityOrTownOrDistrict ?? addr?.city ?? pi?.city ?? '').trim();
+  // localityOrArea = actual city (e.g. "Shillong"); cityOrTownOrDistrict = district (e.g. "EAST KHASI HILLS")
+  // Use localityOrArea as city — it's the actual city name, not the district
+  const city = (addr?.localityOrArea ?? addr?.LocalityOrArea ?? addr?.CityOrTownOrDistrict ?? addr?.cityOrTownOrDistrict ?? pi?.city ?? '').trim();
   if (city) { out.city = city; notes.push(`City: ${city}`); }
+  // localityOrArea form field gets the district (cityOrTownOrDistrict) if not already set
+  if (!out.localityOrArea) {
+    const district = (addr?.CityOrTownOrDistrict ?? addr?.cityOrTownOrDistrict ?? '').trim();
+    if (district && district !== city) out.localityOrArea = district;
+  }
 
   const pin = String(addr?.PinCode ?? addr?.pinCode ?? addr?.pincode ?? '').replace(/\D/g, '');
   if (/^\d{6}$/.test(pin)) { out.pinCode = pin; notes.push(`PIN: ${pin}`); }
@@ -287,7 +294,6 @@ function validateForm(data: ClientFormData, isEdit: boolean): Record<string, str
     errors.aadhaarNumber = 'Aadhaar must be 12 digits';
   if (data.pinCode && !PINCODE_REGEX.test(data.pinCode))
     errors.pinCode = 'Pin code must be 6 digits';
-  if (!data.roadOrStreet.trim()) errors.roadOrStreet = 'Road / Street is required';
   if (!data.city.trim()) errors.city = 'City is required';
   if (!isEdit && !data.portalPassword)
     errors.portalPassword = 'Portal password is required for new clients';
