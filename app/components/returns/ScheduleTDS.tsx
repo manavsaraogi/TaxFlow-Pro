@@ -50,6 +50,7 @@ interface AISCapitalGain {
   costOfAcquisition: number;
   fmvValue: number;
   transferDate?: string;
+  purchaseDate?: string;
 }
 
 interface AISChallan {
@@ -341,22 +342,24 @@ function parseAISJson(raw: any): ParsedPortalData {
 
           } else if (/SFT-17|SFT-018|SFT-19/.test(infoCode)) {
             // Sale of securities — capital gains
-            const salesIdx    = labels.indexOf('salesConsideration');
-            const costIdx     = labels.indexOf('costOfAcquisition');
-            const fmvIdx      = labels.indexOf('fmvValue');
-            const assetTypeIdx = labels.indexOf('assetType');
-            const secNameIdx  = labels.indexOf('securityName');
-            const dateIdx     = labels.indexOf('transferDate');
+            const salesIdx      = labels.indexOf('salesConsideration');
+            const costIdx       = labels.indexOf('costOfAcquisition');
+            const fmvIdx        = labels.indexOf('fmvValue');
+            const assetTypeIdx  = labels.indexOf('assetType');
+            const secNameIdx    = labels.indexOf('securityName');
+            const dateIdx       = labels.indexOf('transferDate');
+            const purDateIdx    = labels.findIndex(l => /purchaseDate|dateOfPurchase|acquisitionDate/i.test(l));
 
             for (const row of (el.l1?.columnData ?? [])) {
               if (statusIdx >= 0 && row[statusIdx] !== 'Active') continue;
               sftCapitalGains.push({
-                securityName:      secNameIdx >= 0 ? (row[secNameIdx] ?? el.title ?? '') : (el.title ?? ''),
-                assetType:         assetTypeIdx >= 0 ? (row[assetTypeIdx] ?? '') : '',
+                securityName:       secNameIdx >= 0 ? (row[secNameIdx] ?? el.title ?? '') : (el.title ?? ''),
+                assetType:          assetTypeIdx >= 0 ? (row[assetTypeIdx] ?? '') : '',
                 salesConsideration: salesIdx >= 0 ? parseAmt(row[salesIdx]) : 0,
-                costOfAcquisition: costIdx >= 0 ? parseAmt(row[costIdx]) : 0,
-                fmvValue:          fmvIdx >= 0 ? parseAmt(row[fmvIdx]) : 0,
-                transferDate:      dateIdx >= 0 ? row[dateIdx] : undefined,
+                costOfAcquisition:  costIdx >= 0 ? parseAmt(row[costIdx]) : 0,
+                fmvValue:           fmvIdx >= 0 ? parseAmt(row[fmvIdx]) : 0,
+                transferDate:       dateIdx >= 0 ? row[dateIdx] : undefined,
+                purchaseDate:       purDateIdx >= 0 ? row[purDateIdx] : undefined,
               });
             }
           }

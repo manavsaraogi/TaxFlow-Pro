@@ -57,7 +57,7 @@ function calcLTCGGain(e: LTCG112AEntry): number {
   const effectiveCost = e.fmvAsOn31Jan2018 > 0
     ? Math.max(e.purchaseCost, e.fmvAsOn31Jan2018)
     : e.purchaseCost;
-  return Math.max(0, e.salesValue - effectiveCost - e.expenditure);
+  return e.salesValue - effectiveCost - e.expenditure;
 }
 
 function calcLTCGOtherGain(e: LTCGOtherEntry): number {
@@ -88,14 +88,20 @@ function classifyAISGain(cg: AISCapitalGain): 'ltcg112A' | 'ltcgOther' | 'stcg11
   const t = (cg.assetType || '').toUpperCase();
   const n = (cg.securityName || '').toUpperCase();
   // Listed equity shares and equity-oriented MF → 112A / 111A
-  const isEquity = t.includes('EQUITY') || n.includes('EQUITY SHARES') || n.includes('EQUITY MF');
+  const isEquity = t.includes('EQUITY') || n.includes('EQUITY SHARES') || n.includes('EQUITY MF') || n.includes('EQUITY SHARE');
+  // Debt MF (post-Apr 2023 Finance Act amendment) → always stcgOther regardless of holding
+  const isDebtMF = t.includes('DEBT') || (n.includes('DEBT') && n.includes('MF'));
+  if (isDebtMF) return 'stcgOther';
   // Determine long/short: prefer actual dates over AIS label
   let isLong: boolean;
   if (cg.purchaseDate && cg.transferDate) {
     const months = holdingMonths(cg.purchaseDate, cg.transferDate);
     isLong = isEquity ? months > 12 : months > 24;
   } else {
-    isLong = t.includes('LONG');
+    // AIS assetType may say "Long term" / "Short term" / "Long-Term Capital Gain" etc.
+    const hasLong = t.includes('LONG');
+    const hasShort = t.includes('SHORT');
+    isLong = hasLong && !hasShort;
   }
 
   if (isLong && isEquity) return 'ltcg112A';
@@ -208,7 +214,7 @@ export default function ScheduleCG({ returnId, returnData, onSaved, setDirty }: 
       if (bucket === 'ltcg112A') {
         const fmv = cg.fmvValue || 0;
         const effectiveCost = fmv > 0 ? Math.max(cg.costOfAcquisition, fmv) : cg.costOfAcquisition;
-        const gain = Math.max(0, cg.salesConsideration - effectiveCost);
+        const gain = cg.salesConsideration - effectiveCost;
         newLtcg112A.push({
           id: uid(), isin: '', shareOrUnitName: cg.securityName,
           purchaseDate, saleDate,
