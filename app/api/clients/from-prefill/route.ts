@@ -44,6 +44,7 @@ export async function POST(request: NextRequest) {
   });
 
   const clientData = {
+    isActive: true,
     fullName: parsed.fullName || undefined,
     ...(parsed.fatherName ? { fatherName: parsed.fatherName } : {}),
     ...(parsed.gender ? { gender: parsed.gender } : {}),

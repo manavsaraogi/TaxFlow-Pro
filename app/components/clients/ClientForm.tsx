@@ -1027,10 +1027,17 @@ export default function ClientForm({ clientId, onSuccess, onCancel }: ClientForm
         </div>
 
         {/* ── Actions ── */}
+        {feedback?.type === 'error' && (
+          <div style={{
+            padding: '0.75rem 1rem', marginBottom: '0.75rem', borderRadius: 6, fontSize: '0.875rem',
+            background: 'rgba(248,81,73,0.12)', border: '1px solid rgba(248,81,73,0.4)', color: '#f85149',
+          }}>
+            {feedback.message}
+          </div>
+        )}
         <div style={{
           display: 'flex', gap: '0.75rem', justifyContent: 'flex-end',
           paddingTop: '1rem', borderTop: '1px solid var(--border-subtle)',
-
         }}>
           <button type="button" className="btn btn-secondary" onClick={onCancel} disabled={loading}>
             Cancel

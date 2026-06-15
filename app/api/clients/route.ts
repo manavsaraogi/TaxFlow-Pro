@@ -95,11 +95,31 @@ export async function POST(request: NextRequest) {
       });
     } catch (e: any) {
       if (e?.code === 'P2002') {
-        return NextResponse.json({ error: 'A client with this PAN already exists.' }, { status: 409 });
+        // May be a soft-deleted client — reactivate and update instead of rejecting
+        const existing = await prisma.client.findFirst({
+          where: { pan: (body.pan as string).toUpperCase(), firmId: auth.firmId },
+        });
+        if (existing && !existing.isActive) {
+          client = await prisma.client.update({
+            where: { id: existing.id },
+            data: {
+              isActive: true,
+              fullName: body.fullName ?? body.name ?? existing.fullName,
+              dateOfBirth: (body.dateOfBirth ?? body.dateOfBirthOrIncorporation)
+                ? new Date(body.dateOfBirth ?? body.dateOfBirthOrIncorporation)
+                : existing.dateOfBirth,
+              mobileNumber: body.mobileNumber ?? body.mobile ?? existing.mobileNumber,
+              email: body.email ?? existing.email,
+            },
+          });
+        } else {
+          return NextResponse.json({ error: 'A client with this PAN already exists.' }, { status: 409 });
+        }
+      } else {
+        const msg = e?.message ?? 'Failed to create client';
+        console.error('[POST /api/clients] prisma error:', msg, e?.code);
+        return NextResponse.json({ error: msg }, { status: 500 });
       }
-      const msg = e?.message ?? 'Failed to create client';
-      console.error('[POST /api/clients] prisma error:', msg, e?.code);
-      return NextResponse.json({ error: msg }, { status: 500 });
     }
 
     // Store encrypted password via raw query (column not in generated Prisma client yet)
