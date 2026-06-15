@@ -570,10 +570,29 @@ async function fetch26AS({ pan, password, dob, assessmentYear, onStatus }) {
     if (loginBtn) await loginBtn.click(); else await pwdEl.press('Enter');
     log('Clicked login');
 
+    // Handle "Dual Login Detected" popup — click "Login Here" to force-login
+    await page.waitForTimeout(1500);
+    const dualLoginBtn26 = await waitFor(page, ['button:has-text("Login Here")', 'button:has-text("login here")'], 3000);
+    if (dualLoginBtn26) {
+      log('Dual login popup detected — clicking Login Here...');
+      await dualLoginBtn26.click();
+      await page.waitForTimeout(1500);
+    }
+
     for (let i = 0; i < 5; i++) {
-      await page.waitForTimeout(800);
+      await page.waitForTimeout(2000);
       const url = page.url();
       if (/dashboard|myaccount|home|landing|fileIncomeTaxReturn/i.test(url)) break;
+
+      // Handle dual login popup mid-retry
+      const dualBtn = await page.$('button:has-text("Login Here")').catch(() => null);
+      if (dualBtn && await dualBtn.isVisible().catch(() => false)) {
+        log('Dual login popup — clicking Login Here...');
+        await dualBtn.click();
+        await page.waitForTimeout(1500);
+        continue;
+      }
+
       const notAuth = await page.evaluate(() => {
         const el = [...document.querySelectorAll('*')]
           .find(e => e.getBoundingClientRect().width > 0 && /request.*not.*authenticated/i.test(e.textContent) && e.children.length === 0);
