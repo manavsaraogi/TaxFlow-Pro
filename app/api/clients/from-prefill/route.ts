@@ -230,8 +230,10 @@ interface ParsedPrefill {
 function parsePrefillJson(raw: unknown): ParsedPrefill {
   const out: ParsedPrefill = { pan: '', fullName: '' };
 
-  // Unwrap outer ITR wrapper
+  // Unwrap outer ITR wrapper / API response envelope
   let obj: any = raw;
+  // Unwrap common API envelope: { data: {...}, status: "S" }
+  if (obj?.data && typeof obj.data === 'object' && !Array.isArray(obj.data)) obj = obj.data;
   if (obj?.ITR) obj = obj.ITR;
   const itrKey = Object.keys(obj || {}).find(k => /^(ITR[1-9U]|Form_ITR)/i.test(k));
   if (itrKey) obj = obj[itrKey];
@@ -266,12 +268,12 @@ function parsePrefillJson(raw: unknown): ParsedPrefill {
   }
 
   // Contact
-  out.mobile = String(pi?.MobileNo ?? pi?.mobileNo ?? pi?.mobile ?? '').replace(/\D/g, '').slice(-10) || undefined;
+  out.mobile = String(pi?.MobileNo ?? pi?.mobileNo ?? pi?.address?.mobileNo ?? pi?.mobile ?? '').replace(/\D/g, '').slice(-10) || undefined;
   out.email  = pi?.EmailAddress ?? pi?.emailAddress ?? pi?.email ?? undefined;
   out.aadhaar = String(pi?.AadhaarCardNo ?? pi?.aadhaarCardNo ?? '').replace(/\D/g, '') || undefined;
 
   // Address
-  const addr: any = obj?.PartA?.Address ?? obj?.Address ?? {};
+  const addr: any = obj?.PartA?.Address ?? obj?.Address ?? pi?.Address ?? pi?.address ?? {};
   const addrParts = [
     addr?.FlatDoorBlockNo ?? addr?.flatDoorBlockNo ?? '',
     addr?.NameBuildingVillage ?? addr?.nameBuildingVillage ?? '',
@@ -284,7 +286,7 @@ function parsePrefillJson(raw: unknown): ParsedPrefill {
   out.pinCode   = String(addr?.PinCode ?? addr?.pinCode ?? addr?.pincode ?? '').replace(/\D/g, '') || undefined;
 
   // Filing meta
-  const fs: any = obj?.PartA?.FilingStatus ?? obj?.FilingStatus ?? {};
+  const fs: any = obj?.PartA?.FilingStatus ?? obj?.FilingStatus ?? pi?.filingStatus ?? {};
   out.assessmentYear = fs?.AssessmentYear ?? fs?.assessmentYear ?? obj?.PartA?.AY ?? undefined;
   out.residentialStatus = fs?.ResidentialStatus ?? fs?.residentialStatus ?? 'RES';
   out.filingSection = fs?.ReturnFileSec ?? fs?.returnFileSec ?? '11';
