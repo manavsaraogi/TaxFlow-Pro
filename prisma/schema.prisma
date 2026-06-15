@@ -262,8 +262,9 @@ model Return {
   balTaxPayable     Int? @default(0)
   refundDue         Int? @default(0)
   portalData        String?
-  assetsLiabJson    String?
-  ltcgOtherJson     String?
+  assetsLiabJson          String?
+  ltcgOtherJson           String?
+  financialParticularsJson String?
 
   documents         Document[]
   validationResults ValidationResult[]

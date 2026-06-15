@@ -655,6 +655,52 @@ export interface ScheduleSTCG {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// FINANCIAL PARTICULARS — PartA-BS4 + PartA-PL4 (ITR-4 mandatory)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface PartABS4 {
+  // Sources of Funds
+  CapitalOpeningBal:           number;
+  AddProfitFromPL:             number;
+  LessDrawings:                number;
+  // CapitalClosingBal = CapitalOpeningBal + AddProfitFromPL - LessDrawings (computed)
+  SecuredLoansFromBanks:       number;
+  SecuredLoansFromOthers:      number;
+  UnsecuredLoans:              number;
+  Advances:                    number;
+  SundryCreditorsForGoods:     number;
+  SundryCreditorsForExpenses:  number;
+  OtherLiabilities:            number;
+  // Application of Funds
+  GrossBlock:                  number;
+  Depreciation:                number;
+  // NetBlock = GrossBlock - Depreciation (computed)
+  Investments:                 number;
+  SundryDebtorsMoreThan6M:     number;
+  SundryDebtorsOthers:         number;
+  CashInHand:                  number;
+  BalanceWithBanksCurrentAcc:  number;
+  BalanceWithBanksDepositAcc:  number;
+  LoansAndAdvances:            number;
+  AdvanceTaxAndTDS:            number;
+  StockInTrade:                number;
+  OtherCurrentAssets:          number;
+}
+
+export interface PartAPL4 {
+  GrossTurnoverReceipts:       number;  // Same as ScheduleBP turnover
+  GrossProfit:                 number;
+  OtherIncome:                 number;
+  TotalExpenses:               number;
+  NetProfit:                   number;  // GrossProfit + OtherIncome - TotalExpenses
+}
+
+export interface FinancialParticulars {
+  PartABS4: PartABS4;
+  PartAPL4: PartAPL4;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // VERIFICATION
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -794,6 +840,7 @@ export interface ReturnData {
 
   // ITR-4 only
   presumptiveIncome: SchedulePresumptiveIncome | null;
+  financialParticulars: FinancialParticulars | null;
 
   incomeSummary: IncomeSummary | null;
   taxComputation: ITRTaxComputation | null;
@@ -912,6 +959,7 @@ export function emptyReturnData(
     ltcg112A: null,
     stcg: null,
     presumptiveIncome: null,
+    financialParticulars: null,
     incomeSummary: null,
     taxComputation: null,
     verification: null,

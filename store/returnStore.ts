@@ -150,6 +150,7 @@ function buildReturnData(state: ReturnState): ReturnData {
     ltcg112A: state.ltcg112A,
     stcg: state.stcg,
     presumptiveIncome: state.presumptiveIncome,
+    financialParticulars: null,
     incomeSummary: state.summary,
     taxComputation: state.taxComp,
     verification: state.verification,

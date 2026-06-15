@@ -1597,6 +1597,87 @@ function buildITR4(input: BuildITRInput): object {
               TotalLTCG112A: ltcg112ATotal,
             }
           : undefined,
+        // ── PartA-BS4 (Balance Sheet) ────────────────────────────────────
+        ...(() => {
+          const fp = rd.financialParticulars;
+          if (!fp?.PartABS4) return {};
+          const bs = fp.PartABS4;
+          const capClosing  = toInt(bs.CapitalOpeningBal) + toInt(bs.AddProfitFromPL) - toInt(bs.LessDrawings);
+          const netBlock    = toInt(bs.GrossBlock) - toInt(bs.Depreciation);
+          const totSecLoans = toInt(bs.SecuredLoansFromBanks) + toInt(bs.SecuredLoansFromOthers);
+          const totCreditors= toInt(bs.SundryCreditorsForGoods) + toInt(bs.SundryCreditorsForExpenses);
+          const totCapLiab  = capClosing + totSecLoans + toInt(bs.UnsecuredLoans) + toInt(bs.Advances) + totCreditors + toInt(bs.OtherLiabilities);
+          const totDebtors  = toInt(bs.SundryDebtorsMoreThan6M) + toInt(bs.SundryDebtorsOthers);
+          const totBanks    = toInt(bs.BalanceWithBanksCurrentAcc) + toInt(bs.BalanceWithBanksDepositAcc);
+          const totAssets   = netBlock + toInt(bs.Investments) + totDebtors + toInt(bs.CashInHand) + totBanks + toInt(bs.LoansAndAdvances) + toInt(bs.AdvanceTaxAndTDS) + toInt(bs.StockInTrade) + toInt(bs.OtherCurrentAssets);
+          return {
+            'PartA-BS4': {
+              ProprietorFund: {
+                CapitalOpeningBal:    toInt(bs.CapitalOpeningBal),
+                AddProfit:            toInt(bs.AddProfitFromPL),
+                LessDrawings:         toInt(bs.LessDrawings),
+                CapitalClosingBal:    capClosing,
+              },
+              SecuredLoans: {
+                BorrowingsFrmBanks:   toInt(bs.SecuredLoansFromBanks),
+                BorrowingsFrmOthers:  toInt(bs.SecuredLoansFromOthers),
+                TotalSecuredLoans:    totSecLoans,
+              },
+              UnsecuredLoans:         toInt(bs.UnsecuredLoans),
+              Advances:               toInt(bs.Advances),
+              SundryCreditors: {
+                ForGoodsPurchased:    toInt(bs.SundryCreditorsForGoods),
+                ForExpenses:          toInt(bs.SundryCreditorsForExpenses),
+                TotalSundryCreditors: totCreditors,
+              },
+              OthrLiabilitiesAndProvisions: toInt(bs.OtherLiabilities),
+              TotalCapitalAndLiabilities:   totCapLiab,
+              FixedAssets: {
+                GrossBlock:           toInt(bs.GrossBlock),
+                Depreciation:         toInt(bs.Depreciation),
+                NetBlock:             netBlock,
+              },
+              Investments:            toInt(bs.Investments),
+              SundryDebtors: {
+                MoreThan6Months:      toInt(bs.SundryDebtorsMoreThan6M),
+                Others:               toInt(bs.SundryDebtorsOthers),
+                TotalSundryDebtors:   totDebtors,
+              },
+              CashInHand:             toInt(bs.CashInHand),
+              BalanceWithBanks: {
+                InCurrentAcc:         toInt(bs.BalanceWithBanksCurrentAcc),
+                InDepositAcc:         toInt(bs.BalanceWithBanksDepositAcc),
+                TotalBalWithBanks:    totBanks,
+              },
+              LoansAndAdvances:       toInt(bs.LoansAndAdvances),
+              AdvTaxAndTaxDeducAtSource: toInt(bs.AdvanceTaxAndTDS),
+              StockInTrade:           toInt(bs.StockInTrade),
+              OtherCurrentAssets:     toInt(bs.OtherCurrentAssets),
+              TotalAssets:            totAssets,
+            },
+          };
+        })(),
+
+        // ── PartA-PL4 (Profit & Loss) ────────────────────────────────────
+        ...(() => {
+          const fp = rd.financialParticulars;
+          const pl = fp?.PartAPL4;
+          const pi = rd.presumptiveIncome;
+          const turnover = pi
+            ? (pi.Business44AD ?? []).reduce((s: number, b: any) => s + toInt(b.TurnoverCash) + toInt(b.TurnoverDigital), 0)
+              + (pi.Profession44ADA ?? []).reduce((s: number, p: any) => s + toInt(p.GrossReceipts), 0)
+            : 0;
+          return {
+            'PartA-PL4': {
+              GrssProfit:    toInt(pl?.GrossProfit ?? 0),
+              OthIncome:     toInt(pl?.OtherIncome ?? 0),
+              GrossReceipts: toInt(pl?.GrossTurnoverReceipts ?? turnover),
+              TotExpenses:   toInt(pl?.TotalExpenses ?? 0),
+              NetProfit:     toInt(pl?.NetProfit ?? toInt(rd.presumptiveIncome?.TotalPresumptiveIncome ?? 0)),
+            },
+          };
+        })(),
+
         TDSonSalaries:    rd.tds ? buildTDSOnSalaries(rd.tds)     : { TDSonSalary: [], TotalTDSonSalaries: 0 },
         TDSonOthThanSals: rd.tds ? buildTDSOnOtherIncome(rd.tds)  : { TDSonOthThanSal: [], TotalTDSonOthThanSals: 0 },
         ScheduleTDS3Dtls: rd.tds ? buildTDS16C(rd.tds)            : { TDS3Details: [], TotalTDS3Details: 0 },

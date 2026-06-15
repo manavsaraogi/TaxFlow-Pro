@@ -373,6 +373,11 @@ export async function GET(_req: NextRequest, { params }: Params) {
     };
   }
 
+  // ── Map financial particulars ──
+  const financialParticulars = (ret as any).financialParticularsJson
+    ? JSON.parse((ret as any).financialParticularsJson)
+    : null;
+
   // ── Assemble ReturnData ──
   const returnData: ReturnData = {
     formType: ret.formType as any,
@@ -389,6 +394,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
     ltcg112A,
     stcg,
     presumptiveIncome,
+    financialParticulars,
     incomeSummary: null,
     taxComputation: null,
     verification,

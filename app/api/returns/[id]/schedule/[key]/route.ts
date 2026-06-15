@@ -105,6 +105,13 @@ export async function PUT(request: NextRequest, { params }: Params) {
       `;
       break;
     }
+    case 'financialParticulars': {
+      await prisma.$executeRaw`
+        UPDATE "Return" SET "financialParticularsJson" = ${JSON.stringify(body)}, "updatedAt" = NOW()
+        WHERE id = ${returnId}
+      `;
+      break;
+    }
     case 'verification': {
       const vData = {
         assesseeVerName: body.AssesseeVerName ?? '',

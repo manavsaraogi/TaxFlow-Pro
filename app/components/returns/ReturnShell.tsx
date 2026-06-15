@@ -30,6 +30,7 @@ import ScheduleTaxPayments from './ScheduleTaxPayments';
 import ScheduleBP from './ScheduleBP';
 import ScheduleCG from './ScheduleCG';
 import ScheduleAL from './ScheduleAL';
+import ScheduleFinancialParticulars from './ScheduleFinancialParticulars';
 import TaxSummary from './TaxSummary';
 import Verification from './Verification';
 
@@ -52,6 +53,7 @@ interface ReturnMeta {
 type TabId =
   | 'salary'
   | 'business_profession'
+  | 'financial_particulars'
   | 'capital_gains'
   | 'house_property'
   | 'other_sources'
@@ -82,17 +84,18 @@ interface ReturnShellProps {
 
 // All heads of income always shown — ITR type auto-detected from filled data
 const ALL_TABS: Tab[] = [
-  { id: 'salary',              label: 'Salary',               shortLabel: 'S',    icon: 'S'   },
-  { id: 'house_property',      label: 'House Property',        shortLabel: 'HP',   icon: 'HP'  },
-  { id: 'business_profession', label: 'Business / Profession', shortLabel: 'BP',   icon: 'BP'  },
-  { id: 'capital_gains',       label: 'Capital Gains',         shortLabel: 'CG',   icon: 'CG'  },
-  { id: 'other_sources',       label: 'Other Sources',         shortLabel: 'OS',   icon: 'OS'  },
-  { id: 'deductions',          label: 'Deductions (VI-A)',      shortLabel: 'VIA',  icon: 'VIA' },
-  { id: 'assets_liabilities',  label: 'Assets & Liabilities',  shortLabel: 'AL',   icon: 'AL'  },
-  { id: 'tds',                 label: 'TDS / TCS',             shortLabel: 'TDS',  icon: 'TDS' },
-  { id: 'tax_payments',        label: 'Tax Payments',          shortLabel: 'ADV',  icon: 'ADV' },
-  { id: 'tax_summary',         label: 'Tax Summary',           shortLabel: 'SUM',  icon: 'SUM' },
-  { id: 'verification',        label: 'Verification',          shortLabel: 'VER',  icon: 'VER' },
+  { id: 'salary',                label: 'Salary',               shortLabel: 'S',    icon: 'S'   },
+  { id: 'house_property',        label: 'House Property',        shortLabel: 'HP',   icon: 'HP'  },
+  { id: 'business_profession',   label: 'Business / Profession', shortLabel: 'BP',   icon: 'BP'  },
+  { id: 'financial_particulars', label: 'Financial Particulars', shortLabel: 'FP',   icon: 'FP'  },
+  { id: 'capital_gains',         label: 'Capital Gains',         shortLabel: 'CG',   icon: 'CG'  },
+  { id: 'other_sources',         label: 'Other Sources',         shortLabel: 'OS',   icon: 'OS'  },
+  { id: 'deductions',            label: 'Deductions (VI-A)',      shortLabel: 'VIA',  icon: 'VIA' },
+  { id: 'assets_liabilities',    label: 'Assets & Liabilities',  shortLabel: 'AL',   icon: 'AL'  },
+  { id: 'tds',                   label: 'TDS / TCS',             shortLabel: 'TDS',  icon: 'TDS' },
+  { id: 'tax_payments',          label: 'Tax Payments',          shortLabel: 'ADV',  icon: 'ADV' },
+  { id: 'tax_summary',           label: 'Tax Summary',           shortLabel: 'SUM',  icon: 'SUM' },
+  { id: 'verification',          label: 'Verification',          shortLabel: 'VER',  icon: 'VER' },
 ];
 
 // ─── Mock data ────────────────────────────────────────────────────────────────
@@ -575,21 +578,26 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate, fo
           <div style={{ padding: '10px 14px 4px', fontSize: '10px', fontWeight: 800, letterSpacing: '0.1em', color: '#475569', textTransform: 'uppercase' }}>
             Income Heads
           </div>
-          {(['salary','house_property','business_profession','capital_gains','other_sources'] as const).map(tabId => (
-            <ScheduleNavItem
-              key={tabId}
-              tab={ALL_TABS.find(t => t.id === tabId)!}
-              isActive={activeTab === tabId}
-              onClick={() => setActiveTab(tabId)}
-              badge={validation ? tabErrorCount(validation, tabId as any) : 0}
-              tag={
-                tabId === 'business_profession' && (() => {
-                  const pi = (returnData as any)?.presumptiveIncome;
-                  return pi && ((pi.Business44AD?.length ?? 0) + (pi.Profession44ADA?.length ?? 0)) > 0 && returnMeta?.regime === 'OLD';
-                })() ? 'IEA' : undefined
-              }
-            />
-          ))}
+          {(['salary','house_property','business_profession','financial_particulars','capital_gains','other_sources'] as const).map(tabId => {
+            const isITR4 = returnMeta?.formType === 'ITR-4';
+            return (
+              <ScheduleNavItem
+                key={tabId}
+                tab={ALL_TABS.find(t => t.id === tabId)!}
+                isActive={activeTab === tabId}
+                onClick={() => setActiveTab(tabId)}
+                badge={validation ? tabErrorCount(validation, tabId as any) : 0}
+                tag={
+                  tabId === 'financial_particulars' && isITR4 ? 'REQ'
+                  : tabId === 'business_profession' && (() => {
+                    const pi = (returnData as any)?.presumptiveIncome;
+                    return pi && ((pi.Business44AD?.length ?? 0) + (pi.Profession44ADA?.length ?? 0)) > 0 && returnMeta?.regime === 'OLD';
+                  })() ? 'IEA' : undefined
+                }
+                tagColor={tabId === 'financial_particulars' ? '#DC2626' : undefined}
+              />
+            );
+          })}
 
           {/* Section: Deductions & Credits */}
           <div style={{ padding: '10px 14px 4px', fontSize: '10px', fontWeight: 800, letterSpacing: '0.1em', color: '#475569', textTransform: 'uppercase', marginTop: '4px' }}>
@@ -680,6 +688,17 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate, fo
                 setTaxComp(computeTaxLiability(newSummary, rd.regime ?? returnMeta?.regime ?? 'NEW'));
                 onScheduleChange(newSummary);
                 runDetection(rd);
+              }}
+              setDirty={setDirty}
+            />
+          )}
+
+          {activeTab === 'financial_particulars' && (
+            <ScheduleFinancialParticulars
+              returnId={String(returnMeta.id)}
+              returnData={returnData ?? {} as any}
+              onSaved={(rd: any) => {
+                setReturnData(rd);
               }}
               setDirty={setDirty}
             />
