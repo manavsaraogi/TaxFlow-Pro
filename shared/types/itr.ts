@@ -627,6 +627,8 @@ export interface STCG111AEntry {
   id: string;
   isin: string;
   shareOrUnitName: string;
+  purchaseDate?: string;
+  saleDate?: string;
   salesValue: number;
   purchaseCost: number;
   expenditure: number;
@@ -636,6 +638,8 @@ export interface STCG111AEntry {
 export interface STCGOtherEntry {
   id: string;
   assetDesc: string;
+  purchaseDate?: string;
+  saleDate?: string;
   salesValue: number;
   purchaseCost: number;
   expenditure: number;

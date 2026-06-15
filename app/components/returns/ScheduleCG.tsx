@@ -9,6 +9,8 @@ interface LTCG112AEntry {
   id: string;
   isin: string;
   shareOrUnitName: string;
+  purchaseDate: string;
+  saleDate: string;
   salesValue: number;
   purchaseCost: number;
   fmvAsOn31Jan2018: number;
@@ -19,6 +21,8 @@ interface LTCG112AEntry {
 interface LTCGOtherEntry {
   id: string;
   assetDesc: string;
+  purchaseDate: string;
+  saleDate: string;
   salesValue: number;
   purchaseCost: number;
   expenditure: number;
@@ -39,6 +43,7 @@ interface AISCapitalGain {
   costOfAcquisition: number;
   fmvValue: number;
   transferDate?: string;
+  purchaseDate?: string;
 }
 
 const LTCG_EXEMPTION = 125_000;
@@ -72,17 +77,31 @@ function defaultState(): CGState {
 }
 
 // Classify AIS capital gain into one of 4 buckets
+// Returns holding period in months between two yyyy-mm-dd date strings
+function holdingMonths(from: string, to: string): number {
+  const a = new Date(from), b = new Date(to);
+  return (b.getFullYear() - a.getFullYear()) * 12 + (b.getMonth() - a.getMonth())
+    + (b.getDate() >= a.getDate() ? 0 : -1);
+}
+
 function classifyAISGain(cg: AISCapitalGain): 'ltcg112A' | 'ltcgOther' | 'stcg111A' | 'stcgOther' {
   const t = (cg.assetType || '').toUpperCase();
-  const isLong = t.includes('LONG');
-  const isEquity = t.includes('EQUITY');
-  // "equity oriented" / "equity-oriented" MF qualifies for 112A / 111A
-  const isEquityOriented = isEquity;
+  const n = (cg.securityName || '').toUpperCase();
+  // Listed equity shares and equity-oriented MF → 112A / 111A
+  const isEquity = t.includes('EQUITY') || n.includes('EQUITY SHARES') || n.includes('EQUITY MF');
+  // Determine long/short: prefer actual dates over AIS label
+  let isLong: boolean;
+  if (cg.purchaseDate && cg.transferDate) {
+    const months = holdingMonths(cg.purchaseDate, cg.transferDate);
+    isLong = isEquity ? months > 12 : months > 24;
+  } else {
+    isLong = t.includes('LONG');
+  }
 
-  if (isLong && isEquityOriented) return 'ltcg112A';
-  if (!isLong && isEquityOriented) return 'stcg111A';
-  if (isLong) return 'ltcgOther';      // gold, property, debt MF (pre-Apr 2023), unlisted
-  return 'stcgOther';                  // debt MF (post-Apr 2023 amendment), other short-term
+  if (isLong && isEquity) return 'ltcg112A';
+  if (!isLong && isEquity) return 'stcg111A';
+  if (isLong) return 'ltcgOther';
+  return 'stcgOther';
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -184,50 +203,41 @@ export default function ScheduleCG({ returnId, returnData, onSaved, setDirty }: 
     for (const cg of aisGains) {
       const bucket = classifyAISGain(cg);
 
+      const saleDate = cg.transferDate || '';
+      const purchaseDate = cg.purchaseDate || '';
       if (bucket === 'ltcg112A') {
         const fmv = cg.fmvValue || 0;
         const effectiveCost = fmv > 0 ? Math.max(cg.costOfAcquisition, fmv) : cg.costOfAcquisition;
         const gain = Math.max(0, cg.salesConsideration - effectiveCost);
         newLtcg112A.push({
-          id: uid(),
-          isin: '',
-          shareOrUnitName: cg.securityName,
-          salesValue: cg.salesConsideration,
-          purchaseCost: cg.costOfAcquisition,
-          fmvAsOn31Jan2018: fmv,
-          expenditure: 0,
-          gainLoss: gain,
+          id: uid(), isin: '', shareOrUnitName: cg.securityName,
+          purchaseDate, saleDate,
+          salesValue: cg.salesConsideration, purchaseCost: cg.costOfAcquisition,
+          fmvAsOn31Jan2018: fmv, expenditure: 0, gainLoss: gain,
         });
       } else if (bucket === 'stcg111A') {
         const gain = cg.salesConsideration - cg.costOfAcquisition;
         newStcg111A.push({
-          id: uid(),
-          isin: '',
-          shareOrUnitName: cg.securityName,
-          salesValue: cg.salesConsideration,
-          purchaseCost: cg.costOfAcquisition,
-          expenditure: 0,
-          gainLoss: gain,
+          id: uid(), isin: '', shareOrUnitName: cg.securityName,
+          purchaseDate, saleDate,
+          salesValue: cg.salesConsideration, purchaseCost: cg.costOfAcquisition,
+          expenditure: 0, gainLoss: gain,
         });
       } else if (bucket === 'ltcgOther') {
         const gain = cg.salesConsideration - cg.costOfAcquisition;
         newLtcgOther.push({
-          id: uid(),
-          assetDesc: cg.securityName + (cg.transferDate ? ` (sold ${cg.transferDate})` : ''),
-          salesValue: cg.salesConsideration,
-          purchaseCost: cg.costOfAcquisition,
-          expenditure: 0,
-          gainLoss: gain,
+          id: uid(), assetDesc: cg.securityName,
+          purchaseDate, saleDate,
+          salesValue: cg.salesConsideration, purchaseCost: cg.costOfAcquisition,
+          expenditure: 0, gainLoss: gain,
         });
       } else {
         const gain = cg.salesConsideration - cg.costOfAcquisition;
         newStcgOther.push({
-          id: uid(),
-          assetDesc: cg.securityName + (cg.transferDate ? ` (sold ${cg.transferDate})` : ''),
-          salesValue: cg.salesConsideration,
-          purchaseCost: cg.costOfAcquisition,
-          expenditure: 0,
-          gainLoss: gain,
+          id: uid(), assetDesc: cg.securityName,
+          purchaseDate, saleDate,
+          salesValue: cg.salesConsideration, purchaseCost: cg.costOfAcquisition,
+          expenditure: 0, gainLoss: gain,
         });
       }
     }
@@ -385,7 +395,7 @@ export default function ScheduleCG({ returnId, returnData, onSaved, setDirty }: 
           <button className="btn btn-sm btn-secondary" onClick={() =>
             update(p => ({
               ...p,
-              ltcg112A: [...p.ltcg112A, { id: uid(), isin: '', shareOrUnitName: '', salesValue: 0, purchaseCost: 0, fmvAsOn31Jan2018: 0, expenditure: 0, gainLoss: 0 }],
+              ltcg112A: [...p.ltcg112A, { id: uid(), isin: '', shareOrUnitName: '', purchaseDate: '', saleDate: '', salesValue: 0, purchaseCost: 0, fmvAsOn31Jan2018: 0, expenditure: 0, gainLoss: 0 }],
             }))
           }>+ Add Entry</button>
         </div>
@@ -400,18 +410,22 @@ export default function ScheduleCG({ returnId, returnData, onSaved, setDirty }: 
           <div style={{ fontSize: '13px', color: 'var(--text-muted)', padding: '12px 0' }}>No LTCG 112A entries. Use "Import from AIS" above or "+ Add Entry".</div>
         ) : (
           <>
-            <div style={{ display: 'grid', gridTemplateColumns: '130px 1fr 90px 90px 100px 90px 90px 36px', gap: '6px', padding: '6px 0', fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              <span>ISIN</span><span>Name</span><span>Sale ₹</span><span>Cost ₹</span>
-              <span style={{ color: 'rgba(212,160,23,0.9)' }}>FMV 31-Jan-18 ★</span>
-              <span>Expenses ₹</span><span>Gain</span><span></span>
+            <div style={{ display: 'grid', gridTemplateColumns: '110px 110px 110px 1fr 88px 88px 96px 80px 80px 36px', gap: '6px', padding: '6px 0', fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              <span>ISIN</span><span style={{ color: 'var(--error-light, #f87171)' }}>Purchase Date ★</span><span style={{ color: 'var(--error-light, #f87171)' }}>Sale Date ★</span><span>Name</span><span>Sale ₹</span><span>Cost ₹</span>
+              <span style={{ color: 'rgba(212,160,23,0.9)' }}>FMV 31-Jan-18</span>
+              <span>Exp ₹</span><span>Gain</span><span></span>
             </div>
             {state.ltcg112A.map((e, i) => {
               const effectiveCost = e.fmvAsOn31Jan2018 > 0 ? Math.max(e.purchaseCost, e.fmvAsOn31Jan2018) : e.purchaseCost;
               const grandfatheringApplied = e.fmvAsOn31Jan2018 > e.purchaseCost;
               return (
-                <div key={e.id} style={{ display: 'grid', gridTemplateColumns: '130px 1fr 90px 90px 100px 90px 90px 36px', gap: '6px', alignItems: 'center', padding: '6px 0', borderTop: '1px solid var(--border-subtle)' }}>
-                  <input className="form-input" style={{ fontSize: '12px', padding: '5px 8px' }} value={e.isin} placeholder="ISIN (optional)"
+                <div key={e.id} style={{ display: 'grid', gridTemplateColumns: '110px 110px 110px 1fr 88px 88px 96px 80px 80px 36px', gap: '6px', alignItems: 'center', padding: '6px 0', borderTop: '1px solid var(--border-subtle)' }}>
+                  <input className="form-input" style={{ fontSize: '12px', padding: '5px 8px' }} value={e.isin} placeholder="ISIN"
                     onChange={ev => update(p => ({ ...p, ltcg112A: p.ltcg112A.map((x, j) => j === i ? { ...x, isin: ev.target.value } : x) }))} />
+                  <input className="form-input" type="date" style={{ fontSize: '12px', padding: '5px 6px', borderColor: !e.purchaseDate ? 'var(--error)' : undefined }} value={e.purchaseDate}
+                    onChange={ev => update(p => ({ ...p, ltcg112A: p.ltcg112A.map((x, j) => j === i ? { ...x, purchaseDate: ev.target.value } : x) }))} />
+                  <input className="form-input" type="date" style={{ fontSize: '12px', padding: '5px 6px', borderColor: !e.saleDate ? 'var(--error)' : undefined }} value={e.saleDate}
+                    onChange={ev => update(p => ({ ...p, ltcg112A: p.ltcg112A.map((x, j) => j === i ? { ...x, saleDate: ev.target.value } : x) }))} />
                   <input className="form-input" style={{ fontSize: '12px', padding: '5px 8px' }} value={e.shareOrUnitName} placeholder="Company / Fund name"
                     onChange={ev => update(p => ({ ...p, ltcg112A: p.ltcg112A.map((x, j) => j === i ? { ...x, shareOrUnitName: ev.target.value } : x) }))} />
                   {numInput(e.salesValue, v => update(p => ({ ...p, ltcg112A: p.ltcg112A.map((x, j) => { if (j !== i) return x; const u = { ...x, salesValue: v }; return { ...u, gainLoss: calcLTCGGain(u) }; }) })))}
@@ -455,7 +469,7 @@ export default function ScheduleCG({ returnId, returnData, onSaved, setDirty }: 
           <button className="btn btn-sm btn-secondary" onClick={() =>
             update(p => ({
               ...p,
-              ltcgOther: [...p.ltcgOther, { id: uid(), assetDesc: '', salesValue: 0, purchaseCost: 0, expenditure: 0, gainLoss: 0 }],
+              ltcgOther: [...p.ltcgOther, { id: uid(), assetDesc: '', purchaseDate: '', saleDate: '', salesValue: 0, purchaseCost: 0, expenditure: 0, gainLoss: 0 }],
             }))
           }>+ Add Entry</button>
         </div>
@@ -464,12 +478,16 @@ export default function ScheduleCG({ returnId, returnData, onSaved, setDirty }: 
           <div style={{ fontSize: '13px', color: 'var(--text-muted)', padding: '12px 0' }}>No LTCG other entries. Import from AIS or click "+ Add Entry".</div>
         ) : (
           <>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 110px 110px 100px 100px 36px', gap: '8px', padding: '6px 0', fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              <span>Asset Description</span><span>Sale ₹</span><span>Cost ₹</span><span>Expenses ₹</span><span>Gain / Loss</span><span></span>
+            <div style={{ display: 'grid', gridTemplateColumns: '110px 110px 1fr 100px 100px 90px 90px 36px', gap: '8px', padding: '6px 0', fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              <span style={{ color: 'var(--error-light, #f87171)' }}>Purchase Date ★</span><span style={{ color: 'var(--error-light, #f87171)' }}>Sale Date ★</span><span>Asset Description</span><span>Sale ₹</span><span>Cost ₹</span><span>Expenses ₹</span><span>Gain / Loss</span><span></span>
             </div>
             {state.ltcgOther.map((e, i) => (
-              <div key={e.id} style={{ display: 'grid', gridTemplateColumns: '1fr 110px 110px 100px 100px 36px', gap: '8px', alignItems: 'center', padding: '6px 0', borderTop: '1px solid var(--border-subtle)' }}>
-                <input className="form-input" style={{ fontSize: '12px', padding: '5px 8px' }} value={e.assetDesc} placeholder="e.g. Gold bonds, Property at Shillong, Debt MF (pre-2023)"
+              <div key={e.id} style={{ display: 'grid', gridTemplateColumns: '110px 110px 1fr 100px 100px 90px 90px 36px', gap: '8px', alignItems: 'center', padding: '6px 0', borderTop: '1px solid var(--border-subtle)' }}>
+                <input className="form-input" type="date" style={{ fontSize: '12px', padding: '5px 6px', borderColor: !e.purchaseDate ? 'var(--error)' : undefined }} value={e.purchaseDate}
+                  onChange={ev => update(p => ({ ...p, ltcgOther: p.ltcgOther.map((x, j) => j === i ? { ...x, purchaseDate: ev.target.value } : x) }))} />
+                <input className="form-input" type="date" style={{ fontSize: '12px', padding: '5px 6px', borderColor: !e.saleDate ? 'var(--error)' : undefined }} value={e.saleDate}
+                  onChange={ev => update(p => ({ ...p, ltcgOther: p.ltcgOther.map((x, j) => j === i ? { ...x, saleDate: ev.target.value } : x) }))} />
+                <input className="form-input" style={{ fontSize: '12px', padding: '5px 8px' }} value={e.assetDesc} placeholder="e.g. Gold bonds, Property, Debt MF (pre-2023)"
                   onChange={ev => update(p => ({ ...p, ltcgOther: p.ltcgOther.map((x, j) => j === i ? { ...x, assetDesc: ev.target.value } : x) }))} />
                 {numInput(e.salesValue, v => update(p => ({ ...p, ltcgOther: p.ltcgOther.map((x, j) => { if (j !== i) return x; const u = { ...x, salesValue: v }; return { ...u, gainLoss: calcLTCGOtherGain(u) }; }) })))}
                 {numInput(e.purchaseCost, v => update(p => ({ ...p, ltcgOther: p.ltcgOther.map((x, j) => { if (j !== i) return x; const u = { ...x, purchaseCost: v }; return { ...u, gainLoss: calcLTCGOtherGain(u) }; }) })))}
@@ -500,7 +518,7 @@ export default function ScheduleCG({ returnId, returnData, onSaved, setDirty }: 
           <button className="btn btn-sm btn-secondary" onClick={() =>
             update(p => ({
               ...p,
-              stcg111A: [...p.stcg111A, { id: uid(), isin: '', shareOrUnitName: '', salesValue: 0, purchaseCost: 0, expenditure: 0, gainLoss: 0 }],
+              stcg111A: [...p.stcg111A, { id: uid(), isin: '', shareOrUnitName: '', purchaseDate: '', saleDate: '', salesValue: 0, purchaseCost: 0, expenditure: 0, gainLoss: 0 }],
             }))
           }>+ Add Entry</button>
         </div>
@@ -513,13 +531,17 @@ export default function ScheduleCG({ returnId, returnData, onSaved, setDirty }: 
           <div style={{ fontSize: '13px', color: 'var(--text-muted)', padding: '12px 0' }}>No STCG 111A entries. Import from AIS or click "+ Add Entry".</div>
         ) : (
           <>
-            <div style={{ display: 'grid', gridTemplateColumns: '130px 1fr 100px 100px 90px 90px 36px', gap: '6px', padding: '6px 0', fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              <span>ISIN</span><span>Name</span><span>Sale ₹</span><span>Cost ₹</span><span>Expenses ₹</span><span>Gain</span><span></span>
+            <div style={{ display: 'grid', gridTemplateColumns: '110px 110px 110px 1fr 88px 88px 80px 80px 36px', gap: '6px', padding: '6px 0', fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              <span>ISIN</span><span style={{ color: 'var(--error-light, #f87171)' }}>Purchase Date ★</span><span style={{ color: 'var(--error-light, #f87171)' }}>Sale Date ★</span><span>Name</span><span>Sale ₹</span><span>Cost ₹</span><span>Exp ₹</span><span>Gain</span><span></span>
             </div>
             {state.stcg111A.map((e, i) => (
-              <div key={e.id} style={{ display: 'grid', gridTemplateColumns: '130px 1fr 100px 100px 90px 90px 36px', gap: '6px', alignItems: 'center', padding: '6px 0', borderTop: '1px solid var(--border-subtle)' }}>
-                <input className="form-input" style={{ fontSize: '12px', padding: '5px 8px' }} value={e.isin} placeholder="ISIN (optional)"
+              <div key={e.id} style={{ display: 'grid', gridTemplateColumns: '110px 110px 110px 1fr 88px 88px 80px 80px 36px', gap: '6px', alignItems: 'center', padding: '6px 0', borderTop: '1px solid var(--border-subtle)' }}>
+                <input className="form-input" style={{ fontSize: '12px', padding: '5px 8px' }} value={e.isin} placeholder="ISIN"
                   onChange={ev => update(p => ({ ...p, stcg111A: p.stcg111A.map((x, j) => j === i ? { ...x, isin: ev.target.value } : x) }))} />
+                <input className="form-input" type="date" style={{ fontSize: '12px', padding: '5px 6px', borderColor: !e.purchaseDate ? 'var(--error)' : undefined }} value={e.purchaseDate ?? ''}
+                  onChange={ev => update(p => ({ ...p, stcg111A: p.stcg111A.map((x, j) => j === i ? { ...x, purchaseDate: ev.target.value } : x) }))} />
+                <input className="form-input" type="date" style={{ fontSize: '12px', padding: '5px 6px', borderColor: !e.saleDate ? 'var(--error)' : undefined }} value={e.saleDate ?? ''}
+                  onChange={ev => update(p => ({ ...p, stcg111A: p.stcg111A.map((x, j) => j === i ? { ...x, saleDate: ev.target.value } : x) }))} />
                 <input className="form-input" style={{ fontSize: '12px', padding: '5px 8px' }} value={e.shareOrUnitName} placeholder="Company / Fund name"
                   onChange={ev => update(p => ({ ...p, stcg111A: p.stcg111A.map((x, j) => j === i ? { ...x, shareOrUnitName: ev.target.value } : x) }))} />
                 {numInput(e.salesValue, v => update(p => ({ ...p, stcg111A: p.stcg111A.map((x, j) => { if (j !== i) return x; const u = { ...x, salesValue: v }; return { ...u, gainLoss: calc111AGain(u) }; }) })))}
@@ -551,7 +573,7 @@ export default function ScheduleCG({ returnId, returnData, onSaved, setDirty }: 
           <button className="btn btn-sm btn-secondary" onClick={() =>
             update(p => ({
               ...p,
-              stcgOther: [...p.stcgOther, { id: uid(), assetDesc: '', salesValue: 0, purchaseCost: 0, expenditure: 0, gainLoss: 0 }],
+              stcgOther: [...p.stcgOther, { id: uid(), assetDesc: '', purchaseDate: '', saleDate: '', salesValue: 0, purchaseCost: 0, expenditure: 0, gainLoss: 0 }],
             }))
           }>+ Add Entry</button>
         </div>
@@ -560,11 +582,15 @@ export default function ScheduleCG({ returnId, returnData, onSaved, setDirty }: 
           <div style={{ fontSize: '13px', color: 'var(--text-muted)', padding: '12px 0' }}>No STCG other entries. Import from AIS or click "+ Add Entry".</div>
         ) : (
           <>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 110px 110px 100px 100px 36px', gap: '8px', padding: '6px 0', fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              <span>Asset Description</span><span>Sale ₹</span><span>Cost ₹</span><span>Expenses ₹</span><span>Gain / Loss</span><span></span>
+            <div style={{ display: 'grid', gridTemplateColumns: '110px 110px 1fr 100px 100px 90px 90px 36px', gap: '8px', padding: '6px 0', fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              <span style={{ color: 'var(--error-light, #f87171)' }}>Purchase Date ★</span><span style={{ color: 'var(--error-light, #f87171)' }}>Sale Date ★</span><span>Asset Description</span><span>Sale ₹</span><span>Cost ₹</span><span>Expenses ₹</span><span>Gain / Loss</span><span></span>
             </div>
             {state.stcgOther.map((e, i) => (
-              <div key={e.id} style={{ display: 'grid', gridTemplateColumns: '1fr 110px 110px 100px 100px 36px', gap: '8px', alignItems: 'center', padding: '6px 0', borderTop: '1px solid var(--border-subtle)' }}>
+              <div key={e.id} style={{ display: 'grid', gridTemplateColumns: '110px 110px 1fr 100px 100px 90px 90px 36px', gap: '8px', alignItems: 'center', padding: '6px 0', borderTop: '1px solid var(--border-subtle)' }}>
+                <input className="form-input" type="date" style={{ fontSize: '12px', padding: '5px 6px', borderColor: !e.purchaseDate ? 'var(--error)' : undefined }} value={e.purchaseDate ?? ''}
+                  onChange={ev => update(p => ({ ...p, stcgOther: p.stcgOther.map((x, j) => j === i ? { ...x, purchaseDate: ev.target.value } : x) }))} />
+                <input className="form-input" type="date" style={{ fontSize: '12px', padding: '5px 6px', borderColor: !e.saleDate ? 'var(--error)' : undefined }} value={e.saleDate ?? ''}
+                  onChange={ev => update(p => ({ ...p, stcgOther: p.stcgOther.map((x, j) => j === i ? { ...x, saleDate: ev.target.value } : x) }))} />
                 <input className="form-input" style={{ fontSize: '12px', padding: '5px 8px' }} value={e.assetDesc} placeholder="e.g. Debt MF — ICICI Liquid Fund, Gold jewellery"
                   onChange={ev => update(p => ({ ...p, stcgOther: p.stcgOther.map((x, j) => j === i ? { ...x, assetDesc: ev.target.value } : x) }))} />
                 {numInput(e.salesValue, v => update(p => ({ ...p, stcgOther: p.stcgOther.map((x, j) => { if (j !== i) return x; const u = { ...x, salesValue: v }; return { ...u, gainLoss: calcOtherGain(u) }; }) })))}
