@@ -257,8 +257,8 @@ function parsePrefillJson(raw: unknown): ParsedPrefill {
   const nm: any = pi?.AssesseeName ?? pi?.assesseeName ?? {};
   const first = nm?.FirstName ?? nm?.firstName ?? '';
   const mid   = nm?.MiddleName ?? nm?.middleName ?? '';
-  const last  = nm?.SurName ?? nm?.surName ?? nm?.lastName ?? '';
-  out.fullName = [first, mid, last].filter(Boolean).join(' ').trim() || pi?.Name || '';
+  const last  = nm?.SurName ?? nm?.surName ?? nm?.surNameOrOrgName ?? nm?.lastName ?? '';
+  out.fullName = [first, mid, last].filter(Boolean).join(' ').trim() || pi?.Name || pi?.assesseeVerName || '';
 
   // DOB
   const dobRaw: string = pi?.DOB ?? pi?.dob ?? '';
@@ -274,14 +274,19 @@ function parsePrefillJson(raw: unknown): ParsedPrefill {
   // Contact
   out.mobile = String(pi?.MobileNo ?? pi?.mobileNo ?? pi?.address?.mobileNo ?? pi?.mobile ?? '').replace(/\D/g, '').slice(-10) || undefined;
   out.email  = pi?.EmailAddress ?? pi?.emailAddress ?? pi?.email ?? undefined;
-  out.aadhaar = String(pi?.AadhaarCardNo ?? pi?.aadhaarCardNo ?? '').replace(/\D/g, '') || undefined;
+  const rawAadhaar = String(pi?.AadhaarCardNo ?? pi?.aadhaarCardNo ?? '');
+  // Aadhaar may be base64-encoded on portal
+  const decodedAadhaar = /^[A-Za-z0-9+/]+=*$/.test(rawAadhaar) && rawAadhaar.length > 12
+    ? (() => { try { return Buffer.from(rawAadhaar, 'base64').toString('utf8'); } catch { return rawAadhaar; } })()
+    : rawAadhaar;
+  out.aadhaar = decodedAadhaar.replace(/\D/g, '') || undefined;
 
   // Address
   const addr: any = obj?.PartA?.Address ?? obj?.Address ?? pi?.Address ?? pi?.address ?? {};
   const addrParts = [
-    addr?.FlatDoorBlockNo ?? addr?.flatDoorBlockNo ?? '',
-    addr?.NameBuildingVillage ?? addr?.nameBuildingVillage ?? '',
-    addr?.RoadStreet ?? addr?.roadStreet ?? '',
+    addr?.FlatDoorBlockNo ?? addr?.flatDoorBlockNo ?? addr?.residenceNo ?? '',
+    addr?.NameBuildingVillage ?? addr?.nameBuildingVillage ?? addr?.residenceName ?? '',
+    addr?.RoadStreet ?? addr?.roadStreet ?? addr?.roadOrStreet ?? '',
     addr?.LocalityOrArea ?? addr?.localityOrArea ?? '',
   ].filter(Boolean);
   if (addrParts.length) out.address = addrParts.join(', ');
@@ -359,22 +364,30 @@ function parsePrefillJson(raw: unknown): ParsedPrefill {
     }));
   }
 
-  // ── TDS (Schedule TDS / TDS2) ──────────────────────────────────────────────
+  // ── TDS (Schedule TDS / TDS2 / form26as) ─────────────────────────────────
   const tds1: any[] = toArray(obj?.ScheduleTDS1 ?? obj?.TDS1 ?? obj?.scheduleTDS1);
   const tds2: any[] = toArray(obj?.ScheduleTDS2 ?? obj?.TDS2 ?? obj?.scheduleTDS2);
   const tds3: any[] = toArray(obj?.ScheduleTDS3 ?? obj?.TDS3 ?? obj?.scheduleTDS3);
-  const allTDS = [...tds1, ...tds2, ...tds3];
+  // flat format: form26as.tdsOnOthThanSals.tdSonOthThanSal
+  const f26as: any = obj?.form26as ?? obj?.Form26AS ?? {};
+  const tds26Salary: any[] = toArray(f26as?.tdsOnSals?.tdSonSal);
+  const tds26Other: any[] = toArray(f26as?.tdsOnOthThanSals?.tdSonOthThanSal);
+  const allTDS = [...tds1, ...tds2, ...tds3, ...tds26Salary, ...tds26Other];
 
   if (allTDS.length) {
-    out.tdsEntries = allTDS.map((e: any) => ({
-      entryType: tds1.includes(e) ? 'SALARY' : 'OTHER',
-      nameOfDeductor: e?.NameOfDeductor ?? e?.nameOfDeductor ?? e?.TAN ?? '',
-      tanOfDeductor: e?.TANofDeductor ?? e?.tanOfDeductor ?? e?.TAN ?? '',
-      tdsSection: e?.Section ?? e?.tdsSection ?? e?.NatureOfPayment ?? '',
-      incomeChargeable: num(e?.IncomeChargeable ?? e?.incomeChargeable ?? e?.GrossAmt ?? e?.AmtForTaxDeduct),
-      tdsDeducted: num(e?.TDSDeducted ?? e?.tdsDeducted ?? e?.TaxDeducted ?? e?.TDSCredited),
-      tdsClaimed: num(e?.TDSClaimed ?? e?.tdsClaimed ?? e?.TDSDeducted ?? e?.tdsDeducted ?? 0),
-    }));
+    out.tdsEntries = allTDS.map((e: any) => {
+      const isSalary = tds1.includes(e) || tds26Salary.includes(e);
+      const deductorDetail = e?.employerOrDeductorOrCollectDetl ?? {};
+      return {
+        entryType: isSalary ? 'SALARY' : 'OTHER',
+        nameOfDeductor: e?.NameOfDeductor ?? e?.nameOfDeductor ?? deductorDetail?.employerOrDeductorOrCollecterName ?? '',
+        tanOfDeductor: e?.TANofDeductor ?? e?.tanOfDeductor ?? deductorDetail?.tan ?? e?.TAN ?? '',
+        tdsSection: e?.Section ?? e?.tdsSection ?? e?.sectionCode ?? e?.NatureOfPayment ?? '',
+        incomeChargeable: num(e?.IncomeChargeable ?? e?.incomeChargeable ?? e?.grossAmount ?? e?.GrossAmt ?? e?.AmtForTaxDeduct),
+        tdsDeducted: num(e?.TDSDeducted ?? e?.tdsDeducted ?? e?.taxDeductCreditDtls?.taxDeductedOwnHands ?? e?.TaxDeducted ?? e?.TDSCredited),
+        tdsClaimed: num(e?.TDSClaimed ?? e?.tdsClaimed ?? e?.taxDeductCreditDtls?.taxClaimedOwnHands ?? e?.TDSDeducted ?? e?.tdsDeducted ?? 0),
+      };
+    });
   }
 
   // ── TCS ───────────────────────────────────────────────────────────────────
@@ -407,14 +420,19 @@ function parsePrefillJson(raw: unknown): ParsedPrefill {
   }
 
   // ── Bank Account ──────────────────────────────────────────────────────────
-  const bankArr: any[] = toArray(
-    obj?.BankAccountDetails?.BankDetail
-      ?? obj?.BankDetail ?? obj?.ScheduleBank
+  // flat format: bankAccountDtls[0].addtnlBankDetails[]
+  const flatBankArr: any[] = toArray(
+    obj?.bankAccountDtls?.[0]?.addtnlBankDetails ?? obj?.bankAccountDtls?.[0]?.BankDetail
   );
-  const refundBank = bankArr.find((b: any) => b?.UseForRefund === 'Y' || b?.useForRefund === 'Y') ?? bankArr[0];
+  const bankArr: any[] = flatBankArr.length ? flatBankArr : toArray(
+    obj?.BankAccountDetails?.BankDetail ?? obj?.BankDetail ?? obj?.ScheduleBank
+  );
+  const refundBank = bankArr.find((b: any) =>
+    b?.UseForRefund === 'Y' || b?.useForRefund === 'Y' || b?.useForRefund === 'true'
+  ) ?? bankArr[0];
   if (refundBank) {
     out.bankAccount = {
-      ifsc: refundBank?.IFSCCode ?? refundBank?.ifscCode ?? refundBank?.IFSC ?? '',
+      ifsc: refundBank?.IFSCCode ?? refundBank?.ifscCode ?? refundBank?.ifsccode ?? refundBank?.IFSC ?? '',
       accountNo: refundBank?.BankAccountNo ?? refundBank?.bankAccountNo ?? refundBank?.AccountNo ?? '',
       bankName: refundBank?.BankName ?? refundBank?.bankName ?? '',
     };

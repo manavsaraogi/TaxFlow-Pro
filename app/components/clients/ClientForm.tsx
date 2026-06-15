@@ -118,9 +118,13 @@ function parsePrefillJson(raw: unknown): Partial<ClientFormData> & { _preview?: 
   //   or  Form_ITR1 / Form_ITR2 at top level
   //   or  personalInfo at top level (flat export)
   let obj: any = raw;
+  // IT portal API: { content: "<JSON string>", responseCode: 0 }
+  if (typeof obj?.content === 'string') {
+    try { obj = JSON.parse(obj.content); } catch {}
+  }
   if (obj?.ITR) obj = obj.ITR;
   // pick first key that looks like ITR type
-  const itrKey = Object.keys(obj).find(k => /^(ITR[1-9U]|Form_ITR)/i.test(k));
+  const itrKey = Object.keys(obj ?? {}).find(k => /^(ITR[1-9U]|Form_ITR)/i.test(k));
   if (itrKey) obj = obj[itrKey];
 
   // PersonalInfo (camelCase or PascalCase)
@@ -134,10 +138,11 @@ function parsePrefillJson(raw: unknown): Partial<ClientFormData> & { _preview?: 
   const nameObj = pi?.AssesseeName ?? pi?.assesseeName ?? pi?.name ?? {};
   const firstName = nameObj?.FirstName ?? nameObj?.firstName ?? '';
   const middleName = nameObj?.MiddleName ?? nameObj?.middleName ?? '';
-  const surName = nameObj?.SurName ?? nameObj?.surName ?? nameObj?.lastName ?? '';
+  const surName = nameObj?.SurName ?? nameObj?.surName ?? nameObj?.surNameOrOrgName ?? nameObj?.lastName ?? '';
   const fullName = [firstName, middleName, surName].filter(Boolean).join(' ').trim()
     || (typeof pi?.Name === 'string' ? pi.Name : '')
     || (typeof pi?.name === 'string' ? pi.name : '')
+    || (typeof pi?.assesseeVerName === 'string' ? pi.assesseeVerName : '')
     || (typeof pi?.fullName === 'string' ? pi.fullName : '');
   if (fullName) { out.fullName = fullName; notes.push(`Name: ${fullName}`); }
 
@@ -163,7 +168,7 @@ function parsePrefillJson(raw: unknown): Partial<ClientFormData> & { _preview?: 
   if (atMap[status]) { out.assesseeType = atMap[status]; notes.push(`Type: ${atMap[status]}`); }
 
   // ── Residential status ────────────────────────────────────────────────────────
-  const res: string = (pi?.ResidentialStatus ?? pi?.residentialStatus ?? '').toUpperCase();
+  const res: string = (pi?.ResidentialStatus ?? pi?.residentialStatus ?? pi?.filingStatus?.residentialStatus ?? '').toUpperCase();
   if (res === 'RES' || res === 'RESIDENT') { out.residentialStatus = 'RES'; }
   else if (res === 'NRI') { out.residentialStatus = 'NRI'; }
   else if (res === 'RNR') { out.residentialStatus = 'RNR'; }
