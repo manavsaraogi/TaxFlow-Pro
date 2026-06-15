@@ -701,10 +701,10 @@ export interface IncomeSummary {
 export interface BusinessDetails44AD {
   NameOfBusiness: string;
   BusinessCode: string;
-  GrossReceipts: number;
-  GrossProfit: number;
-  Expenses: number;
-  NetProfit: number;
+  TurnoverCash: number;        // receipts by cash — 8%
+  TurnoverDigital: number;     // receipts by banking/digital — 6%
+  GrossReceipts: number;       // TurnoverCash + TurnoverDigital
+  PresumptiveIncome: number;   // (TurnoverCash×8%) + (TurnoverDigital×6%)
   GSTINOfBusiness?: string;
 }
 
@@ -713,18 +713,43 @@ export interface ProfessionalDetails44ADA {
   NameOfProfession: string;
   ProfessionCode: string;
   GrossReceipts: number;
-  GrossProfit: number;
-  Expenses: number;
-  NetProfit: number;
+  PresumptiveIncome: number;   // 50% of GrossReceipts (minimum)
 }
 
 /** Goods carriage details for u/s 44AE */
 export interface GoodsCarriageDetails44AE {
   RegistrationNo: string;
   OwnedOrHired: 'OWN' | 'HRD';
-  TonnageCapacity?: number;
+  DateOfPurchase?: string;      // YYYY-MM-DD — mandatory per schema
+  TonnageCapacity?: number;     // gross weight in tonnes (for heavy vehicles)
   MonthsOwned: number;
   TaxableIncome: number;
+}
+
+/** GST registration details — mandatory for registered businesses */
+export interface ScheduleGST {
+  GSTINNo: string;
+  GrossRcptsAsPerGST: number;
+  TurnoverAsPerGST?: number;
+}
+
+/** Assets & Liabilities — mandatory when total income > ₹50L */
+export interface ScheduleAL {
+  ImmovableAssets: number;    // land + building value
+  MovableAssets: number;      // jewellery, vehicles, shares, cash etc.
+  CashInHand: number;
+  BankDeposits: number;
+  SharesAndSecurities: number;
+  InsurancePolicies: number;
+  LoansTaken: number;         // liabilities
+  OtherLiabilities: number;
+}
+
+/** Form 10-IEA declaration for old regime opt-out */
+export interface Form10IEADetails {
+  optOut: boolean;
+  ackNo: string;
+  dateOfFiling: string;       // YYYY-MM-DD
 }
 
 /** Presumptive income schedule */
@@ -736,6 +761,9 @@ export interface SchedulePresumptiveIncome {
   GoodsCarriage44AE?: GoodsCarriageDetails44AE[];
   TotalIncome44AE?: number;
   TotalPresumptiveIncome: number;
+  Form10IEA?: Form10IEADetails;
+  ScheduleGST?: ScheduleGST[];
+  ScheduleAL?: ScheduleAL;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

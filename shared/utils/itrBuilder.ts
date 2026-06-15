@@ -1302,13 +1302,31 @@ function buildITR4(input: BuildITRInput): object {
           SchemaVer:      'Ver1.0',
           FormVer:        'Ver1.0',
         },
-        PersonalInfo: buildPersonalInfo(client, { includeStatus: detectStatusFromPAN(client.pan) }),
-        FilingStatus: {
-          ReturnFileSec:            rd.filingSection,
-          Form10IEAEarlierAYOldRegime: 'NA',
-          AsseseeRepFlg:            'N',
-          ItrFilingDueDate:         '2026-08-31',
+        PersonalInfo: {
+          ...buildPersonalInfo(client, { includeStatus: detectStatusFromPAN(client.pan) }),
+          ResidentialStatus: (client.residentialStatus ?? 'RES') === 'RNR' ? 'NOR' : (client.residentialStatus ?? 'RES'),
+          EmployerCategory: 'SE' as const,
         },
+        FilingStatus: (() => {
+          const f10 = rd.presumptiveIncome?.Form10IEA;
+          return {
+            ReturnFileSec:               rd.filingSection,
+            OptOutNewTaxRegime:          rd.regime === 'OLD' ? 'Y' : 'N',
+            SeventhProvisio139:          'N',
+            clauseiv7provisio139i:       'N',
+            AsseseeRepFlg:               'N',
+            ResidentialStatus:           (client.residentialStatus ?? 'RES') === 'RNR' ? 'NOR' : (client.residentialStatus ?? 'RES'),
+            ItrFilingDueDate:            '2026-08-31',
+            ...(rd.regime === 'OLD' && f10?.optOut ? {
+              Form10IEAFiledFlag:        'Y',
+              Form10IEAAckNum:           f10.ackNo,
+              Form10IEADate:             f10.dateOfFiling,
+              Form10IEAEarlierAYOldRegime: 'NA',
+            } : {
+              Form10IEAEarlierAYOldRegime: 'NA',
+            }),
+          };
+        })(),
         IncomeDeductions: {
           IncomeFromBusinessProf:     toInt(summary.IncomeFromBusinessProfession),
           GrossSalary:                toInt(rd.salary?.TotalGrossSalary),
@@ -1374,14 +1392,197 @@ function buildITR4(input: BuildITRInput): object {
             }],
           },
         },
-        // ScheduleBP — presumptive income
-        ScheduleBP: rd.presumptiveIncome
+        // ── ScheduleBP — presumptive income ──────────────────────────────
+        ScheduleBP: rd.presumptiveIncome ? (() => {
+          const pi = rd.presumptiveIncome!;
+          const biz44AD  = pi.Business44AD  ?? [];
+          const prof44ADA = pi.Profession44ADA ?? [];
+          const gc44AE   = pi.GoodsCarriage44AE ?? [];
+          const tot44AD  = toInt(pi.TotalIncome44AD ?? biz44AD.reduce((s, b) => s + b.PresumptiveIncome, 0));
+          const tot44ADA = toInt(pi.TotalIncome44ADA ?? prof44ADA.reduce((s, p) => s + p.PresumptiveIncome, 0));
+          const tot44AE  = toInt(pi.TotalIncome44AE ?? gc44AE.reduce((s, g) => s + g.TaxableIncome, 0));
+          return {
+            NoOfBusiness44AD:  biz44AD.length,
+            NoOfProf44ADA:     prof44ADA.length,
+            Business44ADDtls: biz44AD.length > 0 ? {
+              Business44ADDtlsEntry: biz44AD.map(b => ({
+                NatureOfBusiness:    b.BusinessCode,
+                TradeName:           b.NameOfBusiness,
+                TurnoverCash:        toInt(b.TurnoverCash),
+                TurnoverDigital:     toInt(b.TurnoverDigital),
+                Turnover:            toInt(b.TurnoverCash) + toInt(b.TurnoverDigital),
+                GrossReceipts:       toInt(b.GrossReceipts),
+                PresumptiveIncome44AD: toInt(b.PresumptiveIncome),
+                ...(b.GSTINOfBusiness ? { GSTINOfBusiness: b.GSTINOfBusiness } : {}),
+              })),
+            } : undefined,
+            TotalIncmBusiness44AD: tot44AD,
+            Prof44ADADtls: prof44ADA.length > 0 ? {
+              Prof44ADADtlsEntry: prof44ADA.map(p => ({
+                NatureOfProfession:  p.ProfessionCode,
+                ProfessionName:      p.NameOfProfession,
+                GrossReceipts:       toInt(p.GrossReceipts),
+                PresumptiveIncome44ADA: toInt(p.PresumptiveIncome),
+              })),
+            } : undefined,
+            TotalIncmProfession44ADA: tot44ADA,
+            GoodsCarriage44AEDtls: gc44AE.length > 0 ? {
+              GoodsCarriage44AEDtlsEntry: gc44AE.map(g => ({
+                RegistrationNo:  g.RegistrationNo,
+                OwnedOrHired:    g.OwnedOrHired,
+                DateOfPurchase:  g.DateOfPurchase ?? '',
+                TonnageCapacity: toInt(g.TonnageCapacity ?? 0),
+                MonthsOwned:     toInt(g.MonthsOwned),
+                TaxableIncome:   toInt(g.TaxableIncome),
+              })),
+            } : undefined,
+            TotalIncmGoodsCarriage44AE: tot44AE,
+            TotPresumptiveInc: tot44AD + tot44ADA + tot44AE,
+          };
+        })() : undefined,
+
+        // ── ScheduleOS ───────────────────────────────────────────────────
+        ScheduleOS: rd.otherSources
           ? {
-              NoOfBusiness44AD:  rd.presumptiveIncome.Business44AD?.length ?? 0,
-              NoOfProf44ADA:     rd.presumptiveIncome.Profession44ADA?.length ?? 0,
-              TotPresumptiveInc: toInt(rd.presumptiveIncome.TotalPresumptiveIncome),
+              OtherSrcThanOwnRaceHorse: toInt(rd.otherSources.IncomeFromOtherSources),
+              OthSrcItems: Array.isArray(rd.otherSources.OtherSourceItems)
+                ? rd.otherSources.OtherSourceItems.map(buildOtherSourceItem)
+                : [],
+              DeductionUs57iia: toInt(rd.otherSources.DeductionUs57iia),
+              IncomeOthSrc:     toInt(rd.otherSources.IncomeFromOtherSources),
+            }
+          : { OtherSrcThanOwnRaceHorse: 0, OthSrcItems: [], DeductionUs57iia: 0, IncomeOthSrc: 0 },
+
+        // ── ScheduleVIA ──────────────────────────────────────────────────
+        ScheduleVIA: rd.deductions && rd.regime === 'OLD'
+          ? { UsrDeductions: buildUsrDeductions(rd.deductions) }
+          : undefined,
+
+        // ── ScheduleCGFor23 ──────────────────────────────────────────────
+        ...(() => {
+          const hasCG = (rd.stcg?.TotalSTCG111A || rd.stcg?.TotalSTCGOther || rd.ltcg112A?.TaxableLTCG112A);
+          if (!hasCG) return {};
+          const stcg = rd.stcg;
+          const stcg111ATotal  = toInt(stcg?.TotalSTCG111A);
+          const stcgOtherTotal = toInt(stcg?.TotalSTCGOther);
+          const otherEntries   = stcg?.OtherEntries ?? [];
+          const entries111A    = stcg?.Entries111A  ?? [];
+          const ltcgOtherTotal = 0; // LTCG Other not yet stored in ReturnData
+          const ltcg112AEnts   = rd.ltcg112A?.Entries ?? [];
+          const totalCG        = stcg111ATotal + stcgOtherTotal + ltcgOtherTotal + ltcg112ATotal;
+          return {
+            ScheduleCGFor23: {
+              ShortTermCapGainFor23: {
+                EquityMFDTDtls111A: entries111A.length > 0 ? {
+                  ShareUnitSaleDetails111A: entries111A.map(e => ({
+                    ISIN:            e.isin ?? '',
+                    ShareUnitName:   e.shareOrUnitName ?? '',
+                    SaleValue:       toInt(e.salesValue),
+                    CostAcquisition: toInt(e.purchaseCost),
+                    Expenditure:     toInt(e.expenditure),
+                    GainLoss:        toInt(e.gainLoss),
+                  })),
+                  TotalSaleValue:   entries111A.reduce((s, e) => s + toInt(e.salesValue), 0),
+                  TotalCostOfAcq:   entries111A.reduce((s, e) => s + toInt(e.purchaseCost), 0),
+                  TotalExpenditure: entries111A.reduce((s, e) => s + toInt(e.expenditure), 0),
+                  TotalSTCG111A:    stcg111ATotal,
+                } : undefined,
+                NRITransacSec48Dtl:       { NRITransactionSec48: 0 },
+                NRISecur115AD:             { NRISecuritiesIncome: 0, NRISecuritiesTax: 0 },
+                SaleOnOtherAssets: {
+                  SaleValue:       otherEntries.reduce((s, e) => s + toInt(e.salesValue), 0),
+                  CostAcquisition: otherEntries.reduce((s, e) => s + toInt(e.purchaseCost), 0),
+                  LowDeductions:   otherEntries.reduce((s, e) => s + toInt(e.expenditure), 0),
+                  CapGain:         stcgOtherTotal,
+                },
+                TotalAmtDeemedStcg:          0,
+                PassThrIncNatureSTCG:         0,
+                TotalAmtNotTaxUsDTAAStcg:    0,
+                TotalAmtTaxUsDTAAStcg:        0,
+                TotalSTCG:                    stcg111ATotal + stcgOtherTotal,
+              },
+              LongTermCapGain23: {
+                SaleOfEquityShareUs112A: ltcg112AEnts.length > 0 ? {
+                  SaleOfEquityDtls: ltcg112AEnts.map(e => ({
+                    ISIN:             e.ISIN ?? '',
+                    ShareUnitName:    e.ShareOrUnitName ?? '',
+                    SaleValue:        toInt(e.SalesValue),
+                    PurchaseCost:     toInt(e.PurchaseCost),
+                    FMVasOn31Jan2018: toInt(e.FMVasOn31Jan2018),
+                    Expenditure:      toInt(e.Expenditure),
+                    GainLoss:         toInt(e.GainLoss),
+                  })),
+                  TotalSaleValue:   ltcg112AEnts.reduce((s, e) => s + toInt(e.SalesValue), 0),
+                  TotalCostOfAcq:   ltcg112AEnts.reduce((s, e) => s + toInt(e.PurchaseCost), 0),
+                  TotalExpenditure: 0,
+                  TotalLTCG112A:    ltcg112ATotal,
+                } : undefined,
+                SaleofAssetNADtls: {
+                  SaleValue:       0,
+                  CostAcquisition: 0,
+                  LowDeductions:   0,
+                  CapGain:         ltcgOtherTotal,
+                },
+                NRIProvisoSec48:        { NRITransactionSec48: 0 },
+                NRIOnSec112and115:      { NRISecuritiesIncome: 0, NRISecuritiesTax: 0 },
+                NRISaleOfEquityShareUs112A: { NRIEquityIncome: 0, NRIEquityTax: 0 },
+                NRISaleofForeignAsset:  { NRIForeignAssetIncome: 0, NRIForeignAssetTax: 0 },
+                TotalAmtDeemedLtcg:     0,
+                PassThrIncNatureLTCG:   0,
+                TotalAmtNotTaxUsDTAALtcg: 0,
+                TotalAmtTaxUsDTAALtcg:  0,
+                TotalLTCG:              ltcg112ATotal + ltcgOtherTotal,
+              },
+              SumOfCGIncm:        totalCG,
+              IncmFromVDATrnsf:   0,
+              TotScheduleCGFor23: totalCG,
+            },
+            Schedule112A: ltcg112AEnts.length > 0 ? {
+              Schedule112ADtls: ltcg112AEnts.map(e => ({
+                ISIN:            e.ISIN ?? '',
+                ShareUnitName:   e.ShareOrUnitName ?? '',
+                FMVPerShareUnit: toInt(e.FMVasOn31Jan2018),
+                SaleValue:       toInt(e.SalesValue),
+                PurchaseCost:    toInt(e.PurchaseCost),
+                Expenditure:     toInt(e.Expenditure),
+                GainLoss:        toInt(e.GainLoss),
+              })),
+              TotalLTCG112A: ltcg112ATotal,
+            } : undefined,
+          };
+        })(),
+
+        // ── ScheduleGST ──────────────────────────────────────────────────
+        ScheduleGST: rd.presumptiveIncome?.ScheduleGST?.length
+          ? {
+              GSTNDtls: rd.presumptiveIncome.ScheduleGST.map(g => ({
+                GSTINNo:             g.GSTINNo,
+                GrossRcptsAsPerGST:  toInt(g.GrossRcptsAsPerGST),
+                ...(g.TurnoverAsPerGST != null ? { TurnoverAsPerGST: toInt(g.TurnoverAsPerGST) } : {}),
+              })),
+              TotGrossRcptsAsPerGST: rd.presumptiveIncome.ScheduleGST.reduce((s, g) => s + toInt(g.GrossRcptsAsPerGST), 0),
             }
           : undefined,
+
+        // ── ScheduleAL — Assets & Liabilities (if total income > ₹50L) ──
+        ...(totalIncome > 5_000_000 && rd.presumptiveIncome?.ScheduleAL ? (() => {
+          const al = rd.presumptiveIncome.ScheduleAL!;
+          return {
+            ScheduleAL: {
+              ImmovableAssets:     toInt(al.ImmovableAssets),
+              MovableAssets:       toInt(al.MovableAssets),
+              CashInHand:          toInt(al.CashInHand),
+              BankDeposits:        toInt(al.BankDeposits),
+              SharesAndSecurities: toInt(al.SharesAndSecurities),
+              InsurancePolicies:   toInt(al.InsurancePolicies),
+              TotalAssets:         toInt(al.ImmovableAssets) + toInt(al.MovableAssets) + toInt(al.CashInHand) + toInt(al.BankDeposits) + toInt(al.SharesAndSecurities) + toInt(al.InsurancePolicies),
+              LoansTaken:          toInt(al.LoansTaken),
+              OtherLiabilities:    toInt(al.OtherLiabilities),
+              TotalLiabilities:    toInt(al.LoansTaken) + toInt(al.OtherLiabilities),
+            },
+          };
+        })() : {}),
+
         LTCG112A: rd.ltcg112A?.Entries.length
           ? {
               LTCG112ADtls: rd.ltcg112A.Entries.map((e) => ({

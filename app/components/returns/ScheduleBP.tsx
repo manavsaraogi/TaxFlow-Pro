@@ -11,9 +11,10 @@ interface Business44ADEntry {
   id: string;
   tradeName: string;
   natureCode: string;
-  turnover: number;
+  turnoverCash: number;
+  turnoverDigital: number;
   presumptiveIncome: number;
-  isDigital: boolean;
+  gstin: string;
 }
 
 interface Profession44ADAEntry {
@@ -27,10 +28,18 @@ interface Profession44ADAEntry {
 interface GoodsCarriage44AEEntry {
   id: string;
   vehicleRegNo: string;
+  ownedOrHired: 'OWN' | 'HRD';
+  dateOfPurchase: string;
   isHeavy: boolean;
   ownedMonths: number;
   grossWeight: number;
   presumptiveIncome: number;
+}
+
+interface GSTEntry {
+  id: string;
+  gstin: string;
+  grossReceiptsAsPerGST: number;
 }
 
 interface Form10IEA {
@@ -43,6 +52,7 @@ interface BPState {
   business44AD: Business44ADEntry[];
   profession44ADA: Profession44ADAEntry[];
   goodsCarriage44AE: GoodsCarriage44AEEntry[];
+  gstEntries: GSTEntry[];
   form10IEA: Form10IEA;
 }
 
@@ -53,8 +63,13 @@ function defaultState(): BPState {
     business44AD: [],
     profession44ADA: [],
     goodsCarriage44AE: [],
+    gstEntries: [],
     form10IEA: { optOut: false, ackNo: '', dateOfFiling: '' },
   };
+}
+
+function computeBiz44ADIncome(e: Business44ADEntry): number {
+  return Math.round(e.turnoverCash * 0.08 + e.turnoverDigital * 0.06);
 }
 
 function totalPresumptive(state: BPState): number {
@@ -63,6 +78,10 @@ function totalPresumptive(state: BPState): number {
     state.profession44ADA.reduce((s, e) => s + e.presumptiveIncome, 0) +
     state.goodsCarriage44AE.reduce((s, e) => s + e.presumptiveIncome, 0)
   );
+}
+
+function bizTurnover(e: Business44ADEntry): number {
+  return e.turnoverCash + e.turnoverDigital;
 }
 
 function fmt(n: number) {
@@ -347,6 +366,7 @@ export default function ScheduleBP({ returnId, returnData, regime, onSaved, setD
       business44AD:      parseArr(pi.Business44AD      ?? pi.business44ADJson),
       profession44ADA:   parseArr(pi.Profession44ADA   ?? pi.profession44ADAJson),
       goodsCarriage44AE: parseArr(pi.GoodsCarriage44AE ?? pi.goodsCarriage44AEJson),
+      gstEntries:        parseArr(pi.GSTEntries        ?? pi.gstEntriesJson),
       form10IEA: parseObj(
         pi.Form10IEA ?? pi.form10IEAJson,
         { optOut: false, ackNo: '', dateOfFiling: '' }
@@ -373,6 +393,7 @@ export default function ScheduleBP({ returnId, returnData, regime, onSaved, setD
         business44ADJson:      JSON.stringify(s.business44AD),
         profession44ADAJson:   JSON.stringify(s.profession44ADA),
         goodsCarriage44AEJson: JSON.stringify(s.goodsCarriage44AE),
+        gstEntriesJson:        JSON.stringify(s.gstEntries),
         totalPresumptive:      total,
         form10IEA:             s.form10IEA,
       }),
@@ -413,9 +434,9 @@ export default function ScheduleBP({ returnId, returnData, regime, onSaved, setD
   }
 
   const totalPI = totalPresumptive(state);
-  const biz44 = state.business44AD.reduce((s, e) => s + e.presumptiveIncome, 0);
+  const biz44  = state.business44AD.reduce((s, e) => s + e.presumptiveIncome, 0);
   const prof44 = state.profession44ADA.reduce((s, e) => s + e.presumptiveIncome, 0);
-  const gc44 = state.goodsCarriage44AE.reduce((s, e) => s + e.presumptiveIncome, 0);
+  const gc44   = state.goodsCarriage44AE.reduce((s, e) => s + e.presumptiveIncome, 0);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -460,7 +481,7 @@ export default function ScheduleBP({ returnId, returnData, regime, onSaved, setD
             onAdd={() => update(p => ({
               ...p,
               business44AD: [...p.business44AD, {
-                id: uid(), tradeName: '', natureCode: '', turnover: 0, presumptiveIncome: 0, isDigital: true,
+                id: uid(), tradeName: '', natureCode: '', turnoverCash: 0, turnoverDigital: 0, presumptiveIncome: 0, gstin: '',
               }],
             }))}
           />
@@ -475,94 +496,74 @@ export default function ScheduleBP({ returnId, returnData, regime, onSaved, setD
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               {state.business44AD.map((e, i) => {
-                const rate = e.isDigital ? 0.06 : 0.08;
-                const computed = Math.round(e.turnover * rate);
+                const computed = computeBiz44ADIncome(e);
+                const total = bizTurnover(e);
                 return (
                   <div key={e.id} style={{
                     background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
-                    borderRadius: '8px', padding: '14px 16px',
-                    display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: '12px', alignItems: 'end',
+                    borderRadius: '8px', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '12px',
                   }}>
-                    {/* Trade name */}
-                    <div>
-                      <FieldLabel>Trade / Business Name</FieldLabel>
-                      <input
-                        className="form-input"
-                        value={e.tradeName}
-                        placeholder="e.g. Sharma Traders"
-                        onChange={ev => updateBiz(i, { tradeName: ev.target.value })}
-                      />
-                      <FieldMessage field={`bp.44ad.${i}.tradeName`} />
-                    </div>
-
-                    {/* Nature code dropdown */}
-                    <div>
-                      <FieldLabel>Nature of Business</FieldLabel>
-                      <CodeSelect
-                        value={e.natureCode}
-                        codes={BUSINESS_CODES_44AD}
-                        onChange={(code) => updateBiz(i, { natureCode: code })}
-                      />
-                      <FieldMessage field={`bp.44ad.${i}.natureCode`} />
-                    </div>
-
-                    {/* Turnover + mode */}
-                    <div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                        <FieldLabel>Turnover</FieldLabel>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer', fontSize: '11px', color: 'var(--text-muted)' }}>
-                          <input
-                            type="checkbox"
-                            checked={e.isDigital}
-                            onChange={ev => {
-                              const isDigital = ev.target.checked;
-                              const pi = Math.round(e.turnover * (isDigital ? 0.06 : 0.08));
-                              updateBiz(i, { isDigital, presumptiveIncome: pi });
-                            }}
-                            style={{ accentColor: 'var(--brand-primary)' }}
-                          />
-                          <span style={{ color: e.isDigital ? 'var(--status-success)' : 'var(--text-muted)' }}>
-                            {e.isDigital ? 'Digital (6%)' : 'Cash (8%)'}
-                          </span>
-                        </label>
+                    {/* Row 1: name, nature, GSTIN */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+                      <div>
+                        <FieldLabel>Trade / Business Name</FieldLabel>
+                        <input className="form-input" value={e.tradeName} placeholder="e.g. Sharma Traders"
+                          onChange={ev => updateBiz(i, { tradeName: ev.target.value })} />
+                        <FieldMessage field={`bp.44ad.${i}.tradeName`} />
                       </div>
-                      <AmtInput
-                        value={e.turnover}
-                        onChange={turnover => {
-                          const pi = Math.round(turnover * rate);
-                          updateBiz(i, { turnover, presumptiveIncome: pi });
-                        }}
-                      />
-                      <FieldMessage field={`bp.44ad.${i}.turnover`} />
+                      <div>
+                        <FieldLabel>Nature of Business</FieldLabel>
+                        <CodeSelect value={e.natureCode} codes={BUSINESS_CODES_44AD}
+                          onChange={(code) => updateBiz(i, { natureCode: code })} />
+                        <FieldMessage field={`bp.44ad.${i}.natureCode`} />
+                      </div>
+                      <div>
+                        <FieldLabel>GSTIN (if registered)</FieldLabel>
+                        <input className="form-input" value={e.gstin} placeholder="e.g. 29ABCDE1234F1Z5"
+                          style={{ fontFamily: 'var(--font-mono)', textTransform: 'uppercase' }}
+                          onChange={ev => updateBiz(i, { gstin: ev.target.value.toUpperCase() })} />
+                      </div>
                     </div>
-
-                    {/* Presumptive income */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: '160px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <FieldLabel>Presumptive Income</FieldLabel>
-                        {e.turnover > 0 && e.presumptiveIncome !== computed && (
-                          <button
-                            type="button"
-                            onClick={() => updateBiz(i, { presumptiveIncome: computed })}
-                            style={{ fontSize: '9px', background: 'none', border: 'none', color: 'var(--brand-text)', cursor: 'pointer', padding: 0 }}
-                            title={`Reset to computed: ${fmt(computed)}`}
-                          >
-                            ↺ {fmt(computed)}
-                          </button>
-                        )}
+                    {/* Row 2: cash turnover, digital turnover, presumptive income */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: '12px', alignItems: 'end' }}>
+                      <div>
+                        <FieldLabel>Cash Receipts — 8%</FieldLabel>
+                        <AmtInput value={e.turnoverCash} onChange={v => {
+                          const pi = Math.round(v * 0.08 + e.turnoverDigital * 0.06);
+                          updateBiz(i, { turnoverCash: v, presumptiveIncome: pi });
+                        }} />
+                        <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: 2 }}>
+                          {e.turnoverCash > 0 ? `8% = ${fmt(Math.round(e.turnoverCash * 0.08))}` : 'Receipts by cash/cheque'}
+                        </div>
+                        <FieldMessage field={`bp.44ad.${i}.turnoverCash`} />
                       </div>
-                      <AmtInput
-                        value={e.presumptiveIncome}
-                        onChange={v => updateBiz(i, { presumptiveIncome: v })}
-                      />
-                      <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
-                        {e.turnover > 0 ? `${(rate * 100).toFixed(0)}% of ₹${e.turnover.toLocaleString('en-IN')} = ${fmt(computed)}` : 'Enter turnover to auto-compute'}
+                      <div>
+                        <FieldLabel>Digital Receipts — 6%</FieldLabel>
+                        <AmtInput value={e.turnoverDigital} onChange={v => {
+                          const pi = Math.round(e.turnoverCash * 0.08 + v * 0.06);
+                          updateBiz(i, { turnoverDigital: v, presumptiveIncome: pi });
+                        }} />
+                        <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: 2 }}>
+                          {e.turnoverDigital > 0 ? `6% = ${fmt(Math.round(e.turnoverDigital * 0.06))}` : 'Bank / digital receipts'}
+                        </div>
                       </div>
-                      <button
-                        className="btn btn-ghost btn-sm"
-                        style={{ color: 'var(--status-error)', padding: '2px 6px', marginTop: '4px', alignSelf: 'flex-end' }}
-                        onClick={() => update(p => ({ ...p, business44AD: p.business44AD.filter((_, j) => j !== i) }))}
-                      >
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <FieldLabel>Presumptive Income</FieldLabel>
+                          {total > 0 && e.presumptiveIncome !== computed && (
+                            <button type="button" onClick={() => updateBiz(i, { presumptiveIncome: computed })}
+                              style={{ fontSize: '9px', background: 'none', border: 'none', color: 'var(--brand-text)', cursor: 'pointer', padding: 0 }}>
+                              ↺ {fmt(computed)}
+                            </button>
+                          )}
+                        </div>
+                        <AmtInput value={e.presumptiveIncome} onChange={v => updateBiz(i, { presumptiveIncome: v })} />
+                        <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: 2 }}>
+                          {total > 0 ? `Total turnover ${fmt(total)} · auto = ${fmt(computed)}` : 'Enter turnover above'}
+                        </div>
+                      </div>
+                      <button className="btn btn-ghost btn-sm" style={{ color: 'var(--status-error)', padding: '4px 8px' }}
+                        onClick={() => update(p => ({ ...p, business44AD: p.business44AD.filter((_, j) => j !== i) }))}>
                         Remove
                       </button>
                     </div>
@@ -702,7 +703,7 @@ export default function ScheduleBP({ returnId, returnData, regime, onSaved, setD
             onAdd={() => update(p => ({
               ...p,
               goodsCarriage44AE: [...p.goodsCarriage44AE, {
-                id: uid(), vehicleRegNo: '', isHeavy: false, ownedMonths: 12, grossWeight: 0, presumptiveIncome: 0,
+                id: uid(), vehicleRegNo: '', ownedOrHired: 'OWN' as const, dateOfPurchase: '', isHeavy: false, ownedMonths: 12, grossWeight: 0, presumptiveIncome: 0,
               }],
             }))}
           />
@@ -723,104 +724,87 @@ export default function ScheduleBP({ returnId, returnData, regime, onSaved, setD
                 return (
                   <div key={e.id} style={{
                     background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
-                    borderRadius: '8px', padding: '14px 16px',
-                    display: 'grid', gridTemplateColumns: '1fr 120px 130px 130px auto', gap: '12px', alignItems: 'end',
+                    borderRadius: '8px', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '12px',
                   }}>
-                    {/* Reg no */}
-                    <div>
-                      <FieldLabel>Vehicle Reg. No.</FieldLabel>
-                      <input
-                        className="form-input"
-                        value={e.vehicleRegNo}
-                        placeholder="e.g. MH12AB1234"
-                        onChange={ev => updateGC(i, { vehicleRegNo: ev.target.value })}
-                        style={{ fontFamily: 'var(--font-mono)', textTransform: 'uppercase' }}
-                      />
+                    {/* Row 1: Reg No, Owned/Hired, Date of Purchase, Heavy type */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 140px 150px 160px', gap: '12px', alignItems: 'end' }}>
+                      <div>
+                        <FieldLabel>Vehicle Reg. No.</FieldLabel>
+                        <input className="form-input" value={e.vehicleRegNo} placeholder="e.g. MH12AB1234"
+                          onChange={ev => updateGC(i, { vehicleRegNo: ev.target.value.toUpperCase() })}
+                          style={{ fontFamily: 'var(--font-mono)', textTransform: 'uppercase' }} />
+                      </div>
+                      <div>
+                        <FieldLabel>Owned / Hired</FieldLabel>
+                        <select className="form-input" value={e.ownedOrHired}
+                          onChange={ev => updateGC(i, { ownedOrHired: ev.target.value as 'OWN' | 'HRD' })}
+                          style={{ fontSize: '13px' }}>
+                          <option value="OWN">Owned</option>
+                          <option value="HRD">Hired</option>
+                        </select>
+                      </div>
+                      <div>
+                        <FieldLabel>Date of Purchase ★</FieldLabel>
+                        <input type="date" className="form-input" value={e.dateOfPurchase}
+                          style={{ borderColor: !e.dateOfPurchase ? 'var(--error)' : undefined }}
+                          onChange={ev => updateGC(i, { dateOfPurchase: ev.target.value })} />
+                      </div>
+                      <div>
+                        <FieldLabel>Vehicle Type</FieldLabel>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '7px', cursor: 'pointer',
+                          padding: '7px 10px', background: 'var(--bg-base)',
+                          border: '1px solid var(--border-subtle)', borderRadius: '5px', fontSize: '12px' }}>
+                          <input type="checkbox" checked={e.isHeavy} style={{ accentColor: 'var(--brand-primary)' }}
+                            onChange={ev => {
+                              const isHeavy = ev.target.checked;
+                              const pi = isHeavy ? e.ownedMonths * 1000 * (e.grossWeight || 16) : e.ownedMonths * 7500;
+                              updateGC(i, { isHeavy, presumptiveIncome: pi });
+                            }} />
+                          <span>{e.isHeavy ? 'Heavy (≥12T) — ₹1,000/T/mo' : 'Light/Medium — ₹7,500/mo'}</span>
+                        </label>
+                      </div>
                     </div>
-
-                    {/* Heavy toggle */}
-                    <div>
-                      <FieldLabel>Type</FieldLabel>
-                      <label style={{
-                        display: 'flex', alignItems: 'center', gap: '7px', cursor: 'pointer',
-                        padding: '7px 10px', background: 'var(--bg-base)',
-                        border: '1px solid var(--border-subtle)', borderRadius: '5px', fontSize: '12px',
-                      }}>
-                        <input
-                          type="checkbox"
-                          checked={e.isHeavy}
+                    {/* Row 2: Weight, Months, Income */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '160px 160px 1fr auto', gap: '12px', alignItems: 'end' }}>
+                      <div style={{ opacity: e.isHeavy ? 1 : 0.4, pointerEvents: e.isHeavy ? 'auto' : 'none' }}>
+                        <FieldLabel>Gross Weight (tonnes)</FieldLabel>
+                        <input type="number" min={12} className="form-input" value={e.grossWeight || ''}
+                          placeholder="e.g. 18" style={{ fontFamily: 'var(--font-mono)' }}
                           onChange={ev => {
-                            const isHeavy = ev.target.checked;
-                            const pi = isHeavy ? e.ownedMonths * 1000 * (e.grossWeight || 16) : e.ownedMonths * 7500;
-                            updateGC(i, { isHeavy, presumptiveIncome: pi });
-                          }}
-                          style={{ accentColor: 'var(--brand-primary)' }}
-                        />
-                        <span>{e.isHeavy ? 'Heavy (≥12T)' : 'Light / Medium'}</span>
-                      </label>
-                    </div>
-
-                    {/* Weight (heavy only) */}
-                    <div style={{ opacity: e.isHeavy ? 1 : 0.4, pointerEvents: e.isHeavy ? 'auto' : 'none' }}>
-                      <FieldLabel>Gross Weight (tonnes)</FieldLabel>
-                      <input
-                        type="number" min={12}
-                        className="form-input"
-                        value={e.grossWeight || ''}
-                        onChange={ev => {
-                          const grossWeight = Number(ev.target.value);
-                          const pi = e.isHeavy ? e.ownedMonths * 1000 * grossWeight : e.ownedMonths * 7500;
-                          updateGC(i, { grossWeight, presumptiveIncome: pi });
-                        }}
-                        placeholder="e.g. 18"
-                        style={{ fontFamily: 'var(--font-mono)' }}
-                      />
-                    </div>
-
-                    {/* Months */}
-                    <div>
-                      <FieldLabel>Months Owned</FieldLabel>
-                      <input
-                        type="number" min={1} max={12}
-                        className="form-input"
-                        value={e.ownedMonths || ''}
-                        onChange={ev => {
-                          const months = Math.min(12, Math.max(1, Number(ev.target.value)));
-                          const pi = e.isHeavy ? months * 1000 * (e.grossWeight || 16) : months * 7500;
-                          updateGC(i, { ownedMonths: months, presumptiveIncome: pi });
-                        }}
-                        style={{ fontFamily: 'var(--font-mono)' }}
-                      />
-                    </div>
-
-                    {/* Presumptive income */}
-                    <div style={{ minWidth: '160px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <FieldLabel>Presumptive Income</FieldLabel>
-                        {e.presumptiveIncome !== computed && (
-                          <button
-                            type="button"
-                            onClick={() => updateGC(i, { presumptiveIncome: computed })}
-                            style={{ fontSize: '9px', background: 'none', border: 'none', color: 'var(--brand-text)', cursor: 'pointer', padding: 0 }}
-                          >
-                            ↺ {fmt(computed)}
-                          </button>
-                        )}
+                            const grossWeight = Number(ev.target.value);
+                            const pi = e.isHeavy ? e.ownedMonths * 1000 * grossWeight : e.ownedMonths * 7500;
+                            updateGC(i, { grossWeight, presumptiveIncome: pi });
+                          }} />
                       </div>
-                      <AmtInput
-                        value={e.presumptiveIncome}
-                        onChange={v => updateGC(i, { presumptiveIncome: v })}
-                      />
-                      <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                        {e.isHeavy
-                          ? `${e.ownedMonths} mo × ₹1,000 × ${e.grossWeight || '?'}T = ${fmt(computed)}`
-                          : `${e.ownedMonths} mo × ₹7,500 = ${fmt(computed)}`}
+                      <div>
+                        <FieldLabel>Months in Use</FieldLabel>
+                        <input type="number" min={1} max={12} className="form-input" value={e.ownedMonths || ''}
+                          style={{ fontFamily: 'var(--font-mono)' }}
+                          onChange={ev => {
+                            const months = Math.min(12, Math.max(1, Number(ev.target.value)));
+                            const pi = e.isHeavy ? months * 1000 * (e.grossWeight || 16) : months * 7500;
+                            updateGC(i, { ownedMonths: months, presumptiveIncome: pi });
+                          }} />
                       </div>
-                      <button
-                        className="btn btn-ghost btn-sm"
-                        style={{ color: 'var(--status-error)', padding: '2px 6px', marginTop: '4px', display: 'block' }}
-                        onClick={() => update(p => ({ ...p, goodsCarriage44AE: p.goodsCarriage44AE.filter((_, j) => j !== i) }))}
-                      >
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <FieldLabel>Presumptive Income</FieldLabel>
+                          {e.presumptiveIncome !== computed && (
+                            <button type="button" onClick={() => updateGC(i, { presumptiveIncome: computed })}
+                              style={{ fontSize: '9px', background: 'none', border: 'none', color: 'var(--brand-text)', cursor: 'pointer', padding: 0 }}>
+                              ↺ {fmt(computed)}
+                            </button>
+                          )}
+                        </div>
+                        <AmtInput value={e.presumptiveIncome} onChange={v => updateGC(i, { presumptiveIncome: v })} />
+                        <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: 2 }}>
+                          {e.isHeavy
+                            ? `${e.ownedMonths} mo × ₹1,000 × ${e.grossWeight || '?'}T = ${fmt(computed)}`
+                            : `${e.ownedMonths} mo × ₹7,500 = ${fmt(computed)}`}
+                        </div>
+                      </div>
+                      <button className="btn btn-ghost btn-sm" style={{ color: 'var(--status-error)', padding: '4px 8px' }}
+                        onClick={() => update(p => ({ ...p, goodsCarriage44AE: p.goodsCarriage44AE.filter((_, j) => j !== i) }))}>
                         Remove
                       </button>
                     </div>
@@ -870,6 +854,46 @@ export default function ScheduleBP({ returnId, returnData, regime, onSaved, setD
             </div>
           </div>
         )}
+
+        {/* ── Schedule GST ── */}
+        <section>
+          <SectionHeader
+            badge="GST"
+            title="GST Registration"
+            hint="Mandatory for GST-registered businesses — GSTIN + gross receipts as per GST returns"
+            onAdd={() => update(p => ({
+              ...p,
+              gstEntries: [...p.gstEntries, { id: uid(), gstin: '', grossReceiptsAsPerGST: 0 }],
+            }))}
+          />
+          {state.gstEntries.length === 0 ? (
+            <div style={{ padding: '16px', textAlign: 'center', border: '1px dashed var(--border-subtle)', borderRadius: '8px', color: 'var(--text-muted)', fontSize: '13px' }}>
+              Not GST registered? Leave this blank. Otherwise click <strong>+ Add Entry</strong> for each GSTIN.
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {state.gstEntries.map((g, i) => (
+                <div key={g.id} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: '12px', alignItems: 'end',
+                  background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: '8px', padding: '12px 14px' }}>
+                  <div>
+                    <FieldLabel>GSTIN ★</FieldLabel>
+                    <input className="form-input" value={g.gstin} placeholder="e.g. 29ABCDE1234F1Z5"
+                      style={{ fontFamily: 'var(--font-mono)', textTransform: 'uppercase',
+                        borderColor: !g.gstin ? 'var(--error)' : undefined }}
+                      onChange={ev => update(p => ({ ...p, gstEntries: p.gstEntries.map((x, j) => j === i ? { ...x, gstin: ev.target.value.toUpperCase() } : x) }))} />
+                  </div>
+                  <AmtInput label="Gross Receipts as per GST ★"
+                    value={g.grossReceiptsAsPerGST}
+                    onChange={v => update(p => ({ ...p, gstEntries: p.gstEntries.map((x, j) => j === i ? { ...x, grossReceiptsAsPerGST: v } : x) }))} />
+                  <button className="btn btn-ghost btn-sm" style={{ color: 'var(--status-error)', padding: '4px 8px' }}
+                    onClick={() => update(p => ({ ...p, gstEntries: p.gstEntries.filter((_, j) => j !== i) }))}>
+                    Remove
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
 
         {/* ── Form 10-IEA ── */}
         <section>
