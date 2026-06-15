@@ -61,25 +61,52 @@ export async function POST(request: NextRequest) {
       },
     });
   } else {
-    client = await prisma.client.create({
-      data: {
-        firmId: auth.firmId,
-        pan: parsed.pan.toUpperCase(),
-        fullName: parsed.fullName || parsed.pan,
-        assesseeType: 'INDIVIDUAL',
-        dateOfBirth: parsed.dob ? new Date(parsed.dob) : null,
-        mobileNumber: parsed.mobile || null,
-        email: parsed.email || null,
-        address: parsed.address || null,
-        city: parsed.city || null,
-        stateCode: parsed.stateCode || null,
-        pinCode: parsed.pinCode ? Number(parsed.pinCode) : null,
-        aadhaarNumber: parsed.aadhaar || null,
-        residentialStatus: (parsed.residentialStatus as any) || 'RES',
-        taxRegimePreference: parsed.regime || 'NEW',
-        portalUsername: parsed.pan.toUpperCase(),
-      },
-    });
+    try {
+      client = await prisma.client.create({
+        data: {
+          firmId: auth.firmId,
+          pan: parsed.pan.toUpperCase(),
+          fullName: parsed.fullName || parsed.pan,
+          assesseeType: 'INDIVIDUAL',
+          dateOfBirth: parsed.dob ? new Date(parsed.dob) : null,
+          mobileNumber: parsed.mobile || null,
+          email: parsed.email || null,
+          address: parsed.address || null,
+          city: parsed.city || null,
+          stateCode: parsed.stateCode || null,
+          pinCode: parsed.pinCode ? Number(parsed.pinCode) : null,
+          aadhaarNumber: parsed.aadhaar || null,
+          residentialStatus: (parsed.residentialStatus as any) || 'RES',
+          taxRegimePreference: parsed.regime || 'NEW',
+          portalUsername: parsed.pan.toUpperCase(),
+        },
+      });
+    } catch (e: any) {
+      if (e?.code === 'P2002') {
+        // Race condition — another request created the record; find and update it
+        client = await prisma.client.findFirst({
+          where: { pan: parsed.pan.toUpperCase(), firmId: auth.firmId },
+        });
+        if (!client) throw e;
+        client = await prisma.client.update({
+          where: { id: client.id },
+          data: {
+            fullName: parsed.fullName || client.fullName,
+            dateOfBirth: parsed.dob ? new Date(parsed.dob) : client.dateOfBirth,
+            mobileNumber: parsed.mobile || client.mobileNumber,
+            email: parsed.email || client.email,
+            address: parsed.address || client.address,
+            city: parsed.city || client.city,
+            stateCode: parsed.stateCode || client.stateCode,
+            pinCode: parsed.pinCode ? Number(parsed.pinCode) : client.pinCode,
+            aadhaarNumber: parsed.aadhaar || client.aadhaarNumber,
+            residentialStatus: (parsed.residentialStatus as any) || client.residentialStatus,
+          },
+        });
+      } else {
+        throw e;
+      }
+    }
   }
 
   if (portalPasswordEnc) {

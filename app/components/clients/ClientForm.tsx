@@ -420,7 +420,7 @@ export default function ClientForm({ clientId, onSuccess, onCancel }: ClientForm
             setPrefillLog(prev => [...prev, '✓ Details imported! Creating client…']);
 
             // Auto-submit to create the client
-            await autoCreateClient(mapped, password);
+            await autoCreateClient(mapped, password, prefill);
 
           } else if (s.status === 'error') {
             clearInterval(pollInterval);
@@ -436,36 +436,15 @@ export default function ClientForm({ clientId, onSuccess, onCancel }: ClientForm
     }
   }
 
-  async function autoCreateClient(mapped: Partial<ClientFormData>, password: string) {
+  async function autoCreateClient(mapped: Partial<ClientFormData>, password: string, rawPrefill?: unknown) {
     const pan = (mapped.pan || form.pan).toUpperCase();
     const fullName = mapped.fullName || form.fullName;
-    const dateOfBirth = mapped.dateOfBirth || form.dateOfBirth;
-    const address = mapped.address || form.address || 'To be updated';
-    const city = mapped.city || form.city || 'To be updated';
-
-    const payload = {
-      pan,
-      assesseeType: mapped.assesseeType ?? form.assesseeType,
-      fullName,
-      dateOfBirth: dateOfBirth || undefined,
-      residentialStatus: mapped.residentialStatus ?? form.residentialStatus,
-      employerCategory: form.employerCategory,
-      mobileNumber: mapped.mobileNumber || form.mobileNumber || undefined,
-      email: mapped.email || form.email || undefined,
-      address,
-      city,
-      stateCode: mapped.stateCode || form.stateCode,
-      pinCode: (mapped.pinCode || form.pinCode) ? parseInt(mapped.pinCode || form.pinCode) : undefined,
-      aadhaarNumber: mapped.aadhaarNumber || form.aadhaarNumber || undefined,
-      portalUsername: pan,
-      portalPassword: password,
-    };
 
     try {
-      const res = await fetch('/api/clients', {
+      const res = await fetch('/api/clients/from-prefill', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ prefill: rawPrefill, password }),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -473,7 +452,7 @@ export default function ClientForm({ clientId, onSuccess, onCancel }: ClientForm
         return;
       }
       setPrefillLog(prev => [...prev, `✓ Client created: ${fullName} (${pan})`]);
-      setTimeout(() => onSuccess(json.data?.id ?? 0), 1000);
+      setTimeout(() => onSuccess(json.data?.clientId ?? json.data?.id ?? 0), 1000);
     } catch (e: any) {
       setPrefillError('Data imported but client creation failed: ' + e.message);
     }
