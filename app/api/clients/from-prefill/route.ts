@@ -30,8 +30,7 @@ export async function POST(request: NextRequest) {
   // ── 1. Parse prefill JSON ──────────────────────────────────────────────────
   const parsed = parsePrefillJson(body.prefill);
   if (!parsed.pan) {
-    const preview = JSON.stringify(body.prefill).slice(0, 300);
-    return NextResponse.json({ error: `Could not extract PAN. Keys: ${Object.keys(body.prefill ?? {}).join(', ')}. Preview: ${preview}` }, { status: 422 });
+    return NextResponse.json({ error: 'Could not extract PAN from prefill JSON' }, { status: 422 });
   }
 
   // ── 2. Upsert client ───────────────────────────────────────────────────────
@@ -233,6 +232,10 @@ function parsePrefillJson(raw: unknown): ParsedPrefill {
 
   // Unwrap outer ITR wrapper / API response envelope
   let obj: any = raw;
+  // IT portal wraps prefill in { content: "<JSON string>", responseCode: 0, ... }
+  if (typeof obj?.content === 'string') {
+    try { obj = JSON.parse(obj.content); } catch {}
+  }
   // Unwrap common API envelope: { data: {...}, status: "S" }
   if (obj?.data && typeof obj.data === 'object' && !Array.isArray(obj.data)) obj = obj.data;
   if (obj?.ITR) obj = obj.ITR;
