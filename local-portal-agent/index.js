@@ -90,7 +90,7 @@ app.post('/fetch-26as', async (req, res) => {
   const jobRef = current26ASJob;
 
   fetch26AS({
-    pan, password, dob: dob || null, assessmentYear: assessmentYear || '2025-26',
+    pan, password, dob: dob || null, assessmentYear: assessmentYear || currentAY(),
     onStatus: (msg) => { console.log('[26as]', msg); jobRef.log.push(msg); },
   }).then((data) => {
     jobRef.status = 'done'; jobRef.result = data;

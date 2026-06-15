@@ -263,6 +263,7 @@ model Return {
   refundDue         Int? @default(0)
   portalData        String?
   assetsLiabJson    String?
+  ltcgOtherJson     String?
 
   documents         Document[]
   validationResults ValidationResult[]

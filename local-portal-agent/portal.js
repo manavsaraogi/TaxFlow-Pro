@@ -85,6 +85,22 @@ async function fetchPortalData({ pan, password, dob, assessmentYear, onStatus })
   const captured = { ais: null, tis: null, form26AS: null };
   const page = await context.newPage();
 
+  // Auto-dismiss the IT Portal logout confirmation popup whenever it appears.
+  page.addLocatorHandler(
+    page.getByText('Are you sure you want to Logout?'),
+    async () => {
+      log('Auto-dismiss: Logout popup detected — clicking No...');
+      await page.getByRole('button', { name: 'No' }).click().catch(async () => {
+        await page.evaluate(() => {
+          const btn = [...document.querySelectorAll('button')]
+            .find(b => /^no$/i.test(b.textContent.trim()) && b.getBoundingClientRect().width > 0);
+          if (btn) btn.click();
+        });
+      });
+      await page.waitForTimeout(800);
+    }
+  ).catch(() => null);
+
   try {
     // ── LOGIN ────────────────────────────────────────────────────────────────
     log('Opening portal...');
@@ -459,6 +475,37 @@ async function fetchAIS(page, context, { assessmentYear, pan, dob }, captured, l
   }
 }
 
+// Dismiss the IT Portal's "Are you sure you want to Logout?" confirmation dialog.
+// This popup appears when the SPA detects a Back/Forward/Refresh-style navigation.
+async function dismissLogoutPopup(page, log) {
+  try {
+    const noBtn = await page.$('button:has-text("No"), button:has-text("NO"), button:has-text("no")');
+    if (noBtn && await noBtn.isVisible().catch(() => false)) {
+      log('Logout confirmation popup detected — clicking No...');
+      await noBtn.click();
+      await page.waitForTimeout(1000);
+      return true;
+    }
+  } catch {}
+  return false;
+}
+
+// Navigate to a hash route within the IT Portal without triggering the logout popup.
+// page.goto() causes a full navigation which the SPA treats as Back/Forward/Refresh.
+// Using JS location.hash avoids that.
+async function portalHashNav(page, hash, log) {
+  log('Hash-navigating to ' + hash + '...');
+  await page.evaluate((h) => {
+    // The portal is a SPA — change hash without full reload
+    if (window.location.hash !== h) window.location.hash = h;
+  }, hash).catch(() => null);
+  await page.waitForTimeout(2000);
+
+  // If the popup appeared anyway (sometimes happens), dismiss it
+  await dismissLogoutPopup(page, log);
+  await page.waitForTimeout(1000);
+}
+
 async function waitDashboard(page, log) {
   // Fast path: wait for URL to match dashboard pattern
   const urlReached = await page.waitForURL(
@@ -492,39 +539,74 @@ async function waitDashboard(page, log) {
 }
 
 // Extract 26AS text from a TRACES-downloaded ZIP.
-// TRACES ZIP password = PAN (uppercase) + DOB as DDMMYYYY, e.g. "JOMPS8827A06051999"
+// TRACES ZIP password = DOB in ddmmyyyy format (e.g. "06051999" for 6-May-1999)
+// dob may arrive as "1999-05-06" (ISO) or "06051999" (ddmmyyyy) — normalise below.
 function extract26ASFromZip(zipPath, pan, dob, log) {
+  // DOB arrives as ddmmyyyy from portal-credentials API (e.g. "06051999")
+  // Only convert if it looks like ISO yyyy-mm-dd or yyyymmdd
+  let dobRaw = (dob || '').replace(/\D/g, '');
+  if (dobRaw.length === 8 && /^(19|20)\d{2}/.test(dobRaw)) {
+    // yyyymmdd → ddmmyyyy
+    dobRaw = dobRaw.slice(6, 8) + dobRaw.slice(4, 6) + dobRaw.slice(0, 4);
+  }
+  log('ZIP password: ' + dobRaw);
+
+  // Strategy 1: 7-Zip via 7zip-bin (handles AES-256 encrypted ZIPs)
   try {
-    const zipPassword = (pan || '').toUpperCase() + (dob || '');
+    const sevenZip = require('7zip-bin').path7za;
+    if (sevenZip && dobRaw) {
+      const outDir = zipPath + '_extracted';
+      fs.mkdirSync(outDir, { recursive: true });
+      const result = require('child_process').spawnSync(sevenZip, [
+        'e', zipPath, '-o' + outDir, '-p' + dobRaw, '-y',
+      ], { encoding: 'utf8', timeout: 30000 });
+      log('7z exit: ' + result.status + ' | ' + (result.stdout || '').slice(0, 200));
+      const files = fs.readdirSync(outDir);
+      log('Extracted files: ' + files.join(', '));
+      for (const f of files) {
+        if (/\.(txt|html|htm|csv)$/i.test(f)) {
+          const text = fs.readFileSync(path.join(outDir, f), 'utf8');
+          if (text.length > 100) {
+            log('✓ 26AS extracted via 7z (' + text.length + ' chars) — ' + f);
+            return text;
+          }
+        }
+      }
+    }
+  } catch (e) { log('7z extraction error: ' + e.message); }
+
+  // Strategy 2: adm-zip with Buffer password (ZipCrypto)
+  try {
     const zip = new AdmZip(zipPath);
     const entries = zip.getEntries();
     log('ZIP entries: ' + entries.map(e => e.entryName).join(', '));
     for (const entry of entries) {
       if (/\.(txt|html|htm|csv)$/i.test(entry.entryName)) {
-        let data;
-        if (zipPassword) {
-          try { data = zip.readFile(entry, zipPassword); } catch { /* try without */ }
-        }
-        if (!data) data = zip.readFile(entry);
-        if (data && data.length > 100) {
-          const text = data.toString('utf8');
-          log('✓ 26AS extracted from ZIP (' + text.length + ' chars) — file: ' + entry.entryName);
-          return text;
+        for (const pwd of [dobRaw ? Buffer.from(dobRaw) : null, null]) {
+          try {
+            const data = pwd ? zip.readFile(entry, pwd) : zip.readFile(entry);
+            if (data && data.length > 100) {
+              const text = data.toString('utf8');
+              log('✓ 26AS via adm-zip (' + text.length + ' chars)');
+              return text;
+            }
+          } catch { /* try next */ }
         }
       }
     }
-    log('No text file found in ZIP');
-  } catch (e) {
-    log('ZIP extraction error: ' + e.message);
-  }
+    log('adm-zip: no readable entry found');
+  } catch (e) { log('adm-zip error: ' + e.message); }
+
   return null;
 }
 
 async function fetch26AS({ pan, password, dob, assessmentYear, onStatus }) {
   const log = m => { console.log('[26as]', m); onStatus?.(m); };
 
-  // assessmentYear like "2025-26" — used as-is on TRACES AY dropdown
-  const ay = assessmentYear || '2025-26';
+  // Always compute AY from current date — April onwards = new AY
+  const now = new Date();
+  const ayStart = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
+  const ay = `${ayStart}-${String(ayStart + 1).slice(-2)}`;
 
   log('Launching browser...');
   const browser = await launchBrowser();
@@ -536,6 +618,10 @@ async function fetch26AS({ pan, password, dob, assessmentYear, onStatus }) {
   await context.addInitScript(STEALTH);
   const page = await context.newPage();
   const captured = { text26AS: null };
+
+  // NOTE: We do NOT use addLocatorHandler here for the logout popup.
+  // It fires too eagerly and clicks "No" BEFORE the TRACES tab can open, cancelling navigation.
+  // Instead we dismiss the popup manually at points where we know it's safe to do so.
 
   try {
     // ── STEP 1: LOGIN ────────────────────────────────────────────────────────
@@ -609,128 +695,130 @@ async function fetch26AS({ pan, password, dob, assessmentYear, onStatus }) {
     log('Logged in!');
     await page.screenshot({ path: path.join(SS_DIR, '26as-01-dashboard.png') }).catch(() => null);
 
-    // ── STEP 2: Navigate to TRACES via direct URL (most reliable) ────────────
-    log('Navigating to View Form 26AS (direct URL)...');
+    // ── STEP 2: Navigate to View Form 26AS via menu ──────────────────────────
+    log('Navigating to View Form 26AS...');
+    await page.waitForTimeout(1500);
 
-    // Register new-tab listener BEFORE navigating — the portal may open TRACES in a new tab
-    let tracesTabPromise = context.waitForEvent('page', { timeout: 60000 }).catch(() => null);
+    // Step 2a: Open e-File side panel
+    await clickMenuItem(page, /^e-file$/i, log, 'e-File menu');
+    // Wait for the e-File submenu items to render in the DOM
+    await page.waitForSelector('text=/income tax returns/i', { timeout: 8000 }).catch(() => null);
+    await page.waitForTimeout(500);
 
-    // Primary: use the portal's deep link which SSO-redirects to TRACES
-    await page.goto(
-      'https://eportal.incometax.gov.in/iec/foservices/#/taxstatement/form26as',
-      { waitUntil: 'domcontentloaded', timeout: 30000 }
-    ).catch(() => null);
-    await page.waitForTimeout(4000);
-    await page.screenshot({ path: path.join(SS_DIR, '26as-02-after-direct-nav.png') }).catch(() => null);
-    log('After direct nav, URL: ' + page.url());
+    // Step 2b: Hover "Income Tax Returns" to reveal submenu, then click "View Form 26AS".
+    // Playwright locators move the mouse naturally — no evaluate() calls between hover and click.
+    var tracesTabPromise = context.waitForEvent('page', { timeout: 60000 }).catch(() => null);
+    try {
+      const itrLocator = page.locator('text=/^Income Tax Returns$/i').first();
+      await itrLocator.hover({ timeout: 8000 });
+      log('Hovered Income Tax Returns');
+      await page.waitForTimeout(600);
 
-    // If the direct URL logged us out, re-login first
-    if (/login|signin/i.test(page.url())) {
-      log('Session expired — re-logging in...');
-      await page.goto(PORTAL_URL, { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => null);
-      await waitDashboard(page, log);
-      tracesTabPromise = context.waitForEvent('page', { timeout: 60000 }).catch(() => null);
-      await page.goto(
-        'https://eportal.incometax.gov.in/iec/foservices/#/taxstatement/form26as',
-        { waitUntil: 'domcontentloaded', timeout: 30000 }
-      ).catch(() => null);
-      await page.waitForTimeout(4000);
+      const view26Locator = page.locator('text=/^View Form 26AS$/i').first();
+      await view26Locator.click({ timeout: 5000 });
+      log('Clicked View Form 26AS via locator');
+    } catch (e) {
+      log('Locator approach failed: ' + e.message);
+      // Fallback: log visible items for debugging
+      const texts = await page.evaluate(() => {
+        const out = [];
+        const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
+        let n; while ((n = w.nextNode())) { const t = n.textContent.trim(); if (t.length > 3 && t.length < 60) out.push(t); }
+        return [...new Set(out)].slice(0, 60);
+      }).catch(() => []);
+      log('DOM text nodes: ' + texts.join(' | '));
+      await page.screenshot({ path: path.join(SS_DIR, '26as-02b-no-view26as.png'), fullPage: true }).catch(() => null);
     }
 
-    // The direct URL may land on an IT-portal intermediate page with a "Proceed to TRACES"
-    // or "View Form 26AS" button. Click it if TRACES hasn't opened yet.
+    // Wait for TRACES tab BEFORE dismissing any popup — dismissing "No" cancels the navigation
+    log('Waiting up to 10s for TRACES tab to open...');
+    let tracesPage = await Promise.race([
+      tracesTabPromise,
+      new Promise(r => setTimeout(r, 10000, null)),
+    ]);
+
+    // NOW it's safe to dismiss the logout popup (TRACES tab already open or will be found below)
+    await dismissLogoutPopup(page, log);
+
+    await page.screenshot({ path: path.join(SS_DIR, '26as-02-after-menu-nav.png') }).catch(() => null);
+    log('After click, main page URL: ' + page.url());
+    log('TRACES tab captured: ' + (tracesPage ? tracesPage.url() : 'none yet'));
+
+    // Step 2d: If we landed on an IT Portal intermediate page with a "Proceed to TRACES" button, click it
     if (!/traces\.gov\.in|tdscpc\.gov\.in/i.test(page.url())) {
-      log('Checking for SSO proceed button on portal 26AS page...');
+      log('Checking for SSO proceed / View Form 26AS button...');
       await page.screenshot({ path: path.join(SS_DIR, '26as-02b-sso-page.png') }).catch(() => null);
       const ssoClicked = await page.evaluate(() => {
         const el = [...document.querySelectorAll('a, button, input[type="button"], input[type="submit"]')]
           .find(e => /proceed|view.*form.*26as|form.*26as|annual tax statement|go to traces/i.test(
             (e.textContent || e.value || '').trim()
           ) && e.getBoundingClientRect().width > 0);
-        if (el) { el.scrollIntoView({ block: 'center' }); el.click(); return true; }
-        return false;
-      }).catch(() => false);
+        if (el) { el.scrollIntoView({ block: 'center' }); el.click(); return (e => e.textContent?.trim() || e.value)(el); }
+        return null;
+      }).catch(() => null);
       if (ssoClicked) {
-        log('Clicked SSO proceed button — waiting for TRACES...');
-        await page.waitForTimeout(5000);
-      }
-    }
-
-    // Fallback: menu navigation — hover over "Income Tax Returns" to open submenu
-    if (!/traces\.gov\.in|tdscpc\.gov\.in/i.test(page.url())) {
-      log('Direct URL did not open TRACES — trying menu navigation...');
-      const efileClicked = await clickMenuItem(page, /e-fil/i, log, 'e-File/e-Filing menu');
-      if (efileClicked) {
+        log('Clicked: ' + ssoClicked + ' — waiting for TRACES...');
         await page.waitForTimeout(1000);
-        // Hover over "Income Tax Returns" to reveal its submenu (it has a ▶ arrow)
-        const hovered = await page.evaluate(() => {
-          const el = [...document.querySelectorAll('a, li, button, span')]
-            .find(e => /income tax returns/i.test(e.textContent.trim()) && e.getBoundingClientRect().width > 0);
-          if (el) {
-            el.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
-            el.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
-            return true;
-          }
-          return false;
-        }).catch(() => false);
-        if (hovered) {
-          log('Hovered Income Tax Returns — waiting for submenu...');
-          await page.waitForTimeout(800);
-        }
-        // Now click "View Form 26AS" from the submenu
-        const clicked = await clickMenuItemVisible(page, /view.*form.*26as|view.*26as|form.*26as/i, log, 'View Form 26AS');
-        if (!clicked) {
-          // Last try: JS click on any matching visible link
-          await page.evaluate(() => {
-            const el = [...document.querySelectorAll('a, li, span, button')]
-              .find(e => /view.*form.*26as|form.*26as|annual tax statement/i.test(e.textContent) && e.getBoundingClientRect().width > 0);
-            if (el) { el.scrollIntoView({ block: 'center' }); el.click(); }
-          }).catch(() => null);
-        }
-      } else {
-        // e-File menu not found — try a direct JS search for any 26AS link
-        await page.evaluate(() => {
-          const el = [...document.querySelectorAll('a, li, span, button')]
-            .find(e => /view form 26as|annual tax statement/i.test(e.textContent) && e.getBoundingClientRect().width > 0);
-          if (el) { el.scrollIntoView({ block: 'center' }); el.click(); }
-        }).catch(() => null);
+        await dismissLogoutPopup(page, log);
+        await page.waitForTimeout(4000);
       }
-      await page.waitForTimeout(3000);
     }
 
     await page.screenshot({ path: path.join(SS_DIR, '26as-03-after-nav.png') }).catch(() => null);
-    log('After navigation, page URL: ' + page.url());
+    log('After SSO check, URL: ' + page.url());
 
-    // ── STEP 3: Wait for TRACES tab to open ─────────────────────────────────
-    log('Waiting for TRACES portal to open...');
-    let tracesPage = await tracesTabPromise;
-
-    // If no new tab, check if current page redirected to TRACES, or search existing tabs
-    if (!tracesPage) {
+    // ── STEP 3: Locate the TRACES tab ───────────────────────────────────────
+    log('Checking for TRACES portal...');
+    // tracesPage may already be captured from Step 2d above
+    if (!tracesPage || !/traces\.gov\.in|tdscpc\.gov\.in/i.test(tracesPage.url())) {
       if (/traces\.gov\.in|tdscpc\.gov\.in/i.test(page.url())) {
         tracesPage = page;
         log('Current page redirected to TRACES');
       } else {
         tracesPage = context.pages().find(p => /traces\.gov\.in|tdscpc\.gov\.in/i.test(p.url())) ?? null;
+        if (tracesPage) log('Found TRACES in existing tabs: ' + tracesPage.url());
       }
     }
 
     if (!tracesPage) {
-      // Last resort: try the direct portal URL that redirects to TRACES
-      log('TRACES not opened — trying direct portal redirect URL...');
-      tracesTabPromise = context.waitForEvent('page', { timeout: 20000 }).catch(() => null);
-      await page.goto(
-        'https://eportal.incometax.gov.in/iec/foservices/#/taxstatement/form26as',
-        { waitUntil: 'domcontentloaded', timeout: 20000 }
-      ).catch(() => null);
-      await page.waitForTimeout(3000);
-      tracesPage = await tracesTabPromise;
-      if (!tracesPage) {
-        tracesPage = context.pages().find(p => /traces\.gov\.in|tdscpc\.gov\.in/i.test(p.url())) ?? null;
+      // Last resort: retry the whole navigation sequence
+      log('TRACES not opened — retrying menu navigation...');
+      const retryTabPromise = context.waitForEvent('page', { timeout: 20000 }).catch(() => null);
+
+      await dismissLogoutPopup(page, log); // clear any popup first
+      await clickMenuItem(page, /^e-file$/i, log, 'e-File (retry)');
+      await page.waitForTimeout(1200);
+
+      // Hover ITR via TreeWalker coords
+      const retryItrCoords = await page.evaluate(() => {
+        const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
+        let node;
+        while ((node = walker.nextNode())) {
+          if (/^income tax returns$/i.test(node.textContent.trim())) {
+            const el = node.parentElement;
+            if (el) { const r = el.getBoundingClientRect(); if (r.width > 0) return { x: Math.round(r.left + r.width/2), y: Math.round(r.top + r.height/2) }; }
+          }
+        }
+        return null;
+      }).catch(() => null);
+      if (retryItrCoords) {
+        await page.mouse.move(retryItrCoords.x, retryItrCoords.y, { steps: 10 });
+        await page.waitForTimeout(1200);
       }
-      if (!tracesPage && /traces\.gov\.in|tdscpc\.gov\.in/i.test(page.url())) {
-        tracesPage = page;
-      }
+
+      // Click View Form 26AS with real mouse
+      const retryCoords = await page.evaluate(() => {
+        const el = [...document.querySelectorAll('a,li,span,button')]
+          .find(e => { const t = e.textContent.trim(); return /view.*26as|form.*26as/i.test(t) && t.length < 80 && e.getBoundingClientRect().width > 0; });
+        if (el) { const r = el.getBoundingClientRect(); return { x: Math.round(r.left + r.width/2), y: Math.round(r.top + r.height/2) }; }
+        return null;
+      }).catch(() => null);
+      if (retryCoords) await page.mouse.click(retryCoords.x, retryCoords.y);
+
+      tracesPage = await Promise.race([retryTabPromise, new Promise(r => setTimeout(r, 8000, null))]);
+      await dismissLogoutPopup(page, log);
+      if (!tracesPage) tracesPage = context.pages().find(p => /traces\.gov\.in|tdscpc\.gov\.in/i.test(p.url())) ?? null;
+      if (!tracesPage && /traces\.gov\.in|tdscpc\.gov\.in/i.test(page.url())) tracesPage = page;
     }
 
     if (!tracesPage) {
@@ -741,36 +829,116 @@ async function fetch26AS({ pan, password, dob, assessmentYear, onStatus }) {
     await tracesPage.waitForLoadState('domcontentloaded', { timeout: 30000 }).catch(() => null);
     await tracesPage.bringToFront().catch(() => null);
     log('TRACES portal opened: ' + tracesPage.url());
+
+    // TRACES loads slowly over SSO — wait for any visible content
+    await tracesPage.waitForTimeout(2000);
+    for (let i = 0; i < 10; i++) {
+      const hasContent = await tracesPage.evaluate(() =>
+        document.body && document.body.innerText.trim().length > 50
+      ).catch(() => false);
+      if (hasContent) break;
+      await tracesPage.waitForTimeout(1000);
+    }
     await tracesPage.screenshot({ path: path.join(SS_DIR, '26as-05-traces.png') }).catch(() => null);
+    log('TRACES page text (first 200): ' + (await tracesPage.evaluate(() => document.body?.innerText?.slice(0, 200)).catch(() => '')));
 
-    // Wait for TRACES page to fully load (it can be slow due to SSO)
-    await tracesPage.waitForTimeout(3000);
+    // ── STEP 3b: If on TRACES auth dashboard, click Compliance tab then 26AS card ──
+    if (/authBridge\/dashboard/i.test(tracesPage.url())) {
+      log('TRACES auth dashboard detected — URL: ' + tracesPage.url());
 
-    // ── STEP 4: TRACES — "I agree" checkbox + Proceed ───────────────────────
-    log('Looking for "I agree" checkbox on TRACES...');
-    for (let attempt = 0; attempt < 3; attempt++) {
-      // The acceptance checkbox text: "I agree to the usage and acceptance of Form 16 / 16A generated from TRACES"
-      const agreeChk = await tracesPage.evaluate(() => {
-        // Find checkbox near "I agree" text
-        const labels = [...document.querySelectorAll('label, span, td, div, p')]
-          .filter(e => /i agree|usage.*acceptance|acceptance.*usage/i.test(e.textContent) && e.getBoundingClientRect().width > 0);
-        for (const lbl of labels) {
-          const chk = lbl.querySelector('input[type="checkbox"]') ||
-                      lbl.previousElementSibling?.querySelector?.('input[type="checkbox"]') ||
-                      document.querySelector('input[type="checkbox"]');
-          if (chk && !chk.checked) { chk.click(); return 'clicked'; }
-          if (chk?.checked) return 'already-checked';
+      // Wait up to 15s for the page to render, then log all visible links/tabs
+      await tracesPage.waitForTimeout(3000);
+      await tracesPage.screenshot({ path: path.join(SS_DIR, '26as-05b-auth-dashboard.png') }).catch(() => null);
+      const dashTexts = await tracesPage.evaluate(() =>
+        [...document.querySelectorAll('a, li, button, span, div')]
+          .filter(e => e.getBoundingClientRect().width > 0 && e.children.length === 0)
+          .map(e => e.textContent?.trim()).filter(t => t && t.length > 2 && t.length < 80)
+          .filter((v, i, a) => a.indexOf(v) === i).slice(0, 30)
+      ).catch(() => []);
+      log('Dashboard elements: ' + dashTexts.join(' | '));
+
+      // Click "Compliance under Income-tax Act, 1961" tab — try multiple strategies
+      let compTabClicked = false;
+      // Strategy 1: exact text match via evaluate
+      compTabClicked = await tracesPage.evaluate(() => {
+        const all = [...document.querySelectorAll('a, li, button, span, td, div')];
+        const el = all.find(e => /compliance\s+under\s+income/i.test(e.textContent?.trim()) &&
+          e.getBoundingClientRect().width > 0 && e.children.length < 3);
+        if (el) { el.click(); return true; }
+        return false;
+      }).catch(() => false);
+      log('Compliance tab click (strategy 1): ' + compTabClicked);
+
+      if (!compTabClicked) {
+        // Strategy 2: Playwright locator with partial text
+        try {
+          await tracesPage.locator(':text("Compliance under")').first().click({ timeout: 5000 });
+          compTabClicked = true;
+          log('Compliance tab click (strategy 2): true');
+        } catch (e2) { log('Strategy 2 failed: ' + e2.message); }
+      }
+
+      await tracesPage.waitForTimeout(2500);
+      await tracesPage.screenshot({ path: path.join(SS_DIR, '26as-05c-after-compliance.png') }).catch(() => null);
+      log('After Compliance tab, URL: ' + tracesPage.url());
+
+      // Click 26AS card
+      const cardTexts = await tracesPage.evaluate(() =>
+        [...document.querySelectorAll('a, div, li')]
+          .filter(e => e.getBoundingClientRect().width > 0)
+          .map(e => e.textContent?.trim()).filter(t => t && t.length > 2 && t.length < 100)
+          .filter((v, i, a) => a.indexOf(v) === i).slice(0, 20)
+      ).catch(() => []);
+      log('Cards on page: ' + cardTexts.join(' | '));
+
+      let card26Clicked = await tracesPage.evaluate(() => {
+        // Find anchor with href pointing to 26AS — most reliable
+        const byHref = [...document.querySelectorAll('a')]
+          .find(a => /welcome26AS|26as/i.test(a.getAttribute('href') || a.getAttribute('ng-href') || ''));
+        if (byHref) { byHref.click(); return 'href:' + (byHref.getAttribute('href') || byHref.getAttribute('ng-href')); }
+        // Fallback: find the card containing "26AS" text but not "15CA" or "Bulk"
+        const all = [...document.querySelectorAll('a, button, div[onclick], div[ng-click]')];
+        const el = all.find(e => {
+          const t = e.textContent?.trim() ?? '';
+          return /26\s*AS/i.test(t) && !/15\s*CA|bulk|filed\s+forms/i.test(t) &&
+            e.getBoundingClientRect().width > 0 && t.length < 100;
+        });
+        if (el) { el.click(); return 'text:' + el.textContent?.trim().slice(0, 60); }
+        return null;
+      }).catch(() => null);
+      log('26AS card click: ' + (card26Clicked || 'not found'));
+
+      await tracesPage.waitForLoadState('domcontentloaded', { timeout: 20000 }).catch(() => null);
+      await tracesPage.waitForTimeout(2000);
+      await tracesPage.screenshot({ path: path.join(SS_DIR, '26as-05d-after-card.png') }).catch(() => null);
+      log('After 26AS card, URL: ' + tracesPage.url());
+    }
+
+    // ── STEP 4: "I agree" checkbox ──────────────────────────────────────────
+    log('Looking for "I agree" checkbox...');
+    for (let attempt = 0; attempt < 6; attempt++) {
+      const result = await tracesPage.evaluate(() => {
+        // Strategy 1: checkbox inside/near a label with "agree" text
+        const allChk = [...document.querySelectorAll('input[type="checkbox"]')];
+        for (const chk of allChk) {
+          const label = chk.closest('label') ||
+            chk.parentElement ||
+            document.querySelector(`label[for="${chk.id}"]`);
+          const txt = label?.textContent || chk.nextSibling?.textContent || chk.parentElement?.textContent || '';
+          if (/agree|accept|usage/i.test(txt)) {
+            if (!chk.checked) { chk.click(); return 'clicked-labeled'; }
+            return 'already-checked';
+          }
         }
-        // Fallback: click any unchecked checkbox on the page
+        // Strategy 2: any unchecked checkbox on the page (TRACES only has one)
         const anyChk = document.querySelector('input[type="checkbox"]:not(:checked)');
-        if (anyChk) { anyChk.click(); return 'fallback-clicked'; }
+        if (anyChk) { anyChk.click(); return 'clicked-any'; }
+        // Already checked
+        if (document.querySelector('input[type="checkbox"]:checked')) return 'already-checked';
         return null;
       }).catch(() => null);
 
-      if (agreeChk) {
-        log('I agree checkbox: ' + agreeChk);
-        break;
-      }
+      if (result) { log('I agree checkbox: ' + result); break; }
       await tracesPage.waitForTimeout(1500);
       await tracesPage.screenshot({ path: path.join(SS_DIR, '26as-06-agree-attempt' + attempt + '.png') }).catch(() => null);
     }
@@ -778,134 +946,146 @@ async function fetch26AS({ pan, password, dob, assessmentYear, onStatus }) {
     await tracesPage.waitForTimeout(500);
     await tracesPage.screenshot({ path: path.join(SS_DIR, '26as-07-after-agree.png') }).catch(() => null);
 
-    // Click "Proceed" button
+    // ── STEP 5: Click "Proceed" button ──────────────────────────────────────
     log('Clicking Proceed...');
-    const proceedClicked = await tracesPage.evaluate(() => {
-      const btn = [...document.querySelectorAll('button, input[type="submit"], input[type="button"], a')]
-        .find(e => /^proceed$/i.test(e.value?.trim() || e.textContent?.trim()) && e.getBoundingClientRect().width > 0);
-      if (btn) { btn.scrollIntoView({ block: 'center' }); btn.click(); return true; }
-      return false;
-    }).catch(() => false);
-
-    if (!proceedClicked) {
-      log('Proceed button not found — trying submit...');
-      await tracesPage.evaluate(() => {
-        const btn = document.querySelector('input[type="submit"], button[type="submit"]');
-        if (btn) btn.click();
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const clicked = await tracesPage.evaluate(() => {
+        const el = [...document.querySelectorAll('button, input[type="submit"], input[type="button"], a')]
+          .find(e => {
+            const t = (e.value || e.textContent || '').trim();
+            return /^proceed$/i.test(t) && e.getBoundingClientRect().width > 0;
+          });
+        if (el) { el.scrollIntoView({ block: 'center' }); el.click(); return (el.value || el.textContent).trim(); }
+        // Fallback: any submit button
+        const sub = [...document.querySelectorAll('input[type="submit"], button[type="submit"]')]
+          .find(e => e.getBoundingClientRect().width > 0);
+        if (sub) { sub.click(); return 'submit-fallback: ' + (sub.value || sub.textContent).trim(); }
+        return null;
       }).catch(() => null);
+      if (clicked) { log('Proceed clicked: ' + clicked); break; }
+      await tracesPage.waitForTimeout(1500);
     }
 
-    await tracesPage.waitForTimeout(2000);
+    await tracesPage.waitForTimeout(3000);
     await tracesPage.screenshot({ path: path.join(SS_DIR, '26as-08-after-proceed.png') }).catch(() => null);
-    log('After Proceed, TRACES URL: ' + tracesPage.url());
+    log('After Proceed, URL: ' + tracesPage.url());
 
-    // ── STEP 5: Click "View Tax Credit (Form 26AS/Annual Tax Statement)" ──────
-    log('Clicking View Tax Credit (Form 26AS/Annual Tax Statement)...');
-    await tracesPage.waitForTimeout(1000);
+    // ── STEP 6: Click "View Tax Credit (Form 26AS/Annual Tax Statement)" link ──
+    log('Looking for "View Tax Credit" link...');
+    await tracesPage.screenshot({ path: path.join(SS_DIR, '26as-09-before-view-credit.png') }).catch(() => null);
+    log('Page text before Step 6: ' + (await tracesPage.evaluate(() => document.body?.innerText?.slice(0, 400)).catch(() => '')));
 
-    const viewTaxCreditClicked = await tracesPage.evaluate(() => {
-      const el = [...document.querySelectorAll('a, button, span, li, td, div')]
-        .find(e => /view tax credit|form 26as.*annual|annual.*tax statement/i.test(e.textContent) && e.getBoundingClientRect().width > 0);
-      if (el) { el.scrollIntoView({ block: 'center' }); el.click(); return el.textContent.trim().slice(0, 60); }
-      return null;
-    }).catch(() => null);
+    let step6Done = false;
+    // Strategy 1: Playwright locator on <a> with exact text — most reliable
+    try {
+      const vtcLocator = tracesPage.locator('a:has-text("View Tax Credit")').first();
+      await vtcLocator.waitFor({ state: 'visible', timeout: 8000 });
+      await vtcLocator.click();
+      log('Clicked View Tax Credit via locator');
+      step6Done = true;
+    } catch (e) { log('Step 6 locator failed: ' + e.message); }
 
-    if (viewTaxCreditClicked) {
-      log('Clicked: ' + viewTaxCreditClicked);
-    } else {
-      log('View Tax Credit link not found — taking screenshot for debugging');
-      await tracesPage.screenshot({ path: path.join(SS_DIR, '26as-09-no-view-credit.png'), fullPage: true }).catch(() => null);
+    if (!step6Done) {
+      // Strategy 2: evaluate — find <a> whose text contains "View Tax Credit" or href contains view26AS
+      for (let attempt = 0; attempt < 4; attempt++) {
+        const clicked = await tracesPage.evaluate(() => {
+          const anchors = [...document.querySelectorAll('a')];
+          const el = anchors.find(a =>
+            /view\s*tax\s*credit/i.test(a.textContent?.trim() ?? '') ||
+            /view26AS|viewTaxCredit/i.test(a.getAttribute('href') ?? '')
+          );
+          if (el) { el.scrollIntoView({ block: 'center' }); el.click(); return el.textContent?.trim().slice(0, 80); }
+          return null;
+        }).catch(() => null);
+        if (clicked) { log('Clicked View Tax Credit (evaluate): ' + clicked); step6Done = true; break; }
+        await tracesPage.waitForTimeout(2000);
+        log('Step 6 attempt ' + (attempt + 1) + ' — page text: ' + (await tracesPage.evaluate(() => document.body?.innerText?.slice(0, 200)).catch(() => '')));
+      }
     }
 
-    await tracesPage.waitForTimeout(2000);
-    await tracesPage.screenshot({ path: path.join(SS_DIR, '26as-10-view-credit.png') }).catch(() => null);
+    await tracesPage.waitForTimeout(2500);
+    await tracesPage.screenshot({ path: path.join(SS_DIR, '26as-10-after-view-credit.png') }).catch(() => null);
+    log('After View Tax Credit, URL: ' + tracesPage.url());
 
-    // ── STEP 6: Select Assessment Year ──────────────────────────────────────
-    // TRACES AY dropdown: values like "2025-26" or "2026" or numeric year
+    // ── STEP 7: Select Assessment Year ──────────────────────────────────────
     log('Selecting Assessment Year: ' + ay);
-    await tracesPage.waitForTimeout(1000);
+    await tracesPage.waitForTimeout(1500);
+    await tracesPage.waitForSelector('select', { timeout: 10000 }).catch(() => null);
 
-    const aySelected = await tracesPage.evaluate((ayLabel) => {
-      const selects = [...document.querySelectorAll('select')];
-      for (const sel of selects) {
-        const opts = [...sel.options].map(o => o.text.trim());
-        // Try exact match first
-        const exactOpt = [...sel.options].find(o => o.text.trim() === ayLabel || o.value === ayLabel);
-        if (exactOpt) {
-          sel.value = exactOpt.value;
-          sel.dispatchEvent(new Event('change', { bubbles: true }));
-          return 'exact: ' + exactOpt.text;
-        }
-        // Try partial match (e.g. "2025-26" contains "2025")
-        const [ayStart] = ayLabel.split('-');
-        const partialOpt = [...sel.options].find(o => o.text.includes(ayStart) || o.value.includes(ayStart));
-        if (partialOpt) {
-          sel.value = partialOpt.value;
-          sel.dispatchEvent(new Event('change', { bubbles: true }));
-          return 'partial: ' + partialOpt.text;
-        }
-      }
-      return null;
-    }, ay).catch(() => null);
+    // Log every select and its options so we know exactly what's on the page
+    const allSelects = await tracesPage.evaluate(() =>
+      [...document.querySelectorAll('select')].map(s => ({
+        id: s.id, name: s.name,
+        opts: [...s.options].map(o => o.text.trim() + '=' + o.value),
+      }))
+    ).catch(() => []);
+    log('Selects: ' + JSON.stringify(allSelects));
 
-    if (aySelected) {
-      log('AY selected: ' + aySelected);
-    } else {
-      log('AY dropdown not found — may need manual selection');
-      await tracesPage.screenshot({ path: path.join(SS_DIR, '26as-11-no-ay.png'), fullPage: true }).catch(() => null);
+    // From logs: select IDs are #AssessmentYearDropDown and #viewType
+    // AY label "2026-27" has value "2026" (start year), View As "Text" has value "Text"
+    const [start] = ay.split('-');
+    const ayValue = start; // e.g. "2026" for AY 2026-27
+
+    // Select Assessment Year by ID
+    let ayDone = false;
+    for (const sel of ['#AssessmentYearDropDown', 'select[name="AssessmentYearDropDown"]']) {
+      try {
+        await tracesPage.locator(sel).selectOption({ value: ayValue });
+        log('AY selected: ' + ayValue); ayDone = true; break;
+      } catch {}
+      try {
+        await tracesPage.locator(sel).selectOption({ label: new RegExp(ay.replace('-', '[-–]')) });
+        log('AY selected by label: ' + ay); ayDone = true; break;
+      } catch {}
     }
+    if (!ayDone) log('WARNING: AY not selected');
+    await tracesPage.waitForTimeout(300);
 
-    await tracesPage.waitForTimeout(500);
-
-    // ── STEP 7: Select "View As" = Text File ────────────────────────────────
-    log('Selecting View As = Text File...');
-    const viewAsSelected = await tracesPage.evaluate(() => {
-      const selects = [...document.querySelectorAll('select')];
-      for (const sel of selects) {
-        const textOpt = [...sel.options].find(o => /text|txt/i.test(o.text) || o.value.toUpperCase() === 'T');
-        if (textOpt) {
-          sel.value = textOpt.value;
-          sel.dispatchEvent(new Event('change', { bubbles: true }));
-          return 'selected: ' + textOpt.text;
-        }
-      }
-      // If only one select (AY dropdown), try looking for a radio button for "Text"
-      const radioText = [...document.querySelectorAll('input[type="radio"]')]
-        .find(r => /text|txt/i.test(r.value) || /text/i.test(r.nextSibling?.textContent));
-      if (radioText && !radioText.checked) {
-        radioText.click();
-        return 'radio: ' + radioText.value;
-      }
-      return null;
-    }).catch(() => null);
-
-    if (viewAsSelected) {
-      log('View As: ' + viewAsSelected);
-    } else {
-      log('View As = Text selector not found — may default to HTML; will try to parse whatever downloads');
+    // ── STEP 8: Select "View As" = Text ─────────────────────────────────────
+    log('Selecting View As = Text...');
+    let viewAsDone = false;
+    for (const sel of ['#viewType', 'select[name="viewType"]']) {
+      try {
+        await tracesPage.locator(sel).selectOption({ value: 'Text' });
+        log('View As: Text'); viewAsDone = true; break;
+      } catch {}
+      try {
+        await tracesPage.locator(sel).selectOption({ label: /text/i });
+        log('View As: text by label'); viewAsDone = true; break;
+      } catch {}
     }
-
+    if (!viewAsDone) log('WARNING: View As not selected');
     await tracesPage.screenshot({ path: path.join(SS_DIR, '26as-12-view-as.png') }).catch(() => null);
 
-    // ── STEP 8: Click "View/Download" and capture the ZIP ───────────────────
-    log('Clicking View/Download button...');
+    // ── STEP 9: Click "View / Download" ─────────────────────────────────────
+    log('Clicking View/Download...');
     const dlPromise = tracesPage.waitForEvent('download', { timeout: 120000 }).catch(() => null);
+    await tracesPage.waitForTimeout(500);
 
-    const viewDlClicked = await tracesPage.evaluate(() => {
-      const btn = [...document.querySelectorAll('button, input[type="submit"], input[type="button"], a')]
-        .find(e => /view.*download|download.*view|^view$|^download$/i.test((e.value || e.textContent || '').trim()) && e.getBoundingClientRect().width > 0);
-      if (btn) { btn.scrollIntoView({ block: 'center' }); btn.click(); return btn.textContent?.trim() || btn.value; }
-      // Fallback: click first submit button
-      const submit = document.querySelector('input[type="submit"], button[type="submit"]');
-      if (submit) { submit.click(); return 'submit: ' + (submit.value || submit.textContent).trim(); }
-      return null;
-    }).catch(() => null);
-
-    if (viewDlClicked) {
-      log('Clicked: ' + viewDlClicked);
-    } else {
-      log('View/Download button not found — check TRACES page screenshot');
-      await tracesPage.screenshot({ path: path.join(SS_DIR, '26as-13-no-view-dl.png'), fullPage: true }).catch(() => null);
+    // The button is <input type="submit" value="View / Download"> on this JSF page
+    let viewDlClicked = false;
+    const btnSelectors = [
+      'input[type="submit"][value="View / Download"]',
+      'input[type="submit"][value*="View"]',
+      'input[type="button"][value*="View"]',
+      'button:has-text("View")',
+    ];
+    for (const sel of btnSelectors) {
+      try {
+        await tracesPage.locator(sel).first().click({ timeout: 4000 });
+        log('View/Download clicked: ' + sel);
+        viewDlClicked = true;
+        break;
+      } catch {}
+    }
+    if (!viewDlClicked) {
+      // Last resort: click first visible submit button
+      await tracesPage.evaluate(() => {
+        const btn = [...document.querySelectorAll('input[type="submit"], button[type="submit"]')]
+          .find(e => e.getBoundingClientRect().width > 0);
+        if (btn) btn.click();
+      }).catch(() => null);
+      log('View/Download: fallback submit click');
     }
 
     await tracesPage.screenshot({ path: path.join(SS_DIR, '26as-14-after-view-dl.png') }).catch(() => null);
@@ -949,8 +1129,7 @@ async function fetch26AS({ pan, password, dob, assessmentYear, onStatus }) {
       log('Download complete: ' + (fp || 'unknown path'));
 
       if (fp) {
-        const zipPassword = (pan || '').toUpperCase() + (dob || '');
-        log('Extracting ZIP with password: ' + zipPassword);
+        log('Extracting ZIP with DOB password (ddmmyyyy)');
         captured.text26AS = extract26ASFromZip(fp, pan, dob, log);
       }
     }

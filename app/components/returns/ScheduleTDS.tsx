@@ -803,7 +803,7 @@ export default function ScheduleTDS({ returnId, clientId, returnData, onSaved, s
             // Try AIS JSON first
             if (data?.ais) {
               const p = parseAISJson(data.ais);
-              if (p.tdsEntries.length || p.tcsEntries.length) parsed = p;
+              if (p.tdsEntries.length || p.tcsEntries.length || (p.sftCapitalGains?.length ?? 0) > 0) parsed = p;
             }
             // Fall back to 26AS (may be raw text or JSON)
             if (!parsed && data?.form26AS) {
@@ -812,7 +812,7 @@ export default function ScheduleTDS({ returnId, clientId, returnData, onSaved, s
                 if (p.tdsEntries.length || p.tcsEntries.length) parsed = p;
               } else {
                 const p = parseAISJson(data.form26AS);
-                if (p.tdsEntries.length || p.tcsEntries.length) parsed = p;
+                if (p.tdsEntries.length || p.tcsEntries.length || (p.sftCapitalGains?.length ?? 0) > 0) parsed = p;
               }
             }
 
@@ -880,7 +880,10 @@ export default function ScheduleTDS({ returnId, clientId, returnData, onSaved, s
     const agentUrl = await findAgentUrl();
     if (!agentUrl) { setAgent26ASFetching(false); setAgent26ASError('LOCAL_AGENT_NOT_RUNNING'); return; }
 
-    const ayLabel: string = (returnData as any)?.assessmentYear?.label ?? '2025-26';
+    // Always compute AY from current date — April onwards = new AY
+    const now = new Date();
+    const ayStart = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
+    const ayLabel = `${ayStart}-${String(ayStart + 1).slice(-2)}`;
 
     try {
       const startRes = await fetch(`${agentUrl}/fetch-26as`, {
@@ -907,7 +910,14 @@ export default function ScheduleTDS({ returnId, clientId, returnData, onSaved, s
             let parsed: ParsedPortalData | null = null;
             if (data?.form26AS?.raw) {
               const p = parse26ASText(data.form26AS.raw);
-              if (p.tdsEntries.length || p.tcsEntries.length) parsed = p;
+              if (p.tdsEntries.length || p.tcsEntries.length) {
+                // Merge capital gains from previously fetched AIS so they aren't lost
+                const existing = await ipc.getPortalData(returnId);
+                if (existing?.sftCapitalGains?.length) {
+                  p.sftCapitalGains = existing.sftCapitalGains;
+                }
+                parsed = p;
+              }
             }
 
             if (parsed) {
@@ -918,11 +928,13 @@ export default function ScheduleTDS({ returnId, clientId, returnData, onSaved, s
               setMismatches(mm);
               const divCount = parsed.tdsEntries.filter(e => /^194(K|LBA)?$|^194$/.test(e.section ?? '')).length;
               const fdCount  = parsed.tdsEntries.filter(e => /^194A/.test(e.section ?? '')).length;
+              const cgCount = parsed!.sftCapitalGains?.length ?? 0;
               setAgent26ASLog(prev => [
                 ...prev,
                 `Done! ${parsed!.tdsEntries.length} TDS + ${parsed!.tcsEntries.length} TCS entries imported.`,
                 ...(fdCount  > 0 ? [`↳ ${fdCount} FD/interest entries added to Other Sources`]  : []),
                 ...(divCount > 0 ? [`↳ ${divCount} dividend entries added to Other Sources`] : []),
+                ...(cgCount  > 0 ? [`↳ ${cgCount} capital gain transactions available in Capital Gains tab`] : []),
               ]);
             } else {
               setAgent26ASError('26AS fetched but no TDS/TCS entries found.');
@@ -1493,7 +1505,7 @@ export default function ScheduleTDS({ returnId, clientId, returnData, onSaved, s
             📊 Capital Gains from AIS ({portalData.sftCapitalGains.length} transactions)
           </div>
           <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10 }}>
-            The following equity/security sale transactions were reported in your AIS. Please review and enter them in the Capital Gains schedule (not yet supported for auto-import).
+            The following equity/security sale transactions were reported in your AIS. Go to the <strong>Capital Gains</strong> tab and click <strong>Import from AIS</strong> to auto-populate them — grandfathering (FMV 31-Jan-2018) is applied automatically.
           </p>
           <table className="data-table" style={{ width: '100%', fontSize: 12 }}>
             <thead>

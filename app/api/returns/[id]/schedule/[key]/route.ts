@@ -178,6 +178,13 @@ export async function PUT(request: NextRequest, { params }: Params) {
       }
       break;
     }
+    case 'ltcgOther': {
+      await prisma.$executeRaw`
+        UPDATE "Return" SET "ltcgOtherJson" = ${JSON.stringify(body.entries ?? [])}, "updatedAt" = NOW()
+        WHERE id = ${returnId}
+      `;
+      break;
+    }
     case 'stcg': {
       await prisma.sTCGEntry.deleteMany({ where: { returnId } });
       const allStcg: Record<string, unknown>[] = [];
