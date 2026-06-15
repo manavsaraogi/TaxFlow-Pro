@@ -52,6 +52,17 @@ function uid() {
   return Math.random().toString(36).slice(2);
 }
 
+// Normalise AIS date strings (DD/MM/YYYY or DD-MM-YYYY) to YYYY-MM-DD for <input type="date">
+function toInputDate(raw?: string): string {
+  if (!raw) return '';
+  // Already YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  // DD/MM/YYYY or DD-MM-YYYY
+  const m = raw.match(/^(\d{2})[\/\-](\d{2})[\/\-](\d{4})$/);
+  if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+  return '';
+}
+
 function calcLTCGGain(e: LTCG112AEntry): number {
   // Grandfathering: effective cost = max(purchase cost, FMV on 31-Jan-2018)
   const effectiveCost = e.fmvAsOn31Jan2018 > 0
@@ -94,8 +105,10 @@ function classifyAISGain(cg: AISCapitalGain): 'ltcg112A' | 'ltcgOther' | 'stcg11
   if (isDebtMF) return 'stcgOther';
   // Determine long/short: prefer actual dates over AIS label
   let isLong: boolean;
-  if (cg.purchaseDate && cg.transferDate) {
-    const months = holdingMonths(cg.purchaseDate, cg.transferDate);
+  const purDate = toInputDate(cg.purchaseDate);
+  const salDate = toInputDate(cg.transferDate);
+  if (purDate && salDate) {
+    const months = holdingMonths(purDate, salDate);
     isLong = isEquity ? months > 12 : months > 24;
   } else {
     // AIS assetType may say "Long term" / "Short term" / "Long-Term Capital Gain" etc.
@@ -209,8 +222,8 @@ export default function ScheduleCG({ returnId, returnData, onSaved, setDirty }: 
     for (const cg of aisGains) {
       const bucket = classifyAISGain(cg);
 
-      const saleDate = cg.transferDate || '';
-      const purchaseDate = cg.purchaseDate || '';
+      const saleDate = toInputDate(cg.transferDate);
+      const purchaseDate = toInputDate(cg.purchaseDate);
       if (bucket === 'ltcg112A') {
         const fmv = cg.fmvValue || 0;
         const effectiveCost = fmv > 0 ? Math.max(cg.costOfAcquisition, fmv) : cg.costOfAcquisition;
