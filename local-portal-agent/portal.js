@@ -973,12 +973,27 @@ async function clickMenuItemVisible(page, regex, log, label) {
 }
 
 // ─── fetchPrefillJson ─────────────────────────────────────────────────────────
-// Login with PAN + password, intercept the prefill JSON the portal downloads
-// when you start filing an ITR. Returns { prefill: { ... } }.
+// Login, navigate e-File → Income Tax Returns → File Income Tax Return,
+// select AY, choose Online + Prefill mode, intercept the prefill JSON.
+// Returns { prefill: { ... } }.
 async function fetchPrefillJson({ pan, password, assessmentYear, formType, onStatus }) {
-  const log = m => { console.log('[prefill]', m); onStatus?.(m); };
-  const ay = assessmentYear || '2025-26';
+  // NOTE: index.js already does console.log('[prefill]', msg) via the onStatus handler.
+  // Do NOT add another console.log here — it causes every message to print twice.
+  const log = m => { onStatus?.(m); };
+
+  // Compute current applicable AY from system date if not provided
+  function currentAY() {
+    const now = new Date();
+    const yr = now.getFullYear();
+    const mo = now.getMonth() + 1;
+    const start = mo >= 4 ? yr : yr - 1;
+    return `${start}-${String(start + 1).slice(-2)}`;
+  }
+
+  const ay   = assessmentYear || currentAY();   // e.g. "2026-27"
   const form = formType || 'ITR-1';
+  // AY start year (e.g. 2026 for "2026-27") — used to match ?ay=YYYY in URL
+  const ayYear = parseInt(ay.split('-')[0]) || new Date().getFullYear();
 
   log('Launching browser for prefill fetch...');
   const browser = await launchBrowser();
@@ -1002,13 +1017,13 @@ async function fetchPrefillJson({ pan, password, assessmentYear, formType, onSta
       const body = await response.json();
       if (body && typeof body === 'object' && Object.keys(body).length > 3) {
         capturedPrefill = body;
-        log('Intercepted prefill JSON from: ' + url.split('?')[0]);
+        log('✓ Prefill JSON intercepted from: ' + url.split('?')[0].slice(-60));
       }
     } catch {}
   });
 
   try {
-    // ── LOGIN (same flow as fetchPortalData) ─────────────────────────────────
+    // ── LOGIN ────────────────────────────────────────────────────────────────
     log('Opening portal...');
     await page.goto(PORTAL_URL, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => null);
     await page.waitForSelector('input', { timeout: 20000 }).catch(() => null);
@@ -1040,196 +1055,257 @@ async function fetchPrefillJson({ pan, password, assessmentYear, formType, onSta
     if (loginBtn) await loginBtn.click(); else await pwdEl.press('Enter');
     log('Clicked login');
 
-    for (let i = 0; i < 5; i++) {
-      await page.waitForTimeout(800);
+    // Poll for up to 60s after clicking login — handle dual login dialog and
+    // not-authenticated retries before confirming dashboard is reached.
+    log('Waiting for login to complete...');
+    for (let i = 0; i < 40; i++) {
+      await page.waitForTimeout(1500);
       const url = page.url();
-      if (/dashboard|myaccount|home|landing|fileIncomeTaxReturn/i.test(url)) break;
+
+      // Success: on dashboard and not on login page
+      if (/dashboard|myaccount|home|landing/i.test(url) && !/login|password/i.test(url)) {
+        log('Dashboard reached: ' + url);
+        break;
+      }
+
+      // "Dual Login Detected!" — click "Login Here" via JS evaluate (most reliable)
+      const dualHandled = await page.evaluate(() => {
+        const btn = [...document.querySelectorAll('button')]
+          .find(b => /login\s*here/i.test((b.textContent || '').trim()));
+        if (btn) { btn.click(); return true; }
+        return false;
+      }).catch(() => false);
+      if (dualHandled) { log('Dual login dialog — clicked Login Here'); continue; }
+
+      // "Request not authenticated" — re-submit the login form
       const notAuth = await page.evaluate(() => {
         const el = [...document.querySelectorAll('*')]
-          .find(e => e.getBoundingClientRect().width > 0 && /request.*not.*authenticated/i.test(e.textContent) && e.children.length === 0);
+          .find(e => e.getBoundingClientRect().width > 0 &&
+                     /request.*not.*authenticated/i.test(e.textContent) &&
+                     e.children.length === 0);
         return el ? el.textContent.trim() : null;
       }).catch(() => null);
-      if (!notAuth) break;
-      log('Not authenticated — retrying (' + (i + 1) + ')...');
-      const btn = await waitFor(page, ['button:has-text("Continue")', 'button:has-text("Login")', 'button[type="submit"]'], 2000);
-      if (btn) await btn.click(); else await page.keyboard.press('Enter');
+      if (notAuth) {
+        log('Not authenticated — retrying (' + i + ')...');
+        const btn = await waitFor(page, ['button:has-text("Continue")', 'button:has-text("Login")', 'button[type="submit"]'], 2000);
+        if (btn) await btn.click(); else await page.keyboard.press('Enter');
+      }
     }
 
-    log('Waiting for dashboard...');
-    await waitDashboard(page, log);
-    // Let the dashboard fully settle before interacting
     await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => null);
-    await page.waitForTimeout(1000);
     log('Logged in! URL: ' + page.url());
     await page.screenshot({ path: path.join(SS_DIR, 'prefill-01-dashboard.png') }).catch(() => null);
 
-    // ── Step 1: Reach the "File Income Tax Return" page ───────────────────────
-    log('Navigating to File Income Tax Return...');
+    // ── Step 1: Navigate to Download Prefilled Data page ──────────────────────
+    // Direct URL navigation is the most reliable approach — avoids multi-level
+    // hover menus that are fragile. Angular routing handles it since we're logged in.
+    log('Navigating to Download Prefilled Data page...');
 
-    // Path A: "File Now" button visible on dashboard (fastest — no menu needed)
-    const fileNowBtn = await page.evaluate(() => {
-      const btn = [...document.querySelectorAll('button, a')]
-        .find(e => /^(file now|file return)$/i.test((e.textContent || '').trim()) && e.getBoundingClientRect().width > 0);
-      if (btn) { btn.scrollIntoView({ block: 'center' }); btn.click(); return btn.textContent.trim(); }
-      return null;
-    }).catch(() => null);
+    const PREFILL_URL = 'https://eportal.incometax.gov.in/iec/foservices/#/dashboard/downloadPreFilledData';
+    await page.goto(PREFILL_URL, { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => null);
+    await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => null);
+    await page.waitForTimeout(2000);
 
-    if (fileNowBtn) {
-      log('Clicked dashboard button: ' + fileNowBtn);
-      await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => null);
+    // The portal shows a "Back/Forward/Refresh disabled — Logout?" security dialog
+    // on direct navigation. Wait for it and click "No" using Playwright locator.
+    log('Waiting for logout dialog...');
+    try {
+      // Wait up to 4s for the "No" button to appear in the dialog
+      const noBtn = page.getByRole('button', { name: 'No' });
+      await noBtn.waitFor({ state: 'visible', timeout: 4000 });
+      await noBtn.click();
+      log('Clicked No — dismissed logout dialog');
       await page.waitForTimeout(1000);
-    } else {
-      // Path B: e-File menu → Income Tax Returns → File Income Tax Return
-      log('No File Now button — using e-File menu...');
-
-      // Find the e-File nav item by checking only immediate text nodes (not child subtrees)
-      // This avoids matching a <li> whose textContent contains the entire sub-menu
-      const eFileClicked = await page.evaluate(() => {
-        const all = [...document.querySelectorAll('a, li, span, button')].filter(
-          e => e.getBoundingClientRect().width > 0
-        );
-        const el = all.find(e => {
-          // Check only this element's own text nodes (ignore children)
-          const ownText = [...e.childNodes]
-            .filter(n => n.nodeType === Node.TEXT_NODE)
-            .map(n => n.textContent.trim())
-            .join('').trim();
-          return /^e-?file$/i.test(ownText);
-        });
-        if (el) {
-          el.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
-          el.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
-          el.click();
-          return true;
-        }
-        return false;
-      }).catch(() => false);
-
-      if (eFileClicked) {
-        log('Clicked e-File menu');
-        await page.waitForTimeout(600);
-      } else {
-        log('e-File element not found — taking screenshot');
-        await page.screenshot({ path: path.join(SS_DIR, 'prefill-efile-missing.png') }).catch(() => null);
-      }
-
-      // Now click "Income Tax Returns" from the dropdown (must be visible)
-      await clickMenuItemVisible(page, /^income tax returns$/i, log, 'Income Tax Returns');
-      await page.waitForTimeout(500);
-
-      // Then "File Income Tax Return" from the sub-menu
-      await clickMenuItemVisible(page, /file income tax return/i, log, 'File Income Tax Return');
-      await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => null);
-      await page.waitForTimeout(1000);
+    } catch {
+      // Dialog may not appear on every run — that's fine
+      log('No logout dialog detected — proceeding');
     }
+    await page.waitForTimeout(500);
 
     log('After nav, URL: ' + page.url());
     await page.screenshot({ path: path.join(SS_DIR, 'prefill-02-file-itr.png') }).catch(() => null);
 
-    // ── Step 2: Select Assessment Year ───────────────────────────────────────
-    log('Selecting AY: ' + ay);
+    // If direct URL didn't land on the right page (portal may redirect logged-out users),
+    // fall back to menu navigation
+    if (!/downloadPreFilledData/i.test(page.url())) {
+      log('Direct URL redirected — trying menu navigation...');
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await page.waitForTimeout(500);
 
-    // Wait up to 8s for AY cards or dropdown to appear on screen
-    await waitFor(page, [
-      `button:has-text("${ay}")`,
-      `div:has-text("${ay}")`,
-      `label:has-text("${ay}")`,
-      'select',
-    ], 8000);
+      // Click e-File nav item (exact text match in the blue nav bar only)
+      log('Clicking e-File...');
+      const eFileEl = await page.evaluate(() => {
+        // Only look in the nav/header, avoid other page areas
+        const nav = document.querySelector('nav, header, [role="navigation"], .navbar, .nav-menu');
+        const scope = nav || document;
+        const el = [...scope.querySelectorAll('a, button, li, span')]
+          .find(e => {
+            const t = (e.textContent || '').trim();
+            return /^e-?file$/i.test(t) && e.getBoundingClientRect().width > 0;
+          });
+        if (el) { el.click(); return (el.textContent || '').trim(); }
+        return null;
+      });
+      log(eFileEl ? 'Clicked e-File: ' + eFileEl : '⚠ e-File not found in nav');
+      await page.waitForTimeout(700);
 
-    const ayClicked = await page.evaluate((ayLabel) => {
-      // Look for an element whose TEXT is exactly the AY label (short text, no subtrees)
-      const el = [...document.querySelectorAll('button, label, div, span, td, li')]
-        .filter(e => e.getBoundingClientRect().width > 0)
-        .find(e => {
-          const t = (e.textContent || '').trim();
-          return t === ayLabel || t === 'AY ' + ayLabel || t.includes(ayLabel) && t.length < 35;
+      // Hover Income Tax Returns to open its sub-menu
+      try {
+        const itrEl = page.getByText('Income Tax Returns', { exact: true }).first();
+        await itrEl.waitFor({ state: 'visible', timeout: 5000 });
+        const box = await itrEl.boundingBox();
+        if (box) await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+        log('Hovered Income Tax Returns');
+        await page.waitForTimeout(700);
+      } catch (e) { log('Income Tax Returns hover: ' + e.message.split('\n')[0]); }
+
+      // Click Download Pre-Filled Data
+      try {
+        const dlEl = page.getByText('Download Pre-Filled Data', { exact: true }).first();
+        await dlEl.waitFor({ state: 'visible', timeout: 4000 });
+        await dlEl.click();
+        log('Clicked Download Pre-Filled Data');
+      } catch {
+        await page.evaluate(() => {
+          const el = [...document.querySelectorAll('a, li, span, div')]
+            .find(e => /download.*pre.?filled?\s*data/i.test((e.textContent || '').trim()));
+          if (el) el.click();
         });
-      if (el) { el.scrollIntoView({ block: 'center' }); el.click(); return 'clicked: ' + (el.textContent || '').trim().slice(0, 40); }
-
-      // Try a <select> dropdown
-      const sel = document.querySelector('select');
-      if (sel) {
-        const opt = [...sel.options].find(o => (o.text + o.value).includes(ayLabel));
-        if (opt) { sel.value = opt.value; sel.dispatchEvent(new Event('change', { bubbles: true })); return 'dropdown: ' + opt.text; }
+        log('Download Pre-Filled Data clicked (JS fallback)');
       }
-      return null;
-    }, ay).catch(() => null);
 
-    if (ayClicked) log('AY selected: ' + ayClicked);
-    else log('AY card/dropdown not found — may already be selected or page is still loading');
+      await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => null);
+      await page.waitForTimeout(2000);
+      log('After menu nav, URL: ' + page.url());
+      await page.screenshot({ path: path.join(SS_DIR, 'prefill-02-file-itr.png') }).catch(() => null);
+    }
 
+    // ── Step 2: Select Assessment Year ─────────────────────────────────────────
+    // AY is auto-computed from today's date — no manual input needed.
+    log('Selecting AY: ' + ay + ' (auto from current date)');
+
+    // Wait for the dropdown to appear
+    await page.waitForSelector('select, mat-select', { timeout: 10000 }).catch(() => null);
+    await page.waitForTimeout(600);
     await page.screenshot({ path: path.join(SS_DIR, 'prefill-03-ay-selected.png') }).catch(() => null);
 
-    // Click Continue / Proceed button after AY selection
-    const continueBtn = await waitFor(page, ['button:has-text("Continue")', 'button:has-text("Proceed")', 'button[type="submit"]'], 5000);
-    if (continueBtn) { await continueBtn.click(); log('Clicked Continue after AY'); }
-    await page.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => null);
+    let aySelected = false;
 
-    // ── Step 3: Select ITR Form type ─────────────────────────────────────────
-    log('Selecting form: ' + form);
-    // Wait for form type options/radio buttons to appear
-    await waitFor(page, [`input[value="${form}"]`, `label:has-text("${form}")`, `button:has-text("${form}")`], 6000);
-
-    const formClicked = await page.evaluate((formLabel) => {
-      // Try radio input first
-      const radio = [...document.querySelectorAll('input[type="radio"]')]
-        .find(e => (e.value || '').toUpperCase().includes(formLabel.replace('-','')) && e.getBoundingClientRect().width > 0);
-      if (radio) { radio.click(); radio.dispatchEvent(new Event('change', { bubbles: true })); return 'radio: ' + radio.value; }
-
-      // Try label/card with exactly the form name
-      const label = [...document.querySelectorAll('label, button, div, span, li')]
-        .filter(e => e.getBoundingClientRect().width > 0)
-        .find(e => {
-          const t = (e.textContent || '').trim();
-          return t === formLabel || t.startsWith(formLabel) || new RegExp('^' + formLabel + '\\b', 'i').test(t);
+    // Find the AY dropdown by position — it must be in the main content area (y > 250px),
+    // NOT in the header where the language selector (English/Hindi mat-select) lives.
+    const ayDropdown = await page.evaluate(() => {
+      // Look for select or mat-select elements below y=250 (i.e., in the page body, not header)
+      const els = [...document.querySelectorAll('select, mat-select, ng-select')]
+        .filter(e => {
+          const r = e.getBoundingClientRect();
+          return r.width > 0 && r.height > 0 && r.top > 250;
         });
-      if (label) { label.scrollIntoView({ block: 'center' }); label.click(); return 'label: ' + (label.textContent || '').trim().slice(0, 30); }
-      return null;
-    }, form).catch(() => null);
-    if (formClicked) log('Form selected: ' + formClicked);
-    else log('Form type not found — may be pre-selected');
+      if (els.length === 0) return null;
+      return els[0].tagName.toLowerCase();
+    });
+    log('AY dropdown element: ' + (ayDropdown || 'not found'));
 
+    if (ayDropdown === 'select') {
+      // Native select — Playwright selectOption is most reliable
+      const opts = await page.evaluate(() => {
+        const all = [...document.querySelectorAll('select')]
+          .filter(s => s.getBoundingClientRect().top > 250);
+        const s = all[0];
+        return s ? [...s.options].map(o => o.text.trim() + '=' + o.value) : [];
+      });
+      log('AY options: ' + opts.join(' | '));
+
+      try {
+        // Target the select that's in the page body (not header)
+        const sel = page.locator('select').filter(async el => {
+          const box = await el.boundingBox();
+          return box ? box.y > 250 : false;
+        }).first();
+        try { await sel.selectOption({ label: ay }); }
+        catch { await sel.selectOption({ value: ay }); }
+        log('AY selected: ' + ay);
+        aySelected = true;
+      } catch {
+        const picked = await page.evaluate((yr) => {
+          const s = [...document.querySelectorAll('select')].find(el => el.getBoundingClientRect().top > 250);
+          const o = [...(s?.options || [])].find(op => op.text.includes(String(yr)) || op.value.includes(String(yr)));
+          if (o && s) {
+            s.value = o.value;
+            ['input', 'change'].forEach(ev => s.dispatchEvent(new Event(ev, { bubbles: true })));
+            return o.text.trim();
+          }
+          return null;
+        }, ayYear);
+        if (picked) { log('AY selected (JS): ' + picked); aySelected = true; }
+      }
+    } else if (ayDropdown === 'mat-select') {
+      // Angular Material — click to open panel, then click the correct mat-option
+      try {
+        // Click only the mat-select in the content area (y > 250)
+        await page.evaluate(() => {
+          const el = [...document.querySelectorAll('mat-select')]
+            .find(e => e.getBoundingClientRect().top > 250);
+          if (el) el.click();
+        });
+        await page.waitForTimeout(700);
+        // Click the mat-option that contains the AY year
+        await page.locator('mat-option').filter({ hasText: String(ayYear) }).first().click({ timeout: 4000 });
+        log('AY selected via mat-option: ' + ayYear);
+        aySelected = true;
+      } catch (e) { log('mat-select error: ' + e.message.split('\n')[0]); }
+    }
+
+    if (!aySelected) log('⚠ AY not selected — check prefill-03-ay-selected.png');
+    await page.waitForTimeout(800);
+
+    // ── Step 3: Click the Download button ──────────────────────────────────────
+    log('Clicking Download...');
+    // Wait for the button to become enabled (it's greyed out before AY is chosen)
+    await page.waitForFunction(() => {
+      const btn = [...document.querySelectorAll('button')]
+        .find(b => /download/i.test(b.textContent || ''));
+      return btn && !btn.disabled && btn.getBoundingClientRect().width > 0;
+    }, { timeout: 8000 }).catch(() => null);
+
+    try {
+      await page.getByRole('button', { name: /download/i }).first().click({ timeout: 5000 });
+      log('Clicked Download button');
+    } catch {
+      const clicked = await page.evaluate(() => {
+        const btn = [...document.querySelectorAll('button, a')]
+          .find(e => /download/i.test((e.textContent || '').trim()) && !e.disabled && e.getBoundingClientRect().width > 0);
+        if (btn) { btn.click(); return (btn.textContent || '').trim(); }
+        return null;
+      });
+      log(clicked ? 'Download clicked (JS): ' + clicked : '⚠ Download button not clickable');
+    }
+
+    await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => null);
+    await page.waitForTimeout(2000);
+
+    // ── Step 4: Wait for prefill JSON to be intercepted ───────────────────────
+    log('Waiting for prefill data (up to 45s)...');
     await page.screenshot({ path: path.join(SS_DIR, 'prefill-04-form-selected.png') }).catch(() => null);
 
-    const cont2 = await waitFor(page, ['button:has-text("Continue")', 'button:has-text("Proceed")', 'button[type="submit"]'], 5000);
-    if (cont2) { await cont2.click(); log('Clicked Continue (2)'); }
-    await page.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => null);
-
-    // ── Step 4: Trigger "Prefill my return" ──────────────────────────────────
-    log('Looking for Prefill option...');
-    await page.waitForTimeout(1000);
-    const prefillClicked = await page.evaluate(() => {
-      const el = [...document.querySelectorAll('div, button, span, label, li, p')]
-        .filter(e => e.getBoundingClientRect().width > 0)
-        .find(e => /prefill|pre.?fill|pre-?fill/i.test(e.textContent ?? ''));
-      if (el) { el.scrollIntoView({ block: 'center' }); el.click(); return (el.textContent || '').trim().slice(0, 60); }
-      return null;
-    }).catch(() => null);
-    if (prefillClicked) log('Clicked prefill: ' + prefillClicked);
-    else log('Prefill option not found — may trigger automatically');
-
-    const cont3 = await waitFor(page, ['button:has-text("Continue")', 'button:has-text("Proceed")', 'button:has-text("Let\'s Get Started")', 'button[type="submit"]'], 4000);
-    if (cont3) { await cont3.click(); log('Clicked Continue (3)'); }
-
-    // Wait for prefill JSON to be intercepted — check every 1s, up to 30s
-    log('Waiting for prefill JSON to load (up to 30s)...');
-    for (let i = 0; i < 30; i++) {
+    for (let i = 0; i < 45; i++) {
       if (capturedPrefill) break;
       await page.waitForTimeout(1000);
-      // Click any "get started" prompts that might be blocking
+      // Dismiss any blocking "get started" / "let's proceed" prompts
       await page.evaluate(() => {
         const btn = [...document.querySelectorAll('button')]
-          .find(b => /get started|continue|proceed|load/i.test(b.textContent ?? '') && b.getBoundingClientRect().width > 0);
+          .filter(e => e.getBoundingClientRect().width > 0 && !e.disabled)
+          .find(b => /get started|let'?s go|continue|proceed/i.test(b.textContent ?? ''));
         if (btn) btn.click();
       }).catch(() => null);
     }
+
+    await page.screenshot({ path: path.join(SS_DIR, 'prefill-05-done.png') }).catch(() => null);
 
     if (capturedPrefill) {
       log('✓ Prefill JSON captured (' + JSON.stringify(capturedPrefill).length + ' bytes)');
       return { prefill: capturedPrefill };
     } else {
-      log('⚠ Prefill JSON not captured — returning null');
+      log('⚠ Prefill JSON not captured — check screenshots in local-portal-agent/screenshots/');
       return { prefill: null };
     }
 

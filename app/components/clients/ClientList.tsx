@@ -597,6 +597,34 @@ export function ClientList({ onNavigate }: ClientListProps) {
                         </span>
                       )}
                     </td>
+                    <td>
+                      <button
+                        title="Delete client"
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          if (!confirm(`Delete ${client.fullName} (${client.pan})?\n\nThis will permanently delete the client and all their returns.`)) return;
+                          const res = await fetch(`/api/clients/${client.id}`, { method: 'DELETE' });
+                          if (res.ok) {
+                            setClients(prev => prev.filter(c => c.id !== client.id));
+                          } else {
+                            alert('Failed to delete client');
+                          }
+                        }}
+                        style={{
+                          background: 'none', border: 'none', cursor: 'pointer',
+                          color: 'var(--text-muted)', padding: '4px', borderRadius: '4px',
+                          display: 'flex', alignItems: 'center',
+                        }}
+                        onMouseEnter={e => (e.currentTarget.style.color = '#ef4444')}
+                        onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="2,3.5 12,3.5"/><path d="M5.5 3.5V2.5a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1v1"/>
+                          <rect x="3" y="3.5" width="8" height="9" rx="1"/>
+                          <line x1="5.5" y1="6.5" x2="5.5" y2="10"/><line x1="8.5" y1="6.5" x2="8.5" y2="10"/>
+                        </svg>
+                      </button>
+                    </td>
                   </tr>
                 );
               })}

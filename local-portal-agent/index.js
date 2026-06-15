@@ -14,6 +14,15 @@ let currentJob = null;
 let current26ASJob = null;
 let currentPrefillJob = null;
 
+// Returns the current applicable AY (e.g. "2026-27" when month >= April of start year)
+function currentAY() {
+  const now = new Date();
+  const yr = now.getFullYear();
+  const mo = now.getMonth() + 1;
+  const start = mo >= 4 ? yr : yr - 1;
+  return `${start}-${String(start + 1).slice(-2)}`;
+}
+
 function isJobBlocking(job) {
   if (!job) return false;
   if (job.status !== 'running') return false;
@@ -115,7 +124,7 @@ app.post('/fetch-prefill', async (req, res) => {
   const jobRef = currentPrefillJob;
 
   fetchPrefillJson({
-    pan, password, assessmentYear: assessmentYear || '2025-26', formType: formType || 'ITR-1',
+    pan, password, assessmentYear: assessmentYear || currentAY(), formType: formType || 'ITR-1',
     onStatus: (msg) => { console.log('[prefill]', msg); jobRef.log.push(msg); },
   }).then((data) => {
     jobRef.status = 'done'; jobRef.result = data;
