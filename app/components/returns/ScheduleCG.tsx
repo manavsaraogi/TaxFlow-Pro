@@ -270,6 +270,27 @@ export default function ScheduleCG({ returnId, returnData, onSaved, setDirty }: 
   const totalStcg      = total111A + totalOther;
 
   async function handleSave() {
+    const missing: string[] = [];
+    state.ltcg112A.forEach((e, i) => {
+      if (!e.purchaseDate) missing.push(`LTCG 112A row ${i + 1}: Purchase Date`);
+      if (!e.saleDate) missing.push(`LTCG 112A row ${i + 1}: Sale Date`);
+    });
+    state.ltcgOther.forEach((e, i) => {
+      if (!e.purchaseDate) missing.push(`LTCG Other row ${i + 1}: Purchase Date`);
+      if (!e.saleDate) missing.push(`LTCG Other row ${i + 1}: Sale Date`);
+    });
+    state.stcg111A.forEach((e, i) => {
+      if (!e.purchaseDate) missing.push(`STCG 111A row ${i + 1}: Purchase Date`);
+      if (!e.saleDate) missing.push(`STCG 111A row ${i + 1}: Sale Date`);
+    });
+    state.stcgOther.forEach((e, i) => {
+      if (!e.purchaseDate) missing.push(`STCG Other row ${i + 1}: Purchase Date`);
+      if (!e.saleDate) missing.push(`STCG Other row ${i + 1}: Sale Date`);
+    });
+    if (missing.length) {
+      setMsg('✗ Please fill in all dates before saving:\n• ' + missing.join('\n• '));
+      return;
+    }
     setSaving(true);
     setMsg('');
     try {
