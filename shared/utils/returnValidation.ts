@@ -9,6 +9,7 @@ export type TabId =
   | 'salary'
   | 'house_property'
   | 'business_profession'
+  | 'financial_particulars'
   | 'capital_gains'
   | 'other_sources'
   | 'deductions'
@@ -137,6 +138,29 @@ export function validateReturn(
       }
     }
     addTab('business_profession', 'Business & Profession', errors);
+  }
+
+  // ── Financial Particulars (Part A-BS, mandatory for ITR-4) ──────────────────
+  {
+    const errors: FieldError[] = [];
+    const hasBPIncome = b44AD.length + b44ADA.length + b44AE.length > 0;
+    if (hasBPIncome) {
+      const fpRaw = returnData?.financialParticulars ?? returnData?.financialParticularsJson;
+      const fp = typeof fpRaw === 'string' ? JSON.parse(fpRaw) : fpRaw;
+      const mandatory: [string, string][] = [
+        ['E15_SundryCreditors', 'Sundry creditors (E15)'],
+        ['E19_Inventories', 'Inventories (E19)'],
+        ['E20_SundryDebtors', 'Sundry debtors (E20)'],
+        ['E21_BalanceWithBanks', 'Balance with banks (E21)'],
+        ['E22_CashInHand', 'Cash-in-hand (E22)'],
+      ];
+      for (const [key, label] of mandatory) {
+        if (!fp || !(Number(fp[key]) > 0)) {
+          errors.push({ field: `fp.${key}`, message: `${label} is mandatory in Financial Particulars` });
+        }
+      }
+    }
+    addTab('financial_particulars', 'Financial Particulars', errors);
   }
 
   // ── TDS ───────────────────────────────────────────────────────────────────

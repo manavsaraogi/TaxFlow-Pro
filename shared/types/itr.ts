@@ -655,49 +655,28 @@ export interface ScheduleSTCG {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// FINANCIAL PARTICULARS — PartA-BS4 + PartA-PL4 (ITR-4 mandatory)
+// FINANCIAL PARTICULARS — Part A-BS "No Account Case", E11–E25 (ITR-4 mandatory)
+// Flat single-column balance sheet exactly as in the ITR-4 Excel utility.
+// Mandatory: E15, E19, E20, E21, E22.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export interface PartABS4 {
-  // Sources of Funds
-  CapitalOpeningBal:           number;
-  AddProfitFromPL:             number;
-  LessDrawings:                number;
-  // CapitalClosingBal = CapitalOpeningBal + AddProfitFromPL - LessDrawings (computed)
-  SecuredLoansFromBanks:       number;
-  SecuredLoansFromOthers:      number;
-  UnsecuredLoans:              number;
-  Advances:                    number;
-  SundryCreditorsForGoods:     number;
-  SundryCreditorsForExpenses:  number;
-  OtherLiabilities:            number;
-  // Application of Funds
-  GrossBlock:                  number;
-  Depreciation:                number;
-  // NetBlock = GrossBlock - Depreciation (computed)
-  Investments:                 number;
-  SundryDebtorsMoreThan6M:     number;
-  SundryDebtorsOthers:         number;
-  CashInHand:                  number;
-  BalanceWithBanksCurrentAcc:  number;
-  BalanceWithBanksDepositAcc:  number;
-  LoansAndAdvances:            number;
-  AdvanceTaxAndTDS:            number;
-  StockInTrade:                number;
-  OtherCurrentAssets:          number;
-}
-
-export interface PartAPL4 {
-  GrossTurnoverReceipts:       number;  // Same as ScheduleBP turnover
-  GrossProfit:                 number;
-  OtherIncome:                 number;
-  TotalExpenses:               number;
-  NetProfit:                   number;  // GrossProfit + OtherIncome - TotalExpenses
-}
-
 export interface FinancialParticulars {
-  PartABS4: PartABS4;
-  PartAPL4: PartAPL4;
+  E11_ProprietorFund:        number;  // Partners/members own capital
+  E12_SecuredLoans:          number;
+  E13_UnsecuredLoans:        number;
+  E14_Advances:               number;
+  E15_SundryCreditors:        number;  // mandatory
+  E16_OtherLiabilities:       number;
+  // E17 Total capital and liabilities = E11+E12+E13+E14+E15+E16 (computed)
+  E18_FixedAssets:            number;
+  E18a_Investments:           number;
+  E19_Inventories:            number;  // mandatory
+  E20_SundryDebtors:          number;  // mandatory
+  E21_BalanceWithBanks:       number;  // mandatory
+  E22_CashInHand:             number;  // mandatory
+  E23_LoansAndAdvances:       number;
+  E24_OtherAssets:            number;
+  // E25 Total assets = E18+E18a+E19+E20+E21+E22+E23+E24 (computed)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
