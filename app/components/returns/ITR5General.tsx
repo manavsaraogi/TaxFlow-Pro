@@ -68,6 +68,33 @@ interface ITR5GeneralState {
   interest234F: number;
   isUpdatedReturn: boolean;
   updated: ITR5Updated;
+  // ── Compliance Questions (Part A-General 2) ───────────────────────────────
+  hasRelatedPartyTransactions40A2b: boolean;
+  hasInternationalTransactions92B: boolean;
+  hasFiled3CEB: boolean;
+  hasSecondaryAdjustment92CE: boolean;
+  secondaryAdjustmentAmount92CE: number;
+  hasSpecifiedDomesticTransactions92BA: boolean;
+  hasNotifiedJurisdictionalTransactions94A: boolean;
+  hasForeignAssets: boolean;
+  hasForeignIncome: boolean;
+  hasFiled15CA15CB: boolean;
+  financialStatementsIndAS: boolean;
+  isForeignSubsidiary: boolean;
+  claims10AA: boolean;
+  claims80IA: boolean;
+  claims80IB: boolean;
+  claims80IC: boolean;
+  claims80IE: boolean;
+  claims80JJA: boolean;
+  claims80JJAA: boolean;
+  claims80P: boolean;
+  hasVirtualDigitalAssets: boolean;
+  hasAgriculturalIncome: boolean;
+  agriculturalIncome: number;
+  totalTurnover: number;
+  gstRegistered: boolean;
+  gstin: string;
 }
 
 const EMPTY_MEMBER: ITR5Member = {
@@ -112,6 +139,32 @@ const EMPTY: ITR5GeneralState = {
   interest234F: 0,
   isUpdatedReturn: false,
   updated: { ...EMPTY_UPDATED },
+  hasRelatedPartyTransactions40A2b: false,
+  hasInternationalTransactions92B: false,
+  hasFiled3CEB: false,
+  hasSecondaryAdjustment92CE: false,
+  secondaryAdjustmentAmount92CE: 0,
+  hasSpecifiedDomesticTransactions92BA: false,
+  hasNotifiedJurisdictionalTransactions94A: false,
+  hasForeignAssets: false,
+  hasForeignIncome: false,
+  hasFiled15CA15CB: false,
+  financialStatementsIndAS: false,
+  isForeignSubsidiary: false,
+  claims10AA: false,
+  claims80IA: false,
+  claims80IB: false,
+  claims80IC: false,
+  claims80IE: false,
+  claims80JJA: false,
+  claims80JJAA: false,
+  claims80P: false,
+  hasVirtualDigitalAssets: false,
+  hasAgriculturalIncome: false,
+  agriculturalIncome: 0,
+  totalTurnover: 0,
+  gstRegistered: false,
+  gstin: '',
 };
 
 const ENTITY_OPTIONS: { value: EntityType; label: string; hint: string }[] = [
@@ -752,6 +805,192 @@ export default function ITR5General({ returnId, initialData, onSaved }: Props) {
             </div>
           </div>
         )}
+      </Section>
+
+      {/* ── GST & Turnover ───────────────────────────────────────────────── */}
+      <Section title="GST &amp; Turnover">
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className={lbl}>Total Turnover / Gross Receipts for the Year (₹)</label>
+            <input type="number" min={0} className={inp} value={form.totalTurnover || ''}
+              onChange={e => update({ totalTurnover: Number(e.target.value) || 0 })} />
+            <p className="text-xs text-gray-400 mt-1">Used to determine audit applicability and GST reconciliation</p>
+          </div>
+          <div>
+            <label className={lbl}>Agricultural income for the year (₹)</label>
+            <input type="number" min={0} className={inp} value={form.agriculturalIncome || ''}
+              onChange={e => update({ agriculturalIncome: Number(e.target.value) || 0 })} />
+          </div>
+        </div>
+        <ToggleCard
+          id="gstReg"
+          checked={form.gstRegistered}
+          onChange={v => update({ gstRegistered: v })}
+          title="Entity is registered under GST"
+          description="GSTIN required if registered"
+        />
+        {form.gstRegistered && (
+          <div>
+            <label className={lbl}>GSTIN</label>
+            <input className={`${inp} font-mono uppercase`} value={form.gstin}
+              onChange={e => update({ gstin: e.target.value.toUpperCase() })}
+              placeholder="22AAAAA0000A1Z5" maxLength={15} />
+          </div>
+        )}
+        <ToggleCard
+          id="vda"
+          checked={form.hasVirtualDigitalAssets}
+          onChange={v => update({ hasVirtualDigitalAssets: v })}
+          title="Entity has income from Virtual Digital Assets (crypto, NFTs etc.)"
+          description="Taxable at 30% u/s 115BBH; Schedule VDA must be filled"
+          color="amber"
+        />
+        <ToggleCard
+          id="agri"
+          checked={form.hasAgriculturalIncome}
+          onChange={v => update({ hasAgriculturalIncome: v })}
+          title="Entity has agricultural income"
+          description="Relevant for partial integration with business income for tax computation"
+        />
+      </Section>
+
+      {/* ── Transfer Pricing & International Transactions ────────────────── */}
+      <Section
+        title="Transfer Pricing &amp; International Transactions"
+        hint="Answer based on transactions during the financial year. These questions flow directly into Part A-General(2) of the ITR-5."
+      >
+        <ToggleCard
+          id="intl92B"
+          checked={form.hasInternationalTransactions92B}
+          onChange={v => update({ hasInternationalTransactions92B: v, hasFiled3CEB: false, hasSecondaryAdjustment92CE: false })}
+          title="Entity has entered into international transactions with associated enterprises (u/s 92B)"
+          description="Transactions with group companies, subsidiaries, or associated enterprises outside India"
+          color="amber"
+        />
+        {form.hasInternationalTransactions92B && (
+          <div className="ml-4 space-y-3 border-l-2 border-amber-200 pl-4">
+            <ToggleCard
+              id="form3CEB"
+              checked={form.hasFiled3CEB}
+              onChange={v => update({ hasFiled3CEB: v })}
+              title="Form 3CEB (Transfer Pricing Report) has been / will be filed u/s 92E"
+              description="Mandatory if international transactions exceed ₹1 crore in aggregate"
+            />
+            <ToggleCard
+              id="sec92CE"
+              checked={form.hasSecondaryAdjustment92CE}
+              onChange={v => update({ hasSecondaryAdjustment92CE: v, secondaryAdjustmentAmount92CE: 0 })}
+              title="Secondary adjustment applies u/s 92CE"
+              description="Where a primary transfer pricing adjustment has been made and the excess money has not been repatriated"
+              color="amber"
+            />
+            {form.hasSecondaryAdjustment92CE && (
+              <div>
+                <label className={lbl}>Amount of secondary adjustment (₹)</label>
+                <input type="number" min={0} className={inp} value={form.secondaryAdjustmentAmount92CE || ''}
+                  onChange={e => update({ secondaryAdjustmentAmount92CE: Number(e.target.value) || 0 })} />
+              </div>
+            )}
+          </div>
+        )}
+
+        <ToggleCard
+          id="sdt92BA"
+          checked={form.hasSpecifiedDomesticTransactions92BA}
+          onChange={v => update({ hasSpecifiedDomesticTransactions92BA: v })}
+          title="Entity has specified domestic transactions u/s 92BA"
+          description="Transactions with domestic related parties exceeding ₹20 crore — TP provisions apply"
+        />
+
+        <ToggleCard
+          id="nja94A"
+          checked={form.hasNotifiedJurisdictionalTransactions94A}
+          onChange={v => update({ hasNotifiedJurisdictionalTransactions94A: v })}
+          title="Transactions with persons in Notified Jurisdictional Areas u/s 94A"
+          description="Countries identified by CBDT where no effective exchange of information exists (e.g. Cyprus in earlier years)"
+          color="amber"
+        />
+
+        <ToggleCard
+          id="relParty"
+          checked={form.hasRelatedPartyTransactions40A2b}
+          onChange={v => update({ hasRelatedPartyTransactions40A2b: v })}
+          title="Payments to related parties covered u/s 40A(2)(b)"
+          description="Payments to directors, partners, relatives, or associated concerns that may be disallowed if excessive"
+        />
+      </Section>
+
+      {/* ── Foreign Assets & Income ──────────────────────────────────────── */}
+      <Section title="Foreign Assets &amp; Foreign Income">
+        <ToggleCard
+          id="foreignAssets"
+          checked={form.hasForeignAssets}
+          onChange={v => update({ hasForeignAssets: v })}
+          title="Entity holds assets located outside India"
+          description="Foreign bank accounts, shares in foreign companies, immovable property abroad, etc. — Schedule FA must be filled"
+          color="amber"
+        />
+        <ToggleCard
+          id="foreignIncome"
+          checked={form.hasForeignIncome}
+          onChange={v => update({ hasForeignIncome: v })}
+          title="Entity has income from foreign sources during the year"
+          description="Dividends, interest, royalties, capital gains on foreign assets — Schedule FSI required"
+        />
+        <ToggleCard
+          id="form15CA"
+          checked={form.hasFiled15CA15CB}
+          onChange={v => update({ hasFiled15CA15CB: v })}
+          title="Form 15CA / 15CB has been filed for foreign remittances"
+          description="Required when remitting money outside India — certificate from CA and self-declaration"
+        />
+        <ToggleCard
+          id="foreignSub"
+          checked={form.isForeignSubsidiary}
+          onChange={v => update({ isForeignSubsidiary: v })}
+          title="Entity is a subsidiary / associate of a foreign company"
+          description="Relevant for Country-by-Country Reporting (CbCR) and BEPS compliance"
+        />
+        <ToggleCard
+          id="indAS"
+          checked={form.financialStatementsIndAS}
+          onChange={v => update({ financialStatementsIndAS: v })}
+          title="Financial statements are prepared under Ind AS"
+          description="Indian Accounting Standards (converged with IFRS) — affects ICDS adjustments in Schedule BP"
+        />
+      </Section>
+
+      {/* ── Special Deductions Claimed ───────────────────────────────────── */}
+      <Section
+        title="Special Deductions &amp; Incentives"
+        hint="Tick whichever your organisation is claiming. The relevant schedule will need to be filled separately."
+      >
+        <div className="grid grid-cols-1 gap-2">
+          <ToggleCard id="c10AA" checked={form.claims10AA} onChange={v => update({ claims10AA: v })}
+            title="Deduction u/s 10AA — Special Economic Zone (SEZ) units"
+            description="Export profits from SEZ units — Schedule 10AA must be filled" />
+          <ToggleCard id="c80IA" checked={form.claims80IA} onChange={v => update({ claims80IA: v })}
+            title="Deduction u/s 80-IA — Infrastructure, telecom, power, SEZ developers"
+            description="100% deduction for eligible infrastructure businesses" />
+          <ToggleCard id="c80IB" checked={form.claims80IB} onChange={v => update({ claims80IB: v })}
+            title="Deduction u/s 80-IB — Industrial undertakings / hotels / hospitals"
+            description="Time-limited profit deduction for eligible businesses" />
+          <ToggleCard id="c80IC" checked={form.claims80IC} onChange={v => update({ claims80IC: v })}
+            title="Deduction u/s 80-IC — Special category state undertakings"
+            description="North-East, J&K, Himachal Pradesh, Uttarakhand — eligible industries" />
+          <ToggleCard id="c80IE" checked={form.claims80IE} onChange={v => update({ claims80IE: v })}
+            title="Deduction u/s 80-IE — North-Eastern states eligible businesses"
+            description="Manufacturing/hotel/adventure/eco-tourism activities in North-East" />
+          <ToggleCard id="c80JJA" checked={form.claims80JJA} onChange={v => update({ claims80JJA: v })}
+            title="Deduction u/s 80JJA — Business of collecting / processing bio-degradable waste"
+            description="100% deduction for 5 years from commencement" />
+          <ToggleCard id="c80JJAA" checked={form.claims80JJAA} onChange={v => update({ claims80JJAA: v })}
+            title="Deduction u/s 80JJAA — New employees' cost (30% for 3 years)"
+            description="For businesses subject to tax audit — additional wages to new employees" />
+          <ToggleCard id="c80P" checked={form.claims80P} onChange={v => update({ claims80P: v })}
+            title="Deduction u/s 80P — Co-operative society income exemption"
+            description="Applies only to co-operative societies — various sub-sections" />
+        </div>
       </Section>
 
     </div>
