@@ -1687,6 +1687,52 @@ function buildITR5(input: BuildITRInput): object {
 
   const toI = (v: unknown) => Math.round(Number(v) || 0);
 
+  // ── Income computations ───────────────────────────────────────────────────
+  const hpIncome   = toI(rd.houseProperty?.TotalIncomeFromHP);
+  const osIncome   = toI(rd.otherSources?.IncomeFromOtherSources);
+  const stcg111A   = toI(rd.stcg?.TotalSTCG111A);
+  const stcgOther  = toI(rd.stcg?.TotalSTCGOther);
+  const totalSTCG  = stcg111A + stcgOther;
+  const ltcg112A   = toI(rd.ltcg112A?.TaxableLTCG112A);
+  const totalLTCG  = ltcg112A;
+  const totalCG    = totalSTCG + totalLTCG;
+
+  // ITR-5 business/profession income from P&L
+  const bpIncome   = toI(pl.BizNetProfit) + toI(pl.ProfNetProfit);
+
+  const grossTotalIncome = bpIncome + Math.max(0, hpIncome) + totalCG + Math.max(0, osIncome);
+
+  // AOP taxed at Maximum Marginal Rate (30%) — no basic exemption, no 87A rebate
+  const taxOnNormalIncome = Math.round(grossTotalIncome * 0.30);
+  const taxOnSTCG111A    = Math.round(stcg111A * 0.20);   // 20% post-July 2024
+  const taxOnLTCG112A   = Math.round(ltcg112A * 0.125);   // 12.5%
+  const taxPayableOnTI  = taxOnNormalIncome + taxOnSTCG111A + taxOnLTCG112A;
+
+  // Surcharge: 12% if income > 1Cr
+  const surchargeRate = grossTotalIncome > 10000000 ? 0.12 : 0;
+  const surcharge     = Math.round(taxPayableOnTI * surchargeRate);
+  const cess          = Math.round((taxPayableOnTI + surcharge) * 0.04);
+  const grossTaxLiab  = taxPayableOnTI + surcharge + cess;
+
+  // Taxes paid
+  const advTax   = toI(rd.taxPayments?.TotalAdvanceTax);
+  const tdsOther = toI(rd.tds?.TotalTDSOnOtherIncome);
+  const tcs      = toI(rd.tds?.TotalTCS);
+  const satTax   = toI(rd.taxPayments?.TotalSelfAssessmentTax);
+  const totalTaxPaid = advTax + tdsOther + tcs + satTax;
+  const netTaxLiab   = Math.max(0, grossTaxLiab - totalTaxPaid);
+  const refund       = Math.max(0, totalTaxPaid - grossTaxLiab);
+
+  // Bank for refund — pulled from returnData bankAccounts
+  const primaryBank = (rd as any).bankAccounts?.[0];
+
+  const cylaInc = (n: number) => ({
+    IncCYLA: { IncOfCurYrUnderThatHead: n, OthSrcLossNoRaceHorseSetoff: 0, IncOfCurYrAfterSetOff: n },
+  });
+  const bflaRow = (n: number) => ({
+    IncBFLA: { IncOfCurYrAfterCYLABFLA: n, BFlossPrevYrUndSameHeadSetoff: 0, IncAfterBFLA: n },
+  });
+
   // ── Balance Sheet totals ──────────────────────────────────────────────────
   const totResrNSurp      = toI(bs.ReservesRevaluation) + toI(bs.ReservesCapital) + toI(bs.ReservesStatutory) + toI(bs.ReservesOther) + toI(bs.ReservesPLCredit);
   const totPartnerFund    = toI(bs.PartnersCapital) + totResrNSurp;
@@ -2056,6 +2102,283 @@ function buildITR5(input: BuildITRInput): object {
             TotCreditsToPL: totCreditsToPL,
           },
         },
+
+        // ── ScheduleHP ────────────────────────────────────────────────────
+        ScheduleHP: rd.houseProperty
+          ? {
+              PropertyDetails:           rd.houseProperty.Properties.map(buildPropertyDetails),
+              TotalIncomeChargeableUnHP: toI(rd.houseProperty.TotalIncomeFromHP),
+            }
+          : { PropertyDetails: [], TotalIncomeChargeableUnHP: 0 },
+
+        // ── ScheduleOS ────────────────────────────────────────────────────
+        ScheduleOS: {
+          OtherSrcThanOwnRaceHorse: Math.max(0, osIncome),
+          OthSrcItems: Array.isArray(rd.otherSources?.OtherSourceItems)
+            ? rd.otherSources!.OtherSourceItems.map(buildOtherSourceItem)
+            : [],
+          DeductionUs57iia: toI(rd.otherSources?.DeductionUs57iia),
+          IncomeOthSrc:     Math.max(0, osIncome),
+        },
+
+        // ── ScheduleCG ────────────────────────────────────────────────────
+        ScheduleCGFor23: {
+          ShortTermCapGainFor23: (() => {
+            const stcg = rd.stcg;
+            const otherAssets = stcg?.OtherEntries ?? [];
+            return {
+              EquityMFDTDtls111A: stcg?.Entries111A?.length
+                ? {
+                    ShareUnitSaleDetails111A: stcg.Entries111A.map(e => ({
+                      ISIN:            e.isin ?? '',
+                      ShareUnitName:   e.shareOrUnitName ?? '',
+                      SaleValue:       toI(e.salesValue),
+                      CostAcquisition: toI(e.purchaseCost),
+                      Expenditure:     toI(e.expenditure),
+                      GainLoss:        toI(e.gainLoss),
+                    })),
+                    TotalSaleValue:   stcg.Entries111A.reduce((s,e) => s + toI(e.salesValue), 0),
+                    TotalCostOfAcq:   stcg.Entries111A.reduce((s,e) => s + toI(e.purchaseCost), 0),
+                    TotalExpenditure: stcg.Entries111A.reduce((s,e) => s + toI(e.expenditure), 0),
+                    TotalSTCG111A:    stcg111A,
+                  }
+                : undefined,
+              NRITransacSec48Dtl:   { NRITransactionSec48: 0 },
+              NRISecur115AD:        { NRISecuritiesIncome: 0, NRISecuritiesTax: 0 },
+              SaleOnOtherAssets:    {
+                SaleValue:       otherAssets.reduce((s,e) => s + toI(e.salesValue), 0),
+                CostAcquisition: otherAssets.reduce((s,e) => s + toI(e.purchaseCost), 0),
+                LowDeductions:   otherAssets.reduce((s,e) => s + toI(e.expenditure), 0),
+                CapGain:         stcgOther,
+              },
+              TotalAmtDeemedStcg:       0,
+              PassThrIncNatureSTCG:     0,
+              TotalAmtNotTaxUsDTAAStcg: 0,
+              TotalAmtTaxUsDTAAStcg:    0,
+              TotalSTCG:                totalSTCG,
+            };
+          })(),
+          LongTermCapGain23: (() => {
+            const entries = rd.ltcg112A?.Entries ?? [];
+            return {
+              SaleOfEquityShareUs112A: entries.length
+                ? {
+                    SaleOfEquityDtls: entries.map(e => ({
+                      ISIN:              e.ISIN ?? '',
+                      ShareUnitName:     e.ShareOrUnitName ?? '',
+                      SaleValue:         toI(e.SalesValue),
+                      PurchaseCost:      toI(e.PurchaseCost),
+                      FMVasOn31Jan2018:  toI(e.FMVasOn31Jan2018),
+                      Expenditure:       toI(e.Expenditure),
+                      GainLoss:          toI(e.GainLoss),
+                    })),
+                    TotalSaleValue:   entries.reduce((s,e) => s + toI(e.SalesValue), 0),
+                    TotalCostOfAcq:   entries.reduce((s,e) => s + toI(e.PurchaseCost), 0),
+                    TotalExpenditure: 0,
+                    TotalLTCG112A:    ltcg112A,
+                  }
+                : undefined,
+              NRIProvisoSec48:            { NRITransactionSec48: 0 },
+              NRIOnSec112and115:          { NRISecuritiesIncome: 0, NRISecuritiesTax: 0 },
+              NRISaleOfEquityShareUs112A: { NRIEquityIncome: 0, NRIEquityTax: 0 },
+              NRISaleofForeignAsset:      { NRIForeignAssetIncome: 0, NRIForeignAssetTax: 0 },
+              SaleofAssetNADtls:          { SaleValue: 0, CostAcquisition: 0, LowDeductions: 0, CapGain: 0 },
+              TotalAmtDeemedLtcg:         0,
+              PassThrIncNatureLTCG:       0,
+              TotalAmtNotTaxUsDTAALtcg:   0,
+              TotalAmtTaxUsDTAALtcg:      0,
+              TotalLTCG:                  ltcg112A,
+            };
+          })(),
+          SumOfCGIncm:        totalCG,
+          IncmFromVDATrnsf:   0,
+          TotScheduleCGFor23: totalCG,
+        },
+
+        // ── ScheduleSI (Special Income rates) ────────────────────────────
+        ScheduleSI: {
+          SIDetails: [
+            ...(stcg111A > 0 ? [{ SecCode: '1A', SplRateInc: stcg111A, SplRateIncTax: taxOnSTCG111A }] : []),
+            ...(ltcg112A > 0 ? [{ SecCode: '112A', SplRateInc: ltcg112A, SplRateIncTax: taxOnLTCG112A }] : []),
+          ],
+          TotSplRateInc:    stcg111A + ltcg112A,
+          TotSplRateIncTax: taxOnSTCG111A + taxOnLTCG112A,
+        },
+
+        // ── ScheduleVIA ───────────────────────────────────────────────────
+        ...(rd.deductions ? {
+          ScheduleVIA: { UsrDeductions: buildUsrDeductions(rd.deductions) },
+        } : {}),
+
+        // ── ScheduleGST ───────────────────────────────────────────────────
+        ScheduleGST: {
+          GSTINDtls: Array.isArray((rd as any).gstDetails)
+            ? (rd as any).gstDetails.map((g: any) => ({
+                GSTIN:             g.gstin ?? '',
+                GSTTurnover:       toI(g.turnover),
+                NameOfBusiness:    g.businessName ?? '',
+                RegistrationStatus: g.registrationStatus ?? 'REG',
+              }))
+            : [],
+          TotTurnover: toI((rd as any).gstTurnover),
+        },
+
+        // ── ScheduleCYLA ─────────────────────────────────────────────────
+        ScheduleCYLA: {
+          HP: cylaInc(Math.max(0, hpIncome)),
+          STCG20Per:    cylaInc(stcg111A),
+          STCG30Per:    cylaInc(0),
+          STCGAppRate:  cylaInc(stcgOther),
+          STCGDTAARate: cylaInc(0),
+          LTCG12_5Per:  cylaInc(ltcg112A),
+          LTCGDTAARate: cylaInc(0),
+          OthSrcExclRaceHorse: cylaInc(Math.max(0, osIncome)),
+          BusinessIncome: cylaInc(Math.max(0, bpIncome)),
+          TotalCurYr: {
+            TotalCurYrInc:  grossTotalIncome,
+            TotalCurYrLoss: 0,
+          },
+          TotalLossSetOff:  { TotalLossSetOff: 0 },
+          LossRemAftSetOff: { LossRemainingAfterSetOff: 0 },
+        },
+
+        // ── ScheduleBFLA ─────────────────────────────────────────────────
+        ScheduleBFLA: {
+          HP:           bflaRow(Math.max(0, hpIncome)),
+          STCG20Per:    bflaRow(stcg111A),
+          STCG30Per:    bflaRow(0),
+          STCGAppRate:  bflaRow(stcgOther),
+          STCGDTAARate: bflaRow(0),
+          LTCG12_5Per:  bflaRow(ltcg112A),
+          LTCGDTAARate: bflaRow(0),
+          BusinessIncome: bflaRow(Math.max(0, bpIncome)),
+          IncomeOfCurrYrAftCYLABFLA: grossTotalIncome,
+          TotalBFLossSetOff: 0,
+        },
+
+        // ── ScheduleCFL ───────────────────────────────────────────────────
+        ScheduleCFL: {
+          LossCFFromPrev8: { TotalLossCFFromPrev8: 0 },
+          TotalOfBFLosses: { TotalBFLoss: 0 },
+          CurrentYrLoss:   { TotalCurrentYrLoss: 0 },
+        },
+
+        // ── ScheduleEI (Exempt Income) ────────────────────────────────────
+        ScheduleEI: {
+          ExemptIncAgri:        0,
+          ExemptIncAgriType:    [],
+          ExemptIncAgriTotal:   0,
+          ExemptIncOthers:      Array.isArray((rd as any).exemptIncome) ? (rd as any).exemptIncome : [],
+          TotExemptInc:         0,
+        },
+
+        // ── PartB-TI ─────────────────────────────────────────────────────
+        'PartB-TI': {
+          IncomeFromHP:  Math.max(0, hpIncome),
+          CapGain: {
+            ShortTerm: {
+              ShortTerm20Per:       stcg111A,
+              ShortTerm30Per:       0,
+              ShortTermAppRate:     stcgOther,
+              ShortTermSplRateDTAA: 0,
+              TotalShortTerm:       totalSTCG,
+            },
+            LongTerm: {
+              LongTerm12_5Per:     ltcg112A,
+              LongTermSplRateDTAA: 0,
+              TotalLongTerm:       ltcg112A,
+            },
+            ShortTermLongTermTotal: totalCG,
+            CapGains30Per115BBH:    0,
+            TotalCapGains:          totalCG,
+          },
+          IncFromOS: {
+            OtherSrcThanOwnRaceHorse: Math.max(0, osIncome),
+            IncChargblSplRate:        0,
+            FromOwnRaceHorse:         0,
+            TotIncFromOS:             Math.max(0, osIncome),
+          },
+          ProfitsAndGainsFromBP: Math.max(0, bpIncome),
+          TotalTI:                  grossTotalIncome,
+          CurrentYearLoss:          0,
+          BalanceAfterSetoffLosses: grossTotalIncome,
+          BroughtFwdLossesSetoff:   0,
+          GrossTotalIncome:         grossTotalIncome,
+          IncChargeTaxSplRate111A112: stcg111A + ltcg112A,
+          DeductionsUnderScheduleVIA: 0,
+          TotalIncome:               grossTotalIncome,
+          IncChargeableTaxSplRates:  stcg111A + ltcg112A,
+          NetAgricultureIncomeOrOtherIncomeForRate: 0,
+          AggregateIncome:           grossTotalIncome,
+          LossesOfCurrentYearCarriedFwd: 0,
+          DeemedIncomeUs115JC:       0,
+        },
+
+        // ── PartB_TTI ─────────────────────────────────────────────────────
+        PartB_TTI: {
+          TaxPayDeemedTotIncUs115JC:  0,
+          Surcharge:                  surcharge,
+          HealthEduCess:              cess,
+          TotalTaxPayablDeemedTotInc: 0,
+          ComputationOfTaxLiability: {
+            TaxPayableOnTI:               taxPayableOnTI,
+            Rebate87A:                    0,
+            TaxPayableOnRebate:           taxPayableOnTI,
+            Surcharge25ofSI:              0,
+            SurchargeOnAboveCrore:        surcharge,
+            Surcharge25ofSIBeforeMarginal: 0,
+            SurchargeOnAboveCroreBeforeMarginal: 0,
+            TotalSurcharge:               surcharge,
+            EducationCess:                cess,
+            GrossTaxLiability:            grossTaxLiab,
+            GrossTaxPayable:              grossTaxLiab,
+            GrossTaxPay:                  grossTaxLiab,
+            CreditUS115JD:                0,
+            TaxPayAfterCreditUs115JD:     grossTaxLiab,
+            TaxRelief:                    0,
+            NetTaxLiability:              netTaxLiab,
+            IntrstPay: {
+              IntrstPayUs234A: 0,
+              IntrstPayUs234B: 0,
+              IntrstPayUs234C: 0,
+              TotalIntrstPay:  0,
+            },
+            AggregateTaxInterestLiability: netTaxLiab,
+          },
+          TaxPaid: {
+            TaxesPaid: {
+              AdvanceTax:        advTax,
+              TDS2:              tdsOther,
+              TCS:               tcs,
+              SelfAssessmentTax: satTax,
+              TotalTaxesPaid:    totalTaxPaid,
+            },
+          },
+          Refund: {
+            RefundDue: refund,
+            BankAccountDtls: {
+              PriBankDetails: {
+                IFSCCode:      primaryBank?.ifscCode ?? '',
+                BankName:      primaryBank?.bankName ?? '',
+                BankAccountNo: primaryBank?.accountNumber ?? '',
+                AccountType:   (primaryBank?.accountType as string) ?? 'SB',
+              },
+            },
+          },
+          AssetOutIndiaFlag: 'N',
+        },
+
+        // ── ScheduleTDS2 (TDS on income other than salary) ───────────────
+        ScheduleTDS2: rd.tds ? buildTDSOnOtherIncome(rd.tds) : { TDSonOthThanSal: [], TotalTDSonOthThanSals: 0 },
+
+        // ── ScheduleTDS3 (TDS u/s 194IB rent) ────────────────────────────
+        ScheduleTDS3Dtls: rd.tds ? buildTDS16C(rd.tds) : { TDS3Details: [], TotalTDS3Details: 0 },
+
+        // ── ScheduleIT (advance tax / self-assessment challans) ───────────
+        ScheduleIT: rd.taxPayments ? buildTaxPayments(rd.taxPayments) : { TotalTaxPayments: 0 },
+
+        // ── Verification ─────────────────────────────────────────────────
+        Verification: rd.verification ? buildVerification(rd.verification, date) : undefined,
       },
     },
   };
