@@ -1810,7 +1810,7 @@ function buildITR5(input: BuildITRInput): object {
         const fromOtherHeads = toI(bp5.amtFromOtherHeadsToBP);
         return netProfit + additions + fromOtherHeads - crossHeads - deductions;
       })()
-    : toI(pl.BizNetProfit) + toI(pl.ProfNetProfit);
+    : toI(pl.N65id) + toI(pl.N65iid);
 
   // Income taxed at special rates is excluded from normal slab computation
   const specialRateIncome = stcg111A + ltcg112A;
@@ -1937,21 +1937,26 @@ function buildITR5(input: BuildITRInput): object {
   };
   const incomeTaxSec  = upd ? 21 : Number(rd.filingSection ?? 11);
 
-  // ── Full P&L income/debit totals ─────────────────────────────────────────
-  const totOthIncome = toI(pl.OtherIncomeRent) + toI(pl.OtherIncomeCommission) + toI(pl.OtherIncomeDividend) + toI(pl.OtherIncomeInterest)
-    + toI(pl.OtherIncomeSaleFixedAsset) + toI(pl.OtherIncomeInvSTT) + toI(pl.OtherIncomeOtherInv)
-    + toI(pl.OtherIncomeForexGainLoss) + toI(pl.OtherIncomeInvToCapital) + toI(pl.OtherIncomeAgricultural)
-    + toI(pl.OtherIncomeOther);
-  const totCreditsToPL = toI(pl.GrossProfitFromTrading) + totOthIncome;
+  // ── Full P&L income/debit totals (using new PLState field names) ─────────
+  const totOthIncome = toI(pl.PL14i) + toI(pl.PL14ii) + toI(pl.PL14iii) + toI(pl.PL14iv)
+    + toI(pl.PL14v) + toI(pl.PL14vi) + toI(pl.PL14vii) + toI(pl.PL14viii)
+    + toI(pl.PL14ix) + toI(pl.PL14x) + toI(pl.PL14xia) + toI(pl.PL14xi);
+  const grossProfitFromTrading = toI(pl.T12) || toI(pl.PL13);
+  const totCreditsToPL = grossProfitFromTrading + totOthIncome;
 
   // Debit/expense side of P&L (regular books)
-  const totDebitsExpenses = toI(pl.FreightOutward) + toI(pl.PowerAndFuel) + toI(pl.Rents)
-    + toI(pl.RepairsBuilding) + toI(pl.RepairsMachinery) + toI(pl.TotalEmployeeComp)
-    + toI(pl.TotalInsurance) + toI(pl.WorkmenWelfare) + toI(pl.Advertisement)
-    + toI(pl.TotalCommission) + toI(pl.TotalProfFees) + toI(pl.TravellingExpenses)
-    + toI(pl.TelephoneExpenses) + toI(pl.Donation) + toI(pl.TotalRatesAndTaxes)
-    + toI(pl.AuditFee) + toI(pl.PartnersSalary) + toI(pl.OtherExpenses)
-    + toI(pl.TotalBadDebts) + toI(pl.DepreciationPL);
+  const totDebitsExpenses = toI(pl.PL16) + toI(pl.PL17) + toI(pl.PL18) + toI(pl.PL19)
+    + toI(pl.PL20) + toI(pl.PL21) + toI(pl.PL22xi)
+    + (toI(pl.PL23i) + toI(pl.PL23ii) + toI(pl.PL23iii) + toI(pl.PL23iv))
+    + toI(pl.PL24) + toI(pl.PL25) + toI(pl.PL26) + toI(pl.PL27) + toI(pl.PL28) + toI(pl.PL29)
+    + (toI(pl.PL30i) + toI(pl.PL30ii)) + (toI(pl.PL31i) + toI(pl.PL31ii))
+    + (toI(pl.PL32i) + toI(pl.PL32ii))
+    + toI(pl.PL33) + toI(pl.PL34) + toI(pl.PL35) + toI(pl.PL36) + toI(pl.PL37)
+    + toI(pl.PL38) + toI(pl.PL39) + toI(pl.PL40) + toI(pl.PL41) + toI(pl.PL42) + toI(pl.PL43)
+    + toI(pl.PL44x) + toI(pl.PL45) + toI(pl.PL46) + toI(pl.PL47) + toI(pl.PL48iv)
+    + toI(pl.PL49) + toI(pl.PL50)
+    + (toI(pl.PL52ia) + toI(pl.PL52ib) + toI(pl.PL52iia) + toI(pl.PL52iib))
+    + toI(pl.PL53);
   // TotDebitsToPL = all expenses + net profit (balancing figure) = TotCreditsToPL
   const totDebitsToPL = totCreditsToPL;
 
@@ -2261,49 +2266,66 @@ function buildITR5(input: BuildITRInput): object {
               MiscOthIncome:              0,
               TotOthIncome:               0,
             },
-            TotCreditsToPL: toI(pl.BizNetProfit) + toI(pl.ProfNetProfit),
+            TotCreditsToPL: toI(pl.N65id) + toI(pl.N65iid),
           },
         } : {
           CreditsToPL: {
-            GrossProfitTrnsfFrmTrdAcc: toI(pl.GrossProfitFromTrading),
+            GrossProfitTrnsfFrmTrdAcc: grossProfitFromTrading,
             OthIncome: {
-              RentInc:                    toI(pl.OtherIncomeRent),
-              Comissions:                 toI(pl.OtherIncomeCommission),
-              Dividends:                  toI(pl.OtherIncomeDividend),
-              InterestInc:                toI(pl.OtherIncomeInterest),
-              ProfitOnSaleFixedAsset:     toI(pl.OtherIncomeSaleFixedAsset),
-              ProfitOnInvChrSTT:          toI(pl.OtherIncomeInvSTT),
-              ProfitOnOthInv:             toI(pl.OtherIncomeOtherInv),
-              ProfitOnCurrFluct:          toI(pl.OtherIncomeForexGainLoss),
-              ProfitOnCnvInvntryToCapAsst: toI(pl.OtherIncomeInvToCapital),
-              ProfitOnAgriIncome:         toI(pl.OtherIncomeAgricultural),
-              MiscOthIncome:              toI(pl.OtherIncomeOther),
+              RentInc:                    toI(pl.PL14i),
+              Comissions:                 toI(pl.PL14ii),
+              Dividends:                  toI(pl.PL14iii),
+              InterestInc:                toI(pl.PL14iv),
+              ProfitOnSaleFixedAsset:     toI(pl.PL14v),
+              ProfitOnInvChrSTT:          toI(pl.PL14vi),
+              ProfitOnOthInv:             toI(pl.PL14vii),
+              ProfitOnCurrFluct:          toI(pl.PL14viii),
+              ProfitOnCnvInvntryToCapAsst: toI(pl.PL14ix),
+              ProfitOnAgriIncome:         toI(pl.PL14x),
+              MiscOthIncome:              toI(pl.PL14xi) + toI(pl.PL14xia),
               TotOthIncome:               totOthIncome,
             },
             TotCreditsToPL: totCreditsToPL,
           },
           DebitsToPL: {
-            FreightOutward:     toI(pl.FreightOutward),
-            PowerAndFuel:       toI(pl.PowerAndFuel),
-            Rents:              toI(pl.Rents),
-            RepairsBuilding:    toI(pl.RepairsBuilding),
-            RepairsMachinery:   toI(pl.RepairsMachinery),
-            TotalEmployeeComp:  toI(pl.TotalEmployeeComp),
-            TotalInsurance:     toI(pl.TotalInsurance),
-            WorkmenWelfare:     toI(pl.WorkmenWelfare),
-            Advertisement:      toI(pl.Advertisement),
-            TotalCommission:    toI(pl.TotalCommission),
-            TotalProfFees:      toI(pl.TotalProfFees),
-            TravellingExpenses: toI(pl.TravellingExpenses),
-            TelephoneExpenses:  toI(pl.TelephoneExpenses),
-            Donation:           toI(pl.Donation),
-            TotalRatesAndTaxes: toI(pl.TotalRatesAndTaxes),
-            AuditFee:           toI(pl.AuditFee),
-            PartnersSalary:     toI(pl.PartnersSalary),
-            OtherExpenses:      toI(pl.OtherExpenses),
-            TotalBadDebts:      toI(pl.TotalBadDebts),
-            DepreciationPL:     toI(pl.DepreciationPL),
-            NetProfitBeforeTax: totDebitsToPL - totDebitsExpenses,
+            FreightOutward:     toI(pl.PL16),
+            ConsumpStoresSpares: toI(pl.PL17),
+            PowerAndFuel:       toI(pl.PL18),
+            Rents:              toI(pl.PL19),
+            RepairsBuilding:    toI(pl.PL20),
+            RepairsMachinery:   toI(pl.PL21),
+            TotalEmployeeComp:  toI(pl.PL22xi),
+            TotalInsurance:     toI(pl.PL23i) + toI(pl.PL23ii) + toI(pl.PL23iii) + toI(pl.PL23iv),
+            WorkmenWelfare:     toI(pl.PL24),
+            Entertainment:      toI(pl.PL25),
+            Hospitality:        toI(pl.PL26),
+            Conference:         toI(pl.PL27),
+            SalesPromotion:     toI(pl.PL28),
+            Advertisement:      toI(pl.PL29),
+            TotalCommission:    toI(pl.PL30i) + toI(pl.PL30ii),
+            Royalty:            toI(pl.PL31i) + toI(pl.PL31ii),
+            TotalProfFees:      toI(pl.PL32i) + toI(pl.PL32ii),
+            HotelBoardingLodging: toI(pl.PL33),
+            TravellingExpenses: toI(pl.PL34),
+            ForeignTravelling:  toI(pl.PL35),
+            ConveyanceExpenses: toI(pl.PL36),
+            TelephoneExpenses:  toI(pl.PL37),
+            GuestHouse:         toI(pl.PL38),
+            ClubExpenses:       toI(pl.PL39),
+            FestivalExpenses:   toI(pl.PL40),
+            Scholarship:        toI(pl.PL41),
+            Gift:               toI(pl.PL42),
+            Donation:           toI(pl.PL43),
+            TotalRatesAndTaxes: toI(pl.PL44x),
+            AuditFee:           toI(pl.PL45),
+            PartnersSalary:     toI(pl.PL46),
+            OtherExpenses:      toI(pl.PL47),
+            TotalBadDebts:      toI(pl.PL48iv),
+            ProvisionBadDebts:  toI(pl.PL49),
+            OtherProvisions:    toI(pl.PL50),
+            InterestPaid:       toI(pl.PL52ia) + toI(pl.PL52ib) + toI(pl.PL52iia) + toI(pl.PL52iib),
+            DepreciationPL:     toI(pl.PL53),
+            NetProfitBeforeTax: toI(pl.NetProfitBeforeTaxes),
             TotDebitsToPL:      totDebitsToPL,
           },
         },
