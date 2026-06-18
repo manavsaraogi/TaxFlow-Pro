@@ -69,7 +69,8 @@ type TabId =
   | 'verification'
   | 'itr5_general'
   | 'itr5_balance_sheet'
-  | 'itr5_pl';
+  | 'itr5_pl'
+  | 'itr5_bp';
 
 interface Tab {
   id: TabId;
@@ -95,9 +96,10 @@ const ALL_TABS: Tab[] = [
   { id: 'house_property',        label: 'House Property',        shortLabel: 'HP',   icon: 'HP'  },
   { id: 'business_profession',   label: 'Business / Profession', shortLabel: 'BP',   icon: 'BP'  },
   { id: 'financial_particulars', label: 'Financial Particulars', shortLabel: 'FP',   icon: 'FP'  },
-  { id: 'itr5_general',          label: 'ITR-5 General',         shortLabel: 'GEN',  icon: 'GEN' },
+  { id: 'itr5_general',          label: 'General Info',          shortLabel: 'GEN',  icon: 'GEN' },
   { id: 'itr5_balance_sheet',    label: 'Balance Sheet',         shortLabel: 'BS',   icon: 'BS'  },
-  { id: 'itr5_pl',               label: 'P&L / Income',          shortLabel: 'PL',   icon: 'PL'  },
+  { id: 'itr5_pl',               label: 'Mfg / Trading / P&L',  shortLabel: 'PL',   icon: 'PL'  },
+  { id: 'itr5_bp',               label: 'Schedule BP',           shortLabel: 'BP',   icon: 'BP'  },
   { id: 'capital_gains',         label: 'Capital Gains',         shortLabel: 'CG',   icon: 'CG'  },
   { id: 'other_sources',         label: 'Other Sources',         shortLabel: 'OS',   icon: 'OS'  },
   { id: 'deductions',            label: 'Deductions (VI-A)',      shortLabel: 'VIA',  icon: 'VIA' },
@@ -594,57 +596,62 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate, fo
           display: 'flex',
           flexDirection: 'column',
         }}>
-          {/* Section: Income Heads */}
-          <div style={{ padding: '10px 14px 4px', fontSize: '10px', fontWeight: 800, letterSpacing: '0.1em', color: '#475569', textTransform: 'uppercase' }}>
-            Income Heads
-          </div>
-          {(['salary','house_property','business_profession','financial_particulars','capital_gains','other_sources'] as const).map(tabId => {
-            const isITR4 = returnMeta?.formType === 'ITR-4';
-            const isITR5 = returnMeta?.formType === 'ITR-5';
-            // ITR-5: AOP/Trust/Firm cannot have salary income; financial_particulars is ITR-4 only
-            if (isITR5 && (tabId === 'salary' || tabId === 'financial_particulars')) return null;
-            // ITR-4: financial_particulars replaces business_profession
-            if (!isITR4 && tabId === 'financial_particulars') return null;
-            return (
-              <ScheduleNavItem
-                key={tabId}
-                tab={ALL_TABS.find(t => t.id === tabId)!}
-                isActive={activeTab === tabId}
-                onClick={() => setActiveTab(tabId)}
-                badge={validation ? tabErrorCount(validation, tabId as any) : 0}
-                tag={
-                  tabId === 'financial_particulars' && isITR4 ? 'REQ'
-                  : tabId === 'business_profession' && (() => {
-                    const pi = (returnData as any)?.presumptiveIncome;
-                    return pi && ((pi.Business44AD?.length ?? 0) + (pi.Profession44ADA?.length ?? 0)) > 0 && returnMeta?.regime === 'OLD';
-                  })() ? 'IEA' : undefined
-                }
-                tagColor={tabId === 'financial_particulars' ? '#DC2626' : undefined}
-              />
-            );
-          })}
+          {/* Section: Income Heads — hidden for ITR-5 (uses its own nav below) */}
+          {returnMeta?.formType !== 'ITR-5' && (
+            <>
+              <div style={{ padding: '10px 14px 4px', fontSize: '10px', fontWeight: 800, letterSpacing: '0.1em', color: '#475569', textTransform: 'uppercase' }}>
+                Income Heads
+              </div>
+              {(['salary','house_property','business_profession','financial_particulars','capital_gains','other_sources'] as const).map(tabId => {
+                const isITR4 = returnMeta?.formType === 'ITR-4';
+                // ITR-4: financial_particulars replaces business_profession
+                if (!isITR4 && tabId === 'financial_particulars') return null;
+                return (
+                  <ScheduleNavItem
+                    key={tabId}
+                    tab={ALL_TABS.find(t => t.id === tabId)!}
+                    isActive={activeTab === tabId}
+                    onClick={() => setActiveTab(tabId)}
+                    badge={validation ? tabErrorCount(validation, tabId as any) : 0}
+                    tag={
+                      tabId === 'financial_particulars' && isITR4 ? 'REQ'
+                      : tabId === 'business_profession' && (() => {
+                        const pi = (returnData as any)?.presumptiveIncome;
+                        return pi && ((pi.Business44AD?.length ?? 0) + (pi.Profession44ADA?.length ?? 0)) > 0 && returnMeta?.regime === 'OLD';
+                      })() ? 'IEA' : undefined
+                    }
+                    tagColor={tabId === 'financial_particulars' ? '#DC2626' : undefined}
+                  />
+                );
+              })}
+            </>
+          )}
 
-          {/* ITR-5 specific tabs */}
+          {/* ITR-5 specific tabs — shown as dedicated grouped nav */}
           {returnMeta?.formType === 'ITR-5' && (
             <>
               <div style={{ padding: '10px 14px 4px', fontSize: '10px', fontWeight: 800, letterSpacing: '0.1em', color: '#475569', textTransform: 'uppercase', marginTop: '4px' }}>
-                ITR-5 Schedules
+                Organisation
               </div>
-              {(['itr5_general','itr5_balance_sheet','itr5_pl'] as const).map(tabId => (
-                <ScheduleNavItem
-                  key={tabId}
-                  tab={ALL_TABS.find(t => t.id === tabId)!}
-                  isActive={activeTab === tabId}
-                  onClick={() => setActiveTab(tabId)}
-                  badge={0}
-                />
-              ))}
+              <ScheduleNavItem tab={ALL_TABS.find(t => t.id === 'itr5_general')!} isActive={activeTab === 'itr5_general'} onClick={() => setActiveTab('itr5_general')} badge={0} />
+              <div style={{ padding: '10px 14px 4px', fontSize: '10px', fontWeight: 800, letterSpacing: '0.1em', color: '#475569', textTransform: 'uppercase' }}>
+                Accounts
+              </div>
+              <ScheduleNavItem tab={ALL_TABS.find(t => t.id === 'itr5_balance_sheet')!} isActive={activeTab === 'itr5_balance_sheet'} onClick={() => setActiveTab('itr5_balance_sheet')} badge={0} />
+              <ScheduleNavItem tab={ALL_TABS.find(t => t.id === 'itr5_pl')!} isActive={activeTab === 'itr5_pl'} onClick={() => setActiveTab('itr5_pl')} badge={0} />
+              <ScheduleNavItem tab={ALL_TABS.find(t => t.id === 'itr5_bp')!} isActive={activeTab === 'itr5_bp'} onClick={() => setActiveTab('itr5_bp')} badge={0} />
+              <div style={{ padding: '10px 14px 4px', fontSize: '10px', fontWeight: 800, letterSpacing: '0.1em', color: '#475569', textTransform: 'uppercase' }}>
+                Other Income
+              </div>
+              <ScheduleNavItem tab={ALL_TABS.find(t => t.id === 'capital_gains')!} isActive={activeTab === 'capital_gains'} onClick={() => setActiveTab('capital_gains')} badge={validation ? tabErrorCount(validation, 'capital_gains') : 0} />
+              <ScheduleNavItem tab={ALL_TABS.find(t => t.id === 'other_sources')!} isActive={activeTab === 'other_sources'} onClick={() => setActiveTab('other_sources')} badge={validation ? tabErrorCount(validation, 'other_sources') : 0} />
+              <ScheduleNavItem tab={ALL_TABS.find(t => t.id === 'house_property')!} isActive={activeTab === 'house_property'} onClick={() => setActiveTab('house_property')} badge={validation ? tabErrorCount(validation, 'house_property') : 0} />
             </>
           )}
 
           {/* Section: Deductions & Credits */}
           <div style={{ padding: '10px 14px 4px', fontSize: '10px', fontWeight: 800, letterSpacing: '0.1em', color: '#475569', textTransform: 'uppercase', marginTop: '4px' }}>
-            Deductions & Credits
+            Deductions &amp; Credits
           </div>
           {(['deductions','assets_liabilities','tds','tax_payments'] as const).map(tabId => (
             <ScheduleNavItem
@@ -703,7 +710,7 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate, fo
             />
           )}
 
-          {activeTab === 'business_profession' && returnMeta?.formType === 'ITR-5' && (
+          {(activeTab === 'business_profession' || activeTab === 'itr5_bp') && returnMeta?.formType === 'ITR-5' && (
             <ITR5BP
               returnId={returnMeta.id}
               maintainsRegularBooks={(returnData as any)?.itr5General?.maintainsRegularBooks ?? false}

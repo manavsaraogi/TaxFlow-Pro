@@ -396,22 +396,22 @@ export default function ITR5PL({ returnId, maintainsRegularBooks, initialData, o
           <div className="text-xs text-gray-400">{saving ? 'Saving…' : savedAt ? `Saved ${savedAt.toLocaleTimeString()}` : ''}</div>
         </div>
 
-        <Section title="Item 65(i) — Business Income">
-          <Row state={pl} set={set} label="(a) Gross receipts — Banking/digital mode (a1)" field="N65ia1" />
-          <Row state={pl} set={set} label="(a) Gross receipts — Other mode (a2)" field="N65ia2" />
-          <Total label="Total Gross Receipts (a1 + a2)" value={pl.N65ia1 + pl.N65ia2} />
-          <Row state={pl} set={set} label="(b) Gross Profit" field="N65ib" />
-          <Row state={pl} set={set} label="(c) Expenses" field="N65ic" />
-          <Row state={pl} set={set} label="(d) Net Profit [b − c]" field="N65id" />
+        <Section title="Business Income (No Account Case)">
+          <Row state={pl} set={set} label="Gross receipts — Banking / digital mode" field="N65ia1" />
+          <Row state={pl} set={set} label="Gross receipts — Cash / other mode" field="N65ia2" />
+          <Total label="Total Gross Receipts" value={pl.N65ia1 + pl.N65ia2} />
+          <Row state={pl} set={set} label="Gross Profit" field="N65ib" />
+          <Row state={pl} set={set} label="Total Expenses" field="N65ic" />
+          <Row state={pl} set={set} label="Net Profit from Business" field="N65id" />
         </Section>
 
-        <Section title="Item 65(ii) — Profession Income">
-          <Row state={pl} set={set} label="(a) Gross receipts — Banking/digital mode (a1)" field="N65iia1" />
-          <Row state={pl} set={set} label="(a) Gross receipts — Other mode (a2)" field="N65iia2" />
+        <Section title="Profession Income (No Account Case)">
+          <Row state={pl} set={set} label="Gross receipts — Banking / digital mode" field="N65iia1" />
+          <Row state={pl} set={set} label="Gross receipts — Cash / other mode" field="N65iia2" />
           <Total label="Total Gross Receipts" value={pl.N65iia1 + pl.N65iia2} />
-          <Row state={pl} set={set} label="(b) Gross Profit" field="N65iib" />
-          <Row state={pl} set={set} label="(c) Expenses" field="N65iic" />
-          <Row state={pl} set={set} label="(d) Net Profit [b − c]" field="N65iid" />
+          <Row state={pl} set={set} label="Gross Profit" field="N65iib" />
+          <Row state={pl} set={set} label="Total Expenses" field="N65iic" />
+          <Row state={pl} set={set} label="Net Profit from Profession" field="N65iid" />
         </Section>
 
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex justify-between items-center">
@@ -419,11 +419,11 @@ export default function ITR5PL({ returnId, maintainsRegularBooks, initialData, o
           <span className="text-xl font-bold text-blue-900 font-mono">{fmt(t.N65Total)}</span>
         </div>
 
-        <Section title="Item 66 — Speculative Activity (if any)">
-          <Row state={pl} set={set} label="(i) Turnover from speculative activity" field="P66i" />
-          <Row state={pl} set={set} label="(ii) Gross Profit" field="P66ii" />
-          <Row state={pl} set={set} label="(iii) Expenditure" field="P66iii" />
-          <Total label="(iv) Net income from speculative activity (ii − iii)" value={t.P66iv} level={3} />
+        <Section title="Speculative Activity Income (if any)">
+          <Row state={pl} set={set} label="Turnover from speculative activity" field="P66i" />
+          <Row state={pl} set={set} label="Gross Profit from speculative activity" field="P66ii" />
+          <Row state={pl} set={set} label="Expenditure on speculative activity" field="P66iii" />
+          <Total label="Net Income from Speculative Activity" value={t.P66iv} level={3} />
         </Section>
       </div>
     );
