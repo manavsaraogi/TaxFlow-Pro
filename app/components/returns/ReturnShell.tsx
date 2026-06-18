@@ -590,7 +590,10 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate, fo
           {(['salary','house_property','business_profession','financial_particulars','capital_gains','other_sources'] as const).map(tabId => {
             const isITR4 = returnMeta?.formType === 'ITR-4';
             const isITR5 = returnMeta?.formType === 'ITR-5';
-            if (tabId === 'financial_particulars' && isITR5) return null;
+            // ITR-5: AOP/Trust/Firm cannot have salary income; financial_particulars is ITR-4 only
+            if (isITR5 && (tabId === 'salary' || tabId === 'financial_particulars')) return null;
+            // ITR-4: financial_particulars replaces business_profession
+            if (!isITR4 && tabId === 'financial_particulars') return null;
             return (
               <ScheduleNavItem
                 key={tabId}
