@@ -61,6 +61,10 @@ interface ITR5GeneralState {
   members: ITR5Member[];
   sharesDeterminable: boolean;
   anyMemberExceedsExemption: boolean;
+  interest234A: number;
+  interest234B: number;
+  interest234C: number;
+  interest234F: number;
   isUpdatedReturn: boolean;
   updated: ITR5Updated;
 }
@@ -101,6 +105,10 @@ const EMPTY: ITR5GeneralState = {
   members: [],
   sharesDeterminable: false,
   anyMemberExceedsExemption: false,
+  interest234A: 0,
+  interest234B: 0,
+  interest234C: 0,
+  interest234F: 0,
   isUpdatedReturn: false,
   updated: { ...EMPTY_UPDATED },
 };
@@ -518,6 +526,32 @@ export default function ITR5General({ returnId, initialData, onSaved }: Props) {
             </div>
           </div>
         ))}
+      </Section>
+
+      {/* ── Interest on Tax u/s 234A/234B/234C/234F ──────────────────────── */}
+      <Section
+        title="Interest & Fees (if any)"
+        hint="Leave at 0 if not applicable. These are added on top of the computed tax. 234A = interest for late filing, 234B = advance tax shortfall, 234C = instalment deferral, 234F = late filing fee."
+      >
+        <div className="grid grid-cols-2 gap-4">
+          {([
+            ['interest234A', '234A — Late Filing Interest (₹)'],
+            ['interest234B', '234B — Advance Tax Shortfall (₹)'],
+            ['interest234C', '234C — Instalment Deferral (₹)'],
+            ['interest234F', '234F — Late Filing Fee (₹)'],
+          ] as const).map(([field, label]) => (
+            <div key={field}>
+              <label className="block text-xs font-medium text-gray-600 mb-1">{label}</label>
+              <input
+                type="number"
+                min={0}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                value={(form as any)[field] || ''}
+                onChange={e => update({ [field]: Number(e.target.value) || 0 } as any)}
+              />
+            </div>
+          ))}
+        </div>
       </Section>
 
       {/* ── Updated Return 139(8A) ───────────────────────────────────────── */}

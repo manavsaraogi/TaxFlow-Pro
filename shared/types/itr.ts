@@ -867,6 +867,11 @@ export interface ITR5General {
   // Tax rate determination (Section 167B)
   sharesDeterminable:    boolean;      // true → slab rates possible; false → MMR 30%
   anyMemberExceedsExemption: boolean; // if shares determinable AND any member > basic exemption → MMR
+  // Interest on tax u/s 234A/234B/234C/234F (manual override; builder computes if 0)
+  interest234A?:         number;
+  interest234B?:         number;
+  interest234C?:         number;
+  interest234F?:         number;
   // 139(8A) updated return
   isUpdatedReturn:       boolean;
   updated?:              ITR5Updated | null;
@@ -957,7 +962,14 @@ export interface ITR5PL {
   OtherIncomeCommission:      number;
   OtherIncomeDividend:        number;
   OtherIncomeInterest:        number;
-  OtherIncomeOther:           number;
+  // AY 25-26 new Other Income sub-items
+  OtherIncomeSaleFixedAsset:  number;  // Profit on sale of fixed assets
+  OtherIncomeInvSTT:          number;  // Profit on investments where STT paid
+  OtherIncomeOtherInv:        number;  // Profit on other investments
+  OtherIncomeForexGainLoss:   number;  // Forex gain/loss u/s 43AA
+  OtherIncomeInvToCapital:    number;  // Conversion of inventory to capital asset
+  OtherIncomeAgricultural:    number;  // Agricultural income (if any)
+  OtherIncomeOther:           number;  // Miscellaneous other income
   FreightOutward:             number;
   PowerAndFuel:               number;
   Rents:                      number;

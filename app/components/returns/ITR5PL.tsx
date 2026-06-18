@@ -20,6 +20,12 @@ interface PLState {
   OtherIncomeCommission: number;
   OtherIncomeDividend: number;
   OtherIncomeInterest: number;
+  OtherIncomeSaleFixedAsset: number;
+  OtherIncomeInvSTT: number;
+  OtherIncomeOtherInv: number;
+  OtherIncomeForexGainLoss: number;
+  OtherIncomeInvToCapital: number;
+  OtherIncomeAgricultural: number;
   OtherIncomeOther: number;
   FreightOutward: number;
   PowerAndFuel: number;
@@ -52,7 +58,9 @@ const ZERO_PL: PLState = {
   BizGrossReceiptsElectronic: 0, BizGrossReceiptsOther: 0, BizGrossProfit: 0, BizExpenses: 0, BizNetProfit: 0,
   ProfGrossReceiptsElectronic: 0, ProfGrossReceiptsOther: 0, ProfGrossProfit: 0, ProfExpenses: 0, ProfNetProfit: 0,
   GrossProfitFromTrading: 0, OtherIncomeRent: 0, OtherIncomeCommission: 0, OtherIncomeDividend: 0,
-  OtherIncomeInterest: 0, OtherIncomeOther: 0, FreightOutward: 0, PowerAndFuel: 0, Rents: 0,
+  OtherIncomeInterest: 0, OtherIncomeSaleFixedAsset: 0, OtherIncomeInvSTT: 0, OtherIncomeOtherInv: 0,
+  OtherIncomeForexGainLoss: 0, OtherIncomeInvToCapital: 0, OtherIncomeAgricultural: 0,
+  OtherIncomeOther: 0, FreightOutward: 0, PowerAndFuel: 0, Rents: 0,
   RepairsBuilding: 0, RepairsMachinery: 0, TotalEmployeeComp: 0, TotalInsurance: 0, WorkmenWelfare: 0,
   Advertisement: 0, TotalCommission: 0, TotalProfFees: 0, TravellingExpenses: 0, TelephoneExpenses: 0,
   Donation: 0, TotalRatesAndTaxes: 0, AuditFee: 0, PartnersSalary: 0, OtherExpenses: 0,
@@ -195,7 +203,13 @@ export default function ITR5PL({ returnId, maintainsRegularBooks, initialData, o
                 <Row label="Other Income — Commission" field="OtherIncomeCommission" />
                 <Row label="Other Income — Dividend" field="OtherIncomeDividend" />
                 <Row label="Other Income — Interest" field="OtherIncomeInterest" />
-                <Row label="Other Income — Others" field="OtherIncomeOther" />
+                <Row label="Other Income — Profit on Sale of Fixed Assets" field="OtherIncomeSaleFixedAsset" />
+                <Row label="Other Income — Profit on Investments (STT paid)" field="OtherIncomeInvSTT" />
+                <Row label="Other Income — Profit on Other Investments" field="OtherIncomeOtherInv" />
+                <Row label="Other Income — Forex Gain / Loss (Sec. 43AA)" field="OtherIncomeForexGainLoss" />
+                <Row label="Other Income — Inventory Converted to Capital Asset" field="OtherIncomeInvToCapital" />
+                <Row label="Other Income — Agricultural Income" field="OtherIncomeAgricultural" />
+                <Row label="Other Income — Miscellaneous" field="OtherIncomeOther" />
               </tbody>
             </table>
           </div>

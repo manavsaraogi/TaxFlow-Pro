@@ -1739,7 +1739,25 @@ function buildITR5(input: BuildITRInput): object {
 
   // Health & Education Cess: 4% on (tax + surcharge)
   const cess         = Math.round((taxPayableOnTI + surcharge) * 0.04);
-  const grossTaxLiab = taxPayableOnTI + surcharge + cess;
+  const regularTaxLiab = taxPayableOnTI + surcharge + cess;
+
+  // AMT u/s 115JC — applies when AMT > regular tax (18.5% of adjusted total income)
+  // Adjusted total income = gross total income (conservative; no add-backs without user input)
+  const amtOnTI      = Math.round(grossTotalIncome * 0.185);
+  const amtSurcharge = Math.round(amtOnTI * normalSurRate);
+  const amtCess      = Math.round((amtOnTI + amtSurcharge) * 0.04);
+  const amtLiability = amtOnTI + amtSurcharge + amtCess;
+  const amtApplies   = grossTotalIncome > 0 && amtLiability > regularTaxLiab;
+  const grossTaxLiab = amtApplies ? amtLiability : regularTaxLiab;
+  const deemedIncome115JC  = amtApplies ? grossTotalIncome : 0;
+  const taxDeemed115JC     = amtApplies ? amtLiability : 0;
+
+  // Interest u/s 234A/234B/234C/234F (user-entered; default 0)
+  const int234A = toI(gen.interest234A);
+  const int234B = toI(gen.interest234B);
+  const int234C = toI(gen.interest234C);
+  const int234F = toI(gen.interest234F);
+  const totalInterest = int234A + int234B + int234C + int234F;
 
   // Taxes paid
   const advTax   = toI(rd.taxPayments?.TotalAdvanceTax);
@@ -1747,8 +1765,8 @@ function buildITR5(input: BuildITRInput): object {
   const tcs      = toI(rd.tds?.TotalTCS);
   const satTax   = toI(rd.taxPayments?.TotalSelfAssessmentTax);
   const totalTaxPaid = advTax + tdsOther + tcs + satTax;
-  const netTaxLiab   = Math.max(0, grossTaxLiab - totalTaxPaid);
-  const refund       = Math.max(0, totalTaxPaid - grossTaxLiab);
+  const netTaxLiab   = Math.max(0, grossTaxLiab + totalInterest - totalTaxPaid);
+  const refund       = Math.max(0, totalTaxPaid - grossTaxLiab - totalInterest);
 
   // Bank for refund — pulled from returnData bankAccounts
   const primaryBank = (rd as any).bankAccounts?.[0];
@@ -1801,7 +1819,10 @@ function buildITR5(input: BuildITRInput): object {
   const incomeTaxSec  = upd ? 21 : Number(rd.filingSection ?? 11);
 
   // ── Full P&L income/debit totals ─────────────────────────────────────────
-  const totOthIncome = toI(pl.OtherIncomeRent) + toI(pl.OtherIncomeCommission) + toI(pl.OtherIncomeDividend) + toI(pl.OtherIncomeInterest) + toI(pl.OtherIncomeOther);
+  const totOthIncome = toI(pl.OtherIncomeRent) + toI(pl.OtherIncomeCommission) + toI(pl.OtherIncomeDividend) + toI(pl.OtherIncomeInterest)
+    + toI(pl.OtherIncomeSaleFixedAsset) + toI(pl.OtherIncomeInvSTT) + toI(pl.OtherIncomeOtherInv)
+    + toI(pl.OtherIncomeForexGainLoss) + toI(pl.OtherIncomeInvToCapital) + toI(pl.OtherIncomeAgricultural)
+    + toI(pl.OtherIncomeOther);
   const totCreditsToPL = toI(pl.GrossProfitFromTrading) + totOthIncome;
 
   return {
@@ -2117,12 +2138,12 @@ function buildITR5(input: BuildITRInput): object {
               Comissions:                 toI(pl.OtherIncomeCommission),
               Dividends:                  toI(pl.OtherIncomeDividend),
               InterestInc:                toI(pl.OtherIncomeInterest),
-              ProfitOnSaleFixedAsset:     0,
-              ProfitOnInvChrSTT:          0,
-              ProfitOnOthInv:             0,
-              ProfitOnCurrFluct:          0,
-              ProfitOnCnvInvntryToCapAsst: 0,
-              ProfitOnAgriIncome:         0,
+              ProfitOnSaleFixedAsset:     toI(pl.OtherIncomeSaleFixedAsset),
+              ProfitOnInvChrSTT:          toI(pl.OtherIncomeInvSTT),
+              ProfitOnOthInv:             toI(pl.OtherIncomeOtherInv),
+              ProfitOnCurrFluct:          toI(pl.OtherIncomeForexGainLoss),
+              ProfitOnCnvInvntryToCapAsst: toI(pl.OtherIncomeInvToCapital),
+              ProfitOnAgriIncome:         toI(pl.OtherIncomeAgricultural),
               MiscOthIncome:              toI(pl.OtherIncomeOther),
               TotOthIncome:               totOthIncome,
             },
@@ -2338,12 +2359,12 @@ function buildITR5(input: BuildITRInput): object {
           NetAgricultureIncomeOrOtherIncomeForRate: 0,
           AggregateIncome:           grossTotalIncome,
           LossesOfCurrentYearCarriedFwd: 0,
-          DeemedIncomeUs115JC:       0,
+          DeemedIncomeUs115JC:       deemedIncome115JC,
         },
 
         // ── PartB_TTI ─────────────────────────────────────────────────────
         PartB_TTI: {
-          TaxPayDeemedTotIncUs115JC:  0,
+          TaxPayDeemedTotIncUs115JC:  taxDeemed115JC,
           Surcharge:                  surcharge,
           HealthEduCess:              cess,
           TotalTaxPayablDeemedTotInc: 0,
@@ -2365,10 +2386,10 @@ function buildITR5(input: BuildITRInput): object {
             TaxRelief:                    0,
             NetTaxLiability:              netTaxLiab,
             IntrstPay: {
-              IntrstPayUs234A: 0,
-              IntrstPayUs234B: 0,
-              IntrstPayUs234C: 0,
-              TotalIntrstPay:  0,
+              IntrstPayUs234A: int234A,
+              IntrstPayUs234B: int234B,
+              IntrstPayUs234C: int234C,
+              TotalIntrstPay:  totalInterest,
             },
             AggregateTaxInterestLiability: netTaxLiab,
           },
