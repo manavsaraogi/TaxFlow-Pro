@@ -265,6 +265,9 @@ model Return {
   assetsLiabJson          String?
   ltcgOtherJson           String?
   financialParticularsJson String?
+  itr5GeneralJson         String?
+  itr5BalanceSheetJson    String?
+  itr5PLJson              String?
 
   documents         Document[]
   validationResults ValidationResult[]

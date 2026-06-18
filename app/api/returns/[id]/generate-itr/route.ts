@@ -378,6 +378,11 @@ export async function GET(_req: NextRequest, { params }: Params) {
     ? JSON.parse((ret as any).financialParticularsJson)
     : null;
 
+  // ── Map ITR-5 schedules ──
+  const itr5General = (ret as any).itr5GeneralJson ? JSON.parse((ret as any).itr5GeneralJson) : null;
+  const itr5BalanceSheet = (ret as any).itr5BalanceSheetJson ? JSON.parse((ret as any).itr5BalanceSheetJson) : null;
+  const itr5PL = (ret as any).itr5PLJson ? JSON.parse((ret as any).itr5PLJson) : null;
+
   // ── Assemble ReturnData ──
   const returnData: ReturnData = {
     formType: ret.formType as any,
@@ -395,6 +400,9 @@ export async function GET(_req: NextRequest, { params }: Params) {
     stcg,
     presumptiveIncome,
     financialParticulars,
+    itr5General,
+    itr5BalanceSheet,
+    itr5PL,
     incomeSummary: null,
     taxComputation: null,
     verification,

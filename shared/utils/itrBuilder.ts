@@ -1658,11 +1658,415 @@ function buildITR4(input: BuildITRInput): object {
  * Build the complete ITR JSON object for the given return.
  * Returns a plain JS object — serialize with JSON.stringify() before writing to file.
  */
+// Maps our entity type codes to schema StatusOrCompanyType + SubStatus
+function itr5EntityStatus(entityType: string): { StatusOrCompanyType: string; SubStatus?: string } {
+  switch (entityType) {
+    case 'FIRM':  return { StatusOrCompanyType: '1',  SubStatus: '10' };
+    case 'LLP':   return { StatusOrCompanyType: '1',  SubStatus: '5'  };
+    case 'LA':    return { StatusOrCompanyType: '2'                   };
+    case 'AOP':   return { StatusOrCompanyType: '14', SubStatus: '8'  };
+    case 'BOI':   return { StatusOrCompanyType: '14', SubStatus: '8'  };
+    case 'COOP':  return { StatusOrCompanyType: '14', SubStatus: '4'  };
+    case 'AJP':   return { StatusOrCompanyType: '9',  SubStatus: '19' };
+    case 'TRUST': return { StatusOrCompanyType: '14', SubStatus: '13' };
+    default:      return { StatusOrCompanyType: '14', SubStatus: '8'  };
+  }
+}
+
+function buildITR5(input: BuildITRInput): object {
+  const { returnData: rd, client, sw, filingDate } = input;
+  const date = filingDate ?? today();
+  const gen  = (rd as any).itr5General ?? {};
+  const bs   = (rd as any).itr5BalanceSheet ?? {};
+  const pl   = (rd as any).itr5PL ?? {};
+  const upd  = gen.isUpdatedReturn ? (gen.updated ?? {}) : null;
+  // AY start year: '2024-25' → '2024', '2025-26' → '2025'
+  const ayYear = rd.assessmentYear ? rd.assessmentYear.split('-')[0] : '2025';
+  // For updated return, use the selected updatedAY; otherwise use the return's own AY
+  const effectiveAYYear = upd ? (upd.updatedAY ?? rd.assessmentYear ?? '2025-26').split('-')[0] : ayYear;
+
+  const toI = (v: unknown) => Math.round(Number(v) || 0);
+
+  // ── Balance Sheet totals ──────────────────────────────────────────────────
+  const totResrNSurp      = toI(bs.ReservesRevaluation) + toI(bs.ReservesCapital) + toI(bs.ReservesStatutory) + toI(bs.ReservesOther) + toI(bs.ReservesPLCredit);
+  const totPartnerFund    = toI(bs.PartnersCapital) + totResrNSurp;
+  const totSecuredRupee   = toI(bs.SecuredLoansFromBanks) + toI(bs.SecuredLoansFromOthers);
+  const totSecrLoan       = toI(bs.SecuredFCYLoans) + totSecuredRupee;
+  const totUnsecuredRupee = toI(bs.UnsecuredLoansFromBanks) + toI(bs.UnsecuredLoansFrom40A2b) + toI(bs.UnsecuredLoansFromOthers);
+  const totUnSecrLoan     = toI(bs.UnsecuredFCYLoans) + totUnsecuredRupee;
+  const totLoanFund       = totSecrLoan + totUnSecrLoan;
+  const totalAdvances     = toI(bs.AdvancesFrom40A2b) + toI(bs.AdvancesFromOthers);
+  const totFundSrc        = totPartnerFund + totLoanFund + toI(bs.DeferredTaxLiability) + totalAdvances;
+
+  const netBlock          = toI(bs.GrossBlock) - toI(bs.Depreciation);
+  const totFixedAsset     = netBlock + toI(bs.CapitalWIP);
+  const totLTInv          = toI(bs.LTInvProperty) + (toI(bs.LTInvListedEquity) + toI(bs.LTInvUnlistedEquity)) + toI(bs.LTInvPrefShares) + toI(bs.LTInvGovtTrust) + toI(bs.LTInvDebentures) + toI(bs.LTInvMF) + toI(bs.LTInvOthers);
+  const totSTInv          = (toI(bs.STInvListedEquity) + toI(bs.STInvUnlistedEquity)) + toI(bs.STInvPrefShares) + toI(bs.STInvGovtTrust) + toI(bs.STInvDebentures) + toI(bs.STInvMF) + toI(bs.STInvOthers);
+  const totInvestments    = totLTInv + totSTInv;
+  const totInventories    = toI(bs.InventoriesRawMaterial) + toI(bs.InventoriesWIP) + toI(bs.InventoriesFinishedGoods) + toI(bs.InventoriesStockInTrade) + toI(bs.InventoriesOthers);
+  const totDebtors        = toI(bs.SundryDebtorsMoreThan1Yr) + toI(bs.SundryDebtorsOthers);
+  const totCashBank       = toI(bs.BalanceWithBanks) + toI(bs.CashInHand) + toI(bs.OtherCashBankBalances);
+  const totCurrAsset      = totInventories + totDebtors + totCashBank + toI(bs.OtherCurrentAssets);
+  const totLoanAdv        = toI(bs.LoansRecoverable) + toI(bs.LoansDepositsToOthers) + toI(bs.LoansRevenueAuthorities);
+  const totCurrAssetLoanAdv = totCurrAsset + totLoanAdv;
+  const totSundryCreditors  = toI(bs.CLSundryCreditors1Yr) + toI(bs.CLSundryCreditsOthers);
+  // AY 25-26 has granular CL fields; AY 24-25 used CLOther as a catch-all
+  const clLeasedAssets      = toI(bs.CLLeasedAssets);
+  const clIntOnLeased       = toI(bs.CLInterestOnLeasedAsset);
+  const clIntNotDue         = toI(bs.CLInterestAccruedNotDue);
+  const clIncomeInAdv       = toI(bs.CLIncomeReceivedInAdvance);
+  const clOtherPayables     = toI(bs.CLOtherPayables) + toI(bs.CLOther);
+  const totCurrLiabilities  = totSundryCreditors + clLeasedAssets + clIntOnLeased + clIntNotDue + clIncomeInAdv + clOtherPayables;
+  const totProvisions       = toI(bs.ProvisionsIncomeTax) + toI(bs.ProvisionsLeaveGratuity) + toI(bs.ProvisionsOther);
+
+  const noAccountCase = !gen.maintainsRegularBooks;
+  const entityStatusBase = itr5EntityStatus(gen.entityType ?? 'AOP');
+  const entityStatus = {
+    ...entityStatusBase,
+    ...(gen.subStatus ? { SubStatus: gen.subStatus } : {}),
+  };
+  const incomeTaxSec  = upd ? 21 : Number(rd.filingSection ?? 11);
+
+  // ── Full P&L income/debit totals ─────────────────────────────────────────
+  const totOthIncome = toI(pl.OtherIncomeRent) + toI(pl.OtherIncomeCommission) + toI(pl.OtherIncomeDividend) + toI(pl.OtherIncomeInterest) + toI(pl.OtherIncomeOther);
+  const totCreditsToPL = toI(pl.GrossProfitFromTrading) + totOthIncome;
+
+  return {
+    ITR: {
+      ITR5: {
+        CreationInfo: {
+          SWVersionNo:      sw.SWVersionNo,
+          SWCreatedBy:      sw.SWCreatedBy,
+          JSONCreatedBy:    sw.SWCreatedBy,
+          JSONCreationDate: date,
+          IntermediaryCity: sw.IntermediaryCity ?? 'Delhi',
+          Digest:           '-',
+        },
+        Form_ITR5: {
+          FormName:       'ITR-5',
+          Description:    'For persons other than- (i) individual, (ii) HUF, (iii) company and (iv) person filing Form ITR-7',
+          AssessmentYear: effectiveAYYear,
+          SchemaVer:      'Ver1.0',
+          FormVer:        'Ver1.0',
+        },
+        // ── 139(8A) Updated Return ─────────────────────────────────────────────
+        ...(upd ? {
+          PartA_139_8A: {
+            PAN:                         client.pan ?? '',
+            Name:                        client.fullName ?? '',
+            AssessmentYear:              effectiveAYYear,
+            PreviouslyFiledForThisAY:    upd.previouslyFiled ? 'Y' : 'N',
+            ...(upd.previouslyFiled && upd.previousFilingType ? {
+              PreviouslyFiledForThisAY_139_8A: upd.previousFilingType,
+            } : {}),
+            ...(upd.origAckNo && upd.origFilingDate ? {
+              Applicable_139_8A: {
+                ITRForm:          'ITR5',
+                AcknowledgementNo: upd.origAckNo,
+                OrigRetFiledDate:  upd.origFilingDate,
+              },
+            } : {}),
+            LaidOutIn_139_8A:    upd.laidOutFlag ? 'Y' : 'N',
+            ITRFormUpdatingInc:  'ITR5',
+            UpdatedReturnDuringPeriod: upd.periodCode ?? '1',
+            ...(Array.isArray(upd.reasons) && upd.reasons.length > 0 ? {
+              UpdatingInc: {
+                ReasonsForUpdatingIncDtls: upd.reasons.map((r: string) => ({
+                  ReasonsForUpdatingIncome: r,
+                })),
+              },
+            } : {}),
+          },
+        } : {}),
+        PartA_GEN1: {
+          OrgFirmInfo: {
+            AssesseeName: { SurNameOrOrgName: client.fullName ?? '' },
+            PAN: client.pan ?? '',
+            Address: {
+              ResidenceNo:          client.address?.split(',')[0]?.trim() ?? '',
+              LocalityOrArea:       client.city ?? '',
+              CityOrTownOrDistrict: client.city ?? '',
+              StateCode:            client.state ?? '07',
+              CountryCode:          'IN',
+              CountryCodeMobile:    91,
+              MobileNo:             Number((client.mobileNumber ?? '9999999999').replace(/\D/g, '')) || 9999999999,
+              EmailAddress:         client.email ?? '',
+              ...(client.pinCode ? { PinCode: client.pinCode } : {}),
+            },
+            DateOFFormOrIncorp:   gen.dateOfFormation ?? '2000-01-01',
+            StatusOrCompanyType:  entityStatus.StatusOrCompanyType,
+            ...(entityStatus.SubStatus ? { SubStatus: entityStatus.SubStatus } : {}),
+          },
+          FilingStatus: {
+            ReturnFileSec: {
+              IncomeTaxSec: incomeTaxSec,
+            },
+            ResidentialStatus:     'RES',
+            BusinessTrustFlag:     'N',
+            InvstmntFundRefrdSec115UB: 'N',
+            ForeignExchangeFlag:   'N',
+            StartUpDPIITFlag:      'N',
+            ifMSME:                'N',
+          },
+        },
+        PartA_GEN2: {
+          LiableSec44AAflg:    gen.maintainsRegularBooks ? 'Y' : 'N',
+          IncDclrdUs:          noAccountCase ? 'N' : 'N',
+          LiableSec44ABflg:    gen.isAuditRequired ? 'Y' : 'N',
+          LiableSec92Eflg:     'N',
+          PrevYrMemPartChange: 'N',
+          AuditedByAccountantFlg: gen.isAuditRequired ? 'Y' : 'N',
+          ...(gen.isAuditRequired && gen.auditorName ? {
+            AuditInfo: {
+              AuditReportFurnishDate: gen.auditReportDate ?? date,
+              AuditDate:              gen.auditReportDate ?? date,
+              AuditorName:            gen.auditorName ?? '',
+              AuditorMemNo:           (gen.auditorMembership ?? '').replace(/\D/g, '').padStart(6, '0').slice(0, 6),
+              AudFrmName:             gen.auditFirmName ?? '',
+              AudFrmRegNo:            gen.auditFirmRegNo ?? '',
+              ...(gen.auditFirmPAN ? { AudFrmPAN: gen.auditFirmPAN } : {}),
+              ...(gen.auditAckNo ? { AckNum44AB: parseInt(gen.auditAckNo) || 0 } : {}),
+              ...(gen.udin ? { UDIN: gen.udin } : {}),
+            },
+          } : {}),
+          // Rule 13: Nature of business — mandatory
+          NatOfBus: {
+            NatureOfBusiness: [{ Code: gen.businessCode || '19009' }],
+          },
+          // Rule 32: Partners/members/trustees info — mandatory for AOP/BOI/Trust
+          ...(Array.isArray(gen.members) && gen.members.length > 0 ? {
+            PartnerOrMemberInfo: gen.members.map((m: any) => ({
+              PartnerOrMemberName: m.name ?? '',
+              AddressDetailWithZipCode: {
+                FlatDoorBlockNo:       m.flatNo ?? '',
+                NameOfPremises:        m.buildingName ?? '',
+                RoadOrStreet:          m.streetName ?? '',
+                LocalityOrArea:        m.localityOrArea ?? '',
+                CityOrTownOrDistrict:  m.cityOrTownOrDistrict ?? '',
+                StateCode:             m.stateCode ?? '27',
+                PinCode:               m.pinCode ?? '',
+                CountryCode:           m.countryCode ?? '91',
+              },
+              SharePercentage:  Number(m.sharePercentage) || 0,
+              Status:           m.status ?? 'TRUSTEE',
+              RateOfInterest:   Number(m.rateOfInterest) || 0,
+              RemunerationPaid: Math.round(Number(m.remunerationPaid) || 0),
+              ...(m.pan ? { PAN: m.pan } : {}),
+              ...(m.aadhaar ? { AadhaarCardNo: m.aadhaar } : {}),
+            })),
+          } : {}),
+        },
+        // ── Balance Sheet ───────────────────────────────────────────────────
+        PARTA_BS: {
+          FundSrc: {
+            PartnerOrMemberFund: {
+              PartnerOrMemberCap: toI(bs.PartnersCapital),
+              ResrNSurp: {
+                RevResr:              toI(bs.ReservesRevaluation),
+                CapResr:              toI(bs.ReservesCapital),
+                StatResr:             toI(bs.ReservesStatutory),
+                OthResr:              toI(bs.ReservesOther),
+                CreditBalOfPLAccount: toI(bs.ReservesPLCredit),
+                TotResrNSurp:         totResrNSurp,
+              },
+              TotPartnerOrMemberFund: totPartnerFund,
+            },
+            LoanFunds: {
+              SecrLoan: {
+                ForeignCurrLoan: toI(bs.SecuredFCYLoans),
+                RupeeLoan: {
+                  FrmBank:      toI(bs.SecuredLoansFromBanks),
+                  FrmOthrs:     toI(bs.SecuredLoansFromOthers),
+                  TotRupeeLoan: totSecuredRupee,
+                },
+                TotSecrLoan: totSecrLoan,
+              },
+              UnsecrLoan: {
+                ForeignCurrencyLoans: toI(bs.UnsecuredFCYLoans),
+                RupeeLoan: {
+                  FrmBank:              toI(bs.UnsecuredLoansFromBanks),
+                  FrmPersonSpcfdUs40A2b: toI(bs.UnsecuredLoansFrom40A2b),
+                  FrmOthrs:             toI(bs.UnsecuredLoansFromOthers),
+                  TotRupeeLoan:         totUnsecuredRupee,
+                },
+                TotUnSecrLoan: totUnSecrLoan,
+              },
+              TotLoanFund: totLoanFund,
+            },
+            DeferredTax: toI(bs.DeferredTaxLiability),
+            Advances: {
+              FrmPersonSpcfdUs40A2b: toI(bs.AdvancesFrom40A2b),
+              FrmOthers:             toI(bs.AdvancesFromOthers),
+              TotalAdvances:         totalAdvances,
+            },
+            TotFundSrc: totFundSrc,
+          },
+          FundApply: {
+            FixedAsset: {
+              GrossBlock:    toI(bs.GrossBlock),
+              Depreciation:  toI(bs.Depreciation),
+              NetBlock:      netBlock,
+              CapWrkProg:    toI(bs.CapitalWIP),
+              TotFixedAsset: totFixedAsset,
+            },
+            Investments: {
+              LongTermInv: {
+                InvInProperty:     toI(bs.LTInvProperty),
+                EquityInstruments: {
+                  ListedEquities:   toI(bs.LTInvListedEquity),
+                  UnListedEquities: toI(bs.LTInvUnlistedEquity),
+                  Total:            toI(bs.LTInvListedEquity) + toI(bs.LTInvUnlistedEquity),
+                },
+                PreferenceShares:    toI(bs.LTInvPrefShares),
+                GovtOrTrustSecurities: toI(bs.LTInvGovtTrust),
+                DebenturesOrBonds:   toI(bs.LTInvDebentures),
+                MutualFunds:         toI(bs.LTInvMF),
+                Others:              toI(bs.LTInvOthers),
+                TotLongTermInv:      totLTInv,
+              },
+              ShortTermInv: {
+                EquityInstruments: {
+                  ListedEquities:   toI(bs.STInvListedEquity),
+                  UnListedEquities: toI(bs.STInvUnlistedEquity),
+                  Total:            toI(bs.STInvListedEquity) + toI(bs.STInvUnlistedEquity),
+                },
+                PreferenceShares:    toI(bs.STInvPrefShares),
+                GovtOrTrustSecurities: toI(bs.STInvGovtTrust),
+                DebenturesOrBonds:   toI(bs.STInvDebentures),
+                MutualFunds:         toI(bs.STInvMF),
+                Others:              toI(bs.STInvOthers),
+                TotShortTermInv:     totSTInv,
+              },
+              TotInvestments: totInvestments,
+            },
+            CurrAssetLoanAdv: {
+              CurrAsset: {
+                Inventories: {
+                  RawMatl:          toI(bs.InventoriesRawMaterial),
+                  WorkInProgress:   toI(bs.InventoriesWIP),
+                  FinOrTradGood:    toI(bs.InventoriesFinishedGoods),
+                  StkInTrade:       toI(bs.InventoriesStockInTrade),
+                  StoresConsumables: 0,
+                  LooseTools:       0,
+                  Others:           toI(bs.InventoriesOthers),
+                  TotInventries:    totInventories,
+                },
+                SundryDebtorDtls: {
+                  OutstandindMorethanOneYr: toI(bs.SundryDebtorsMoreThan1Yr),
+                  Others:                  toI(bs.SundryDebtorsOthers),
+                  TotalSundryDebtors:      totDebtors,
+                },
+                CashOrBankBal: {
+                  BankBal:         toI(bs.BalanceWithBanks),
+                  CashinHand:      toI(bs.CashInHand),
+                  Others:          toI(bs.OtherCashBankBalances),
+                  TotCashOrBankBal: totCashBank,
+                },
+                OthCurrAsset: toI(bs.OtherCurrentAssets),
+                TotCurrAsset: totCurrAsset,
+              },
+              LoanAdv: {
+                AdvRecoverable: toI(bs.LoansRecoverable),
+                Deposits:       toI(bs.LoansDepositsToOthers),
+                BalWithRevAuth: toI(bs.LoansRevenueAuthorities),
+                TotLoanAdv:     totLoanAdv,
+                LoanAdvIncluded: {
+                  PurposeOFBusOrProf:    totLoanAdv,
+                  NotForPurposeOFBusOrProf: 0,
+                },
+              },
+              TotCurrAssetLoanAdv: totCurrAssetLoanAdv,
+              CurrLiabilitiesProv: {
+                CurrLiabilities: {
+                  SundryCreditorDtls: {
+                    OutstandindMorethanOneYr: toI(bs.CLSundryCreditors1Yr),
+                    Others:                  toI(bs.CLSundryCreditsOthers),
+                    TotalSundryCreditors:    totSundryCreditors,
+                  },
+                  LiabForLeasedAsset:   clLeasedAssets,
+                  AccrIntonLeasedAsset: clIntOnLeased,
+                  AccrIntNotDue:        clIntNotDue,
+                  IncRecvdInAdv:        clIncomeInAdv,
+                  OtherPayables:        clOtherPayables,
+                  TotCurrLiabilities:   totCurrLiabilities,
+                },
+                Provisions: {
+                  ITProvision:             toI(bs.ProvisionsIncomeTax),
+                  ELSuperAnnGratProvision: toI(bs.ProvisionsLeaveGratuity),
+                  OthProvision:            toI(bs.ProvisionsOther),
+                  TotProvisions:           totProvisions,
+                },
+                TotCurrLiabilitiesProv: totCurrLiabilities + totProvisions,
+              },
+            },
+            MiscExpndtr: toI(bs.MiscExpenditure),
+            DeferredTaxAsset: toI(bs.DeferredTaxAsset),
+            DebitBalPLAccount: toI(bs.DebitPLBalance),
+          },
+        },
+        // ── P&L ────────────────────────────────────────────────────────────
+        PARTA_PL: noAccountCase ? {
+          // No-account case: NatOfBus44AD array in PARTA_PL carries gross receipts/profit
+          NatOfBus44AD: [
+            {
+              NameOfBusiness: 'Business/Activity',
+              CodeAD: gen.businessCode ?? '19009',
+              GrossReceiptsElecMode:  toI(pl.BizGrossReceiptsElectronic),
+              GrossReceiptsOtherMode: toI(pl.BizGrossReceiptsOther),
+              TotGrossReceipts:       toI(pl.BizGrossReceiptsElectronic) + toI(pl.BizGrossReceiptsOther),
+              GrossProfit:            toI(pl.BizGrossProfit),
+              Expenditure:            toI(pl.BizExpenses),
+              NetProfit:              toI(pl.BizNetProfit),
+            },
+          ],
+          CreditsToPL: {
+            OthIncome: {
+              RentInc:                    0,
+              Comissions:                 0,
+              Dividends:                  0,
+              InterestInc:                0,
+              ProfitOnSaleFixedAsset:     0,
+              ProfitOnInvChrSTT:          0,
+              ProfitOnOthInv:             0,
+              ProfitOnCurrFluct:          0,
+              ProfitOnCnvInvntryToCapAsst: 0,
+              ProfitOnAgriIncome:         0,
+              MiscOthIncome:              0,
+              TotOthIncome:               0,
+            },
+            TotCreditsToPL: toI(pl.BizNetProfit) + toI(pl.ProfNetProfit),
+          },
+        } : {
+          CreditsToPL: {
+            GrossProfitTrnsfFrmTrdAcc: toI(pl.GrossProfitFromTrading),
+            OthIncome: {
+              RentInc:                    toI(pl.OtherIncomeRent),
+              Comissions:                 toI(pl.OtherIncomeCommission),
+              Dividends:                  toI(pl.OtherIncomeDividend),
+              InterestInc:                toI(pl.OtherIncomeInterest),
+              ProfitOnSaleFixedAsset:     0,
+              ProfitOnInvChrSTT:          0,
+              ProfitOnOthInv:             0,
+              ProfitOnCurrFluct:          0,
+              ProfitOnCnvInvntryToCapAsst: 0,
+              ProfitOnAgriIncome:         0,
+              MiscOthIncome:              toI(pl.OtherIncomeOther),
+              TotOthIncome:               totOthIncome,
+            },
+            TotCreditsToPL: totCreditsToPL,
+          },
+        },
+      },
+    },
+  };
+}
+
 export function buildITRJson(input: BuildITRInput): object {
   switch (input.returnData.formType) {
     case 'ITR-1': return buildITR1(input);
     case 'ITR-2': return buildITR2(input);
     case 'ITR-4': return buildITR4(input);
+    case 'ITR-5': return buildITR5(input);
     default:
       throw new Error(`Unsupported form type: ${(input.returnData as ReturnData).formType}`);
   }

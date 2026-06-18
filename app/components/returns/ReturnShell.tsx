@@ -31,6 +31,9 @@ import ScheduleBP from './ScheduleBP';
 import ScheduleCG from './ScheduleCG';
 import ScheduleAL from './ScheduleAL';
 import ScheduleFinancialParticulars from './ScheduleFinancialParticulars';
+import ITR5General from './ITR5General';
+import ITR5BalanceSheet from './ITR5BalanceSheet';
+import ITR5PL from './ITR5PL';
 import TaxSummary from './TaxSummary';
 import Verification from './Verification';
 
@@ -62,7 +65,10 @@ type TabId =
   | 'tds'
   | 'tax_payments'
   | 'tax_summary'
-  | 'verification';
+  | 'verification'
+  | 'itr5_general'
+  | 'itr5_balance_sheet'
+  | 'itr5_pl';
 
 interface Tab {
   id: TabId;
@@ -88,6 +94,9 @@ const ALL_TABS: Tab[] = [
   { id: 'house_property',        label: 'House Property',        shortLabel: 'HP',   icon: 'HP'  },
   { id: 'business_profession',   label: 'Business / Profession', shortLabel: 'BP',   icon: 'BP'  },
   { id: 'financial_particulars', label: 'Financial Particulars', shortLabel: 'FP',   icon: 'FP'  },
+  { id: 'itr5_general',          label: 'ITR-5 General',         shortLabel: 'GEN',  icon: 'GEN' },
+  { id: 'itr5_balance_sheet',    label: 'Balance Sheet',         shortLabel: 'BS',   icon: 'BS'  },
+  { id: 'itr5_pl',               label: 'P&L / Income',          shortLabel: 'PL',   icon: 'PL'  },
   { id: 'capital_gains',         label: 'Capital Gains',         shortLabel: 'CG',   icon: 'CG'  },
   { id: 'other_sources',         label: 'Other Sources',         shortLabel: 'OS',   icon: 'OS'  },
   { id: 'deductions',            label: 'Deductions (VI-A)',      shortLabel: 'VIA',  icon: 'VIA' },
@@ -580,6 +589,8 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate, fo
           </div>
           {(['salary','house_property','business_profession','financial_particulars','capital_gains','other_sources'] as const).map(tabId => {
             const isITR4 = returnMeta?.formType === 'ITR-4';
+            const isITR5 = returnMeta?.formType === 'ITR-5';
+            if (tabId === 'financial_particulars' && isITR5) return null;
             return (
               <ScheduleNavItem
                 key={tabId}
@@ -598,6 +609,24 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate, fo
               />
             );
           })}
+
+          {/* ITR-5 specific tabs */}
+          {returnMeta?.formType === 'ITR-5' && (
+            <>
+              <div style={{ padding: '10px 14px 4px', fontSize: '10px', fontWeight: 800, letterSpacing: '0.1em', color: '#475569', textTransform: 'uppercase', marginTop: '4px' }}>
+                ITR-5 Schedules
+              </div>
+              {(['itr5_general','itr5_balance_sheet','itr5_pl'] as const).map(tabId => (
+                <ScheduleNavItem
+                  key={tabId}
+                  tab={ALL_TABS.find(t => t.id === tabId)!}
+                  isActive={activeTab === tabId}
+                  onClick={() => setActiveTab(tabId)}
+                  badge={0}
+                />
+              ))}
+            </>
+          )}
 
           {/* Section: Deductions & Credits */}
           <div style={{ padding: '10px 14px 4px', fontSize: '10px', fontWeight: 800, letterSpacing: '0.1em', color: '#475569', textTransform: 'uppercase', marginTop: '4px' }}>
@@ -702,6 +731,37 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate, fo
               }}
               setDirty={setDirty}
             />
+          )}
+
+          {activeTab === 'itr5_general' && (
+            <div className="p-6">
+              <ITR5General
+                returnId={returnMeta.id}
+                initialData={(returnData as any)?.itr5General}
+                onSaved={() => setDirty(false)}
+              />
+            </div>
+          )}
+
+          {activeTab === 'itr5_balance_sheet' && (
+            <div className="p-6 overflow-auto">
+              <ITR5BalanceSheet
+                returnId={returnMeta.id}
+                initialData={(returnData as any)?.itr5BalanceSheet}
+                onSaved={() => setDirty(false)}
+              />
+            </div>
+          )}
+
+          {activeTab === 'itr5_pl' && (
+            <div className="p-6 overflow-auto">
+              <ITR5PL
+                returnId={returnMeta.id}
+                maintainsRegularBooks={(returnData as any)?.itr5General?.maintainsRegularBooks ?? false}
+                initialData={(returnData as any)?.itr5PL}
+                onSaved={() => setDirty(false)}
+              />
+            </div>
           )}
 
           {activeTab === 'capital_gains' && (

@@ -24,7 +24,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Which ITR form is applicable */
-export type ITRFormType = 'ITR-1' | 'ITR-2' | 'ITR-4';
+export type ITRFormType = 'ITR-1' | 'ITR-2' | 'ITR-4' | 'ITR-5';
 
 /** Tax regime */
 export type TaxRegime = 'OLD' | 'NEW';
@@ -792,6 +792,197 @@ export interface SchedulePresumptiveIncome {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// ITR-5 — For AOP / BOI / Firm / LLP / Co-operative / AJP
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type ITR5EntityType = 'AOP' | 'BOI' | 'AJP' | 'LA' | 'COOP' | 'FIRM' | 'LLP';
+
+export type ITR5MemberStatus =
+  | 'INDIVIDUAL' | 'IND_WORKING' | 'IND_RETIRED' | 'HUF' | 'FIRM' | 'LLP'
+  | 'DOMESTIC_COMPANY' | 'FOREIGN_COMPANY' | 'CO_OPERATIVE_SOCIETY'
+  | 'LOCAL_AUTHORITY' | 'TRUST' | 'AOP_BOI' | 'ANY_OTHER_AJP'
+  | 'SETTLER' | 'TRUSTEE' | 'BENEFICIARY' | 'PRINCIPAL_OFFICER' | 'EXECUTOR';
+
+export interface ITR5Member {
+  name:             string;
+  pan?:             string;
+  aadhaar?:         string;
+  status:           ITR5MemberStatus;
+  sharePercentage:  number;
+  rateOfInterest:   number;
+  remunerationPaid: number;
+  // address (simplified)
+  flatNo?:          string;
+  buildingName?:    string;
+  streetName?:      string;
+  localityOrArea?:  string;
+  cityOrTownOrDistrict?: string;
+  stateCode?:       string;
+  pinCode?:         string;
+  countryCode?:     string;
+}
+
+export type ITR5UpdatedAY = '2024-25' | '2025-26';
+
+export type ITR5UpdateReason =
+  | '1'   // Return previously not filed
+  | '2'   // Income not reported correctly
+  | '3'   // Wrong heads of income chosen
+  | '4'   // Reduction of carried forward loss
+  | '5'   // Reduction of unabsorbed depreciation
+  | '6'   // Reduction of tax credit u/s 115JB/115JC
+  | '7'   // Wrong rate of tax
+  | 'OTH';
+
+export type ITR5UpdatedPeriod = '1' | '2' | '3' | '4';
+
+export interface ITR5Updated {
+  updatedAY:          ITR5UpdatedAY;       // Which AY is being updated
+  previouslyFiled:    boolean;             // PreviouslyFiledForThisAY
+  previousFilingType: '1' | '2';           // 1=139(1), 2=Other
+  origAckNo:          string;              // 15-digit acknowledgement no. of original return
+  origFilingDate:     string;              // YYYY-MM-DD date of original filing
+  laidOutFlag:        boolean;             // LaidOutIn_139_8A
+  periodCode:         ITR5UpdatedPeriod;   // 1=≤12m, 2=12-24m, 3=24-36m, 4=36-48m
+  reasons:            ITR5UpdateReason[];  // UpdatingInc reasons
+}
+
+export interface ITR5General {
+  entityType:            ITR5EntityType;
+  subStatus?:            string;       // schema SubStatus code e.g. '13' for Trust
+  dateOfFormation?:      string;       // YYYY-MM-DD
+  businessCode?:         string;       // NatOfBus code for NatOfBus in PartA_GEN2
+  maintainsRegularBooks: boolean;
+  isAuditRequired:       boolean;
+  auditorName?:          string;
+  auditorMembership?:    string;
+  auditFirmName?:        string;
+  auditFirmRegNo?:       string;
+  auditFirmPAN?:         string;
+  auditReportDate?:      string;
+  auditAckNo?:           string;
+  udin?:                 string;
+  members:               ITR5Member[]; // PartnerOrMemberInfo (Table F for trusts)
+  // 139(8A) updated return
+  isUpdatedReturn:       boolean;
+  updated?:              ITR5Updated | null;
+}
+
+export interface ITR5BalanceSheet {
+  // ── Sources of Funds ──────────────────────────────────────────────────────
+  PartnersCapital:               number;
+  ReservesRevaluation:           number;
+  ReservesCapital:               number;
+  ReservesStatutory:             number;
+  ReservesOther:                 number;
+  ReservesPLCredit:              number;
+  SecuredFCYLoans:               number;  // AY 25-26: Foreign Currency Loans (Secured)
+  SecuredLoansFromBanks:         number;
+  SecuredLoansFromOthers:        number;
+  UnsecuredFCYLoans:             number;  // AY 25-26: Foreign Currency Loans (Unsecured)
+  UnsecuredLoansFromBanks:       number;
+  UnsecuredLoansFrom40A2b:       number;
+  UnsecuredLoansFromOthers:      number;
+  DeferredTaxLiability:          number;
+  AdvancesFrom40A2b:             number;
+  AdvancesFromOthers:            number;
+  // ── Application of Funds ──────────────────────────────────────────────────
+  GrossBlock:                    number;
+  Depreciation:                  number;
+  CapitalWIP:                    number;
+  LTInvProperty:                 number;
+  LTInvListedEquity:             number;
+  LTInvUnlistedEquity:           number;
+  LTInvPrefShares:               number;
+  LTInvGovtTrust:                number;
+  LTInvDebentures:               number;
+  LTInvMF:                       number;
+  LTInvOthers:                   number;
+  STInvListedEquity:             number;
+  STInvUnlistedEquity:           number;
+  STInvPrefShares:               number;
+  STInvGovtTrust:                number;
+  STInvDebentures:               number;
+  STInvMF:                       number;
+  STInvOthers:                   number;
+  InventoriesRawMaterial:        number;
+  InventoriesWIP:                number;
+  InventoriesFinishedGoods:      number;
+  InventoriesStockInTrade:       number;
+  InventoriesOthers:             number;
+  SundryDebtorsMoreThan1Yr:      number;
+  SundryDebtorsOthers:           number;
+  BalanceWithBanks:              number;
+  CashInHand:                    number;
+  OtherCashBankBalances:         number;
+  OtherCurrentAssets:            number;
+  LoansRecoverable:              number;
+  LoansDepositsToOthers:         number;
+  LoansRevenueAuthorities:       number;
+  CLSundryCreditors1Yr:          number;
+  CLSundryCreditsOthers:         number;
+  CLLeasedAssets:                number;  // AY 25-26: Liability for Leased Assets
+  CLInterestOnLeasedAsset:       number;  // AY 25-26: Interest Accrued on Leased Asset
+  CLInterestAccruedNotDue:       number;  // AY 25-26: Interest Accrued but Not Due
+  CLIncomeReceivedInAdvance:     number;  // AY 25-26: Income Received in Advance
+  CLOtherPayables:               number;  // AY 25-26: Other Payables (replaces CLOther)
+  CLOther:                       number;  // kept for backward compat (AY 24-25)
+  ProvisionsIncomeTax:           number;
+  ProvisionsLeaveGratuity:       number;  // AY 25-26: EL/Superannuation/Gratuity
+  ProvisionsOther:               number;
+  MiscExpenditure:               number;
+  DeferredTaxAsset:              number;
+  DebitPLBalance:                number;
+}
+
+export interface ITR5PL {
+  // No-Account Case (item 65) — used when maintainsRegularBooks = false
+  BizGrossReceiptsElectronic: number;
+  BizGrossReceiptsOther:      number;
+  BizGrossProfit:             number;
+  BizExpenses:                number;
+  BizNetProfit:               number;
+  ProfGrossReceiptsElectronic: number;
+  ProfGrossReceiptsOther:     number;
+  ProfGrossProfit:            number;
+  ProfExpenses:               number;
+  ProfNetProfit:              number;
+  // Full P&L key items (items 13–61) — used when maintainsRegularBooks = true
+  GrossProfitFromTrading:     number;
+  OtherIncomeRent:            number;
+  OtherIncomeCommission:      number;
+  OtherIncomeDividend:        number;
+  OtherIncomeInterest:        number;
+  OtherIncomeOther:           number;
+  FreightOutward:             number;
+  PowerAndFuel:               number;
+  Rents:                      number;
+  RepairsBuilding:            number;
+  RepairsMachinery:           number;
+  TotalEmployeeComp:          number;
+  TotalInsurance:             number;
+  WorkmenWelfare:             number;
+  Advertisement:              number;
+  TotalCommission:            number;
+  TotalProfFees:              number;
+  TravellingExpenses:         number;
+  TelephoneExpenses:          number;
+  Donation:                   number;
+  TotalRatesAndTaxes:         number;
+  AuditFee:                   number;
+  PartnersSalary:             number;
+  OtherExpenses:              number;
+  TotalBadDebts:              number;
+  DepreciationPL:             number;
+  NetProfitBeforeTaxes:       number;
+  ProvisionCurrentTax:        number;
+  ProfitAfterTax:             number;
+  BalanceBroughtForward:      number;
+  TransferToReserves:         number;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // COMPLETE RETURN DATA
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -821,6 +1012,11 @@ export interface ReturnData {
   presumptiveIncome: SchedulePresumptiveIncome | null;
   financialParticulars: FinancialParticulars | null;
 
+  // ITR-5 only
+  itr5General: ITR5General | null;
+  itr5BalanceSheet: ITR5BalanceSheet | null;
+  itr5PL: ITR5PL | null;
+
   incomeSummary: IncomeSummary | null;
   taxComputation: ITRTaxComputation | null;
   verification: Verification | null;
@@ -833,6 +1029,7 @@ export interface ReturnData {
 export const isITR1 = (f: ITRFormType): boolean => f === 'ITR-1';
 export const isITR2 = (f: ITRFormType): boolean => f === 'ITR-2';
 export const isITR4 = (f: ITRFormType): boolean => f === 'ITR-4';
+export const isITR5 = (f: ITRFormType): boolean => f === 'ITR-5';
 
 export const supportsMultipleEmployers = (f: ITRFormType): boolean =>
   f === 'ITR-2' || f === 'ITR-4';
@@ -939,6 +1136,9 @@ export function emptyReturnData(
     stcg: null,
     presumptiveIncome: null,
     financialParticulars: null,
+    itr5General: null,
+    itr5BalanceSheet: null,
+    itr5PL: null,
     incomeSummary: null,
     taxComputation: null,
     verification: null,

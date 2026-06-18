@@ -17,7 +17,10 @@ export type TabId =
   | 'tds'
   | 'tax_payments'
   | 'tax_summary'
-  | 'verification';
+  | 'verification'
+  | 'itr5_general'
+  | 'itr5_balance_sheet'
+  | 'itr5_pl';
 
 export interface FieldError {
   field: string;   // dot-notation key, e.g. "employer.0.name" or "tds.0.tan"

@@ -112,6 +112,27 @@ export async function PUT(request: NextRequest, { params }: Params) {
       `;
       break;
     }
+    case 'itr5General': {
+      await prisma.$executeRaw`
+        UPDATE "Return" SET "itr5GeneralJson" = ${JSON.stringify(body)}, "updatedAt" = NOW()
+        WHERE id = ${returnId}
+      `;
+      break;
+    }
+    case 'itr5BalanceSheet': {
+      await prisma.$executeRaw`
+        UPDATE "Return" SET "itr5BalanceSheetJson" = ${JSON.stringify(body)}, "updatedAt" = NOW()
+        WHERE id = ${returnId}
+      `;
+      break;
+    }
+    case 'itr5PL': {
+      await prisma.$executeRaw`
+        UPDATE "Return" SET "itr5PLJson" = ${JSON.stringify(body)}, "updatedAt" = NOW()
+        WHERE id = ${returnId}
+      `;
+      break;
+    }
     case 'verification': {
       const vData = {
         assesseeVerName: body.AssesseeVerName ?? '',
