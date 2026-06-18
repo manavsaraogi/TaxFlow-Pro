@@ -127,6 +127,116 @@ function splitName(fullName: string): { FirstName: string; MiddleName: string; S
   };
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// AY-SPECIFIC RATE CONFIG
+// Each AY differs in: new-regime slabs, STCG/LTCG rates, rebate limits, due dates.
+// Old-regime slabs and surcharge thresholds are unchanged across all three AYs.
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface AYConfig {
+  // Slab tax (new regime)
+  newRegimeSlabTax: (inc: number) => number;
+  // Capital gains rates
+  stcg111ARate:     number;   // 0.15 (AY24-25) or 0.20 (AY25-26+)
+  ltcg112ARate:     number;   // 0.10 (AY24-25) or 0.125 (AY25-26+)
+  ltcg112AExempt:   number;   // 100000 (AY24-25) or 125000 (AY25-26+)
+  // Rebate 87A
+  rebate87A_new:    number;   // 25000 (AY24-25/25-26) or 60000 (AY26-27)
+  rebateLimit_new:  number;   // 700000 (AY24-25/25-26) or 1200000 (AY26-27)
+  rebate87A_old:    number;   // 12500 always
+  rebateLimit_old:  number;   // 500000 always
+  // Standard deduction u/s 16ia
+  stdDeduction_new: number;   // 50000 (AY24-25) or 75000 (AY25-26+)
+  stdDeduction_old: number;   // 50000 always
+  // Filing due dates
+  dueDateIndividual: string;
+  dueDateAudit:      string;
+}
+
+function getAYConfig(ay: string): AYConfig {
+  // Old-regime slab tax — unchanged across all AYs (individual <60)
+  const oldSlabTax = (inc: number) => {
+    if (inc <= 250_000)   return 0;
+    if (inc <= 500_000)   return Math.round((inc - 250_000) * 0.05);
+    if (inc <= 1_000_000) return 12_500 + Math.round((inc - 500_000) * 0.20);
+    return 112_500 + Math.round((inc - 1_000_000) * 0.30);
+  };
+
+  if (ay === '2024-25') {
+    return {
+      newRegimeSlabTax: (inc) => {
+        // Budget 2023 new-regime slabs (AY 2024-25)
+        if (inc <= 300_000)   return 0;
+        if (inc <= 600_000)   return Math.round((inc - 300_000) * 0.05);
+        if (inc <= 900_000)   return 15_000 + Math.round((inc - 600_000) * 0.10);
+        if (inc <= 1_200_000) return 45_000 + Math.round((inc - 900_000) * 0.15);
+        if (inc <= 1_500_000) return 90_000 + Math.round((inc - 1_200_000) * 0.20);
+        return 150_000 + Math.round((inc - 1_500_000) * 0.30);
+      },
+      stcg111ARate:     0.15,
+      ltcg112ARate:     0.10,
+      ltcg112AExempt:   100_000,
+      rebate87A_new:    25_000,
+      rebateLimit_new:  700_000,
+      rebate87A_old:    12_500,
+      rebateLimit_old:  500_000,
+      stdDeduction_new: 50_000,
+      stdDeduction_old: 50_000,
+      dueDateIndividual: '2024-07-31',
+      dueDateAudit:      '2024-10-31',
+    };
+  }
+
+  if (ay === '2025-26') {
+    return {
+      newRegimeSlabTax: (inc) => {
+        // Budget 2024 new-regime slabs (AY 2025-26)
+        if (inc <= 300_000)   return 0;
+        if (inc <= 700_000)   return Math.round((inc - 300_000) * 0.05);
+        if (inc <= 1_000_000) return 20_000 + Math.round((inc - 700_000) * 0.10);
+        if (inc <= 1_200_000) return 50_000 + Math.round((inc - 1_000_000) * 0.15);
+        if (inc <= 1_500_000) return 80_000 + Math.round((inc - 1_200_000) * 0.20);
+        return 140_000 + Math.round((inc - 1_500_000) * 0.30);
+      },
+      stcg111ARate:     0.20,   // Budget 2024: raised from 15% to 20% (w.e.f. 23-Jul-2024)
+      ltcg112ARate:     0.125,  // Budget 2024: raised from 10% to 12.5%
+      ltcg112AExempt:   125_000,
+      rebate87A_new:    25_000,
+      rebateLimit_new:  700_000,
+      rebate87A_old:    12_500,
+      rebateLimit_old:  500_000,
+      stdDeduction_new: 75_000,
+      stdDeduction_old: 50_000,
+      dueDateIndividual: '2025-07-31',
+      dueDateAudit:      '2025-10-31',
+    };
+  }
+
+  // Default: AY 2026-27 (Budget 2025)
+  return {
+    newRegimeSlabTax: (inc) => {
+      if (inc <= 400_000)   return 0;
+      if (inc <= 800_000)   return Math.round((inc - 400_000) * 0.05);
+      if (inc <= 1_200_000) return 20_000 + Math.round((inc - 800_000) * 0.10);
+      if (inc <= 1_600_000) return 60_000 + Math.round((inc - 1_200_000) * 0.15);
+      if (inc <= 2_000_000) return 120_000 + Math.round((inc - 1_600_000) * 0.20);
+      if (inc <= 2_400_000) return 200_000 + Math.round((inc - 2_000_000) * 0.25);
+      return 300_000 + Math.round((inc - 2_400_000) * 0.30);
+    },
+    stcg111ARate:     0.20,
+    ltcg112ARate:     0.125,
+    ltcg112AExempt:   125_000,
+    rebate87A_new:    60_000,
+    rebateLimit_new:  1_200_000,
+    rebate87A_old:    12_500,
+    rebateLimit_old:  500_000,
+    stdDeduction_new: 75_000,
+    stdDeduction_old: 75_000,
+    dueDateIndividual: '2026-07-31',
+    dueDateAudit:      '2026-10-31',
+  };
+}
+
 // Detect assessee type from PAN 4th character (P=Individual, H=HUF, F=Firm)
 function detectStatusFromPAN(pan: string): 'I' | 'H' | 'F' {
   const ch = (pan[3] ?? 'P').toUpperCase();
@@ -250,73 +360,51 @@ function computeIncomeSummary(rd: ReturnData): IncomeSummary {
 // TAX COMPUTATION
 // ─────────────────────────────────────────────────────────────────────────────
 
-function computeSlabTax(income: number, regime: 'OLD' | 'NEW'): number {
-  if (regime === 'NEW') {
-    // New regime slabs AY 2026-27 (Finance Act 2025)
-    if (income <= 400_000) return 0;
-    if (income <= 800_000) return (income - 400_000) * 0.05;
-    if (income <= 1_200_000) return 20_000 + (income - 800_000) * 0.10;
-    if (income <= 1_600_000) return 60_000 + (income - 1_200_000) * 0.15;
-    if (income <= 2_000_000) return 120_000 + (income - 1_600_000) * 0.20;
-    if (income <= 2_400_000) return 200_000 + (income - 2_000_000) * 0.25;
-    return 300_000 + (income - 2_400_000) * 0.30;
-  } else {
-    // Old regime slabs AY 2026-27 (individual below 60) — unchanged
-    if (income <= 250_000) return 0;
-    if (income <= 500_000) return (income - 250_000) * 0.05;
-    if (income <= 1_000_000) return 12_500 + (income - 500_000) * 0.20;
-    return 112_500 + (income - 1_000_000) * 0.30;
-  }
+function computeSlabTax(income: number, regime: 'OLD' | 'NEW', cfg: AYConfig): number {
+  if (regime === 'NEW') return cfg.newRegimeSlabTax(income);
+  // Old regime — unchanged across all AYs (individual below 60)
+  if (income <= 250_000) return 0;
+  if (income <= 500_000) return Math.round((income - 250_000) * 0.05);
+  if (income <= 1_000_000) return 12_500 + Math.round((income - 500_000) * 0.20);
+  return 112_500 + Math.round((income - 1_000_000) * 0.30);
 }
 
 function computeSurcharge(tax: number, income: number, regime: 'OLD' | 'NEW'): number {
   if (income <= 5_000_000) return 0;
   if (income <= 10_000_000) return tax * 0.10;
   if (income <= 20_000_000) return tax * 0.15;
-  if (income <= 50_000_000) return tax * (regime === 'NEW' ? 0.25 : 0.25);
+  if (income <= 50_000_000) return tax * 0.25;
   return tax * (regime === 'NEW' ? 0.25 : 0.37);
 }
 
-function computeRebate87A(income: number, tax: number, regime: 'OLD' | 'NEW'): number {
+function computeRebate87A(income: number, tax: number, regime: 'OLD' | 'NEW', cfg: AYConfig): number {
   if (regime === 'NEW') {
-    if (income <= DEDUCTION_CAPS.Rebate87A_incomeLimit_new) {
-      return Math.min(tax, DEDUCTION_CAPS.Rebate87A_new);
-    }
+    if (income <= cfg.rebateLimit_new) return Math.min(tax, cfg.rebate87A_new);
   } else {
-    if (income <= DEDUCTION_CAPS.Rebate87A_incomeLimit_old) {
-      return Math.min(tax, DEDUCTION_CAPS.Rebate87A_old);
-    }
+    if (income <= cfg.rebateLimit_old) return Math.min(tax, cfg.rebate87A_old);
   }
   return 0;
 }
 
-function computeTaxLiability(summary: IncomeSummary, regime: 'OLD' | 'NEW'): ITRTaxComputation {
+function computeTaxLiability(summary: IncomeSummary, regime: 'OLD' | 'NEW', ay: string): ITRTaxComputation {
+  const cfg = getAYConfig(ay);
   const totalIncome = summary.TotalIncome;
   const ltcg112A = summary.LTCG112A ?? 0;
   const stcg111A = summary.STCG111A ?? 0;
 
-  // Slab tax on income excluding LTCG 112A and STCG 111A (both taxed at special rates)
-  const slabTax = computeSlabTax(totalIncome, regime);
+  const slabTax = computeSlabTax(totalIncome, regime, cfg);
 
-  // LTCG 112A @ 12.5% on amount exceeding ₹1,25,000
-  const taxableLTCG = Math.max(0, ltcg112A - DEDUCTION_CAPS.LTCG112AExempt);
-  const ltcgTax = Math.round(taxableLTCG * 0.125);
+  const taxableLTCG = Math.max(0, ltcg112A - cfg.ltcg112AExempt);
+  const ltcgTax = Math.round(taxableLTCG * cfg.ltcg112ARate);
+  const stcg111ATax = Math.round(stcg111A * cfg.stcg111ARate);
 
-  // STCG 111A @ 20%
-  const stcg111ATax = Math.round(stcg111A * DEDUCTION_CAPS.STCG111A_rate);
-
-  const grossIncForRebate = totalIncome;
-  const rebate = computeRebate87A(grossIncForRebate, slabTax, regime);
+  const rebate = computeRebate87A(totalIncome, slabTax, regime, cfg);
   const taxAfterRebate = Math.max(0, slabTax - rebate) + ltcgTax + stcg111ATax;
 
   const surcharge = Math.round(computeSurcharge(taxAfterRebate, totalIncome + ltcg112A + stcg111A, regime));
   const taxPlusSurcharge = taxAfterRebate + surcharge;
   const cess = Math.round(taxPlusSurcharge * 0.04);
   const grossTaxLiability = taxPlusSurcharge + cess;
-
-  // Taxes paid
-  const tdsTotal =
-    toInt(0); // Caller passes in taxes paid separately; placeholder
 
   return {
     TotalTaxableIncome: totalIncome,
@@ -327,10 +415,9 @@ function computeTaxLiability(summary: IncomeSummary, regime: 'OLD' | 'NEW'): ITR
     HealthEducationCess: cess,
     GrossTaxLiability: grossTaxLiability,
     TotalTaxPayable: grossTaxLiability,
-    TotalTaxesPaid: tdsTotal,
-    BalTaxPayable: Math.max(0, grossTaxLiability - tdsTotal),
+    TotalTaxesPaid: 0,
+    BalTaxPayable: grossTaxLiability,
     AggregateTaxInterestLiability: grossTaxLiability,
-    Refund: tdsTotal > grossTaxLiability ? tdsTotal - grossTaxLiability : undefined,
   };
 }
 
@@ -673,11 +760,13 @@ function buildVerification(v: Verification, filingDate: string) {
 function buildITR1(input: BuildITRInput): object {
   const { returnData: rd, client, sw, filingDate } = input;
   const date = filingDate ?? today();
+  const ay = rd.assessmentYear ?? '2026-27';
+  const cfg = getAYConfig(ay);
   const summary = computeIncomeSummary(rd);
   const capped = rd.deductions
     ? applyDeductionCaps(rd.deductions, summary.GrossTotalIncome)
     : applyDeductionCaps({ TotalChapVIADeductions: 0 } as DeductionsChapterVIA, 0);
-  const taxComp = computeTaxLiability(summary, rd.regime);
+  const taxComp = computeTaxLiability(summary, rd.regime, ay);
 
   const totalTaxPaid =
     toInt(rd.tds?.TotalTDSOnSalaries) +
@@ -716,7 +805,7 @@ function buildITR1(input: BuildITRInput): object {
           ReturnFileSec: rd.filingSection,
           OptOutNewTaxRegime: rd.regime === 'OLD' ? 'Y' : 'N',
           AsseseeRepFlg: 'N',
-          ItrFilingDueDate: '2026-07-31',
+          ItrFilingDueDate: cfg.dueDateIndividual,
         },
         ITR1_IncomeDeductions: buildITR1IncomeDeductions(rd, summary, capped),
         ITR1_TaxComputation: {
@@ -859,11 +948,13 @@ export function detectFormTypeFromReturnData(rd: ReturnData): { formType: ITRFor
 function buildITR2(input: BuildITRInput): object {
   const { returnData: rd, client, sw, filingDate } = input;
   const date = filingDate ?? today();
+  const ay = rd.assessmentYear ?? '2026-27';
+  const cfg = getAYConfig(ay);
   const summary = computeIncomeSummary(rd);
   const capped = rd.deductions
     ? applyDeductionCaps(rd.deductions, summary.GrossTotalIncome)
     : applyDeductionCaps({ TotalChapVIADeductions: 0 } as DeductionsChapterVIA, 0);
-  const taxComp = computeTaxLiability(summary, rd.regime);
+  const taxComp = computeTaxLiability(summary, rd.regime, ay);
 
   // ── Capital gains from LTCG 112A entries ────────────────────────────────
   const ltcg112ATotal = toInt(rd.ltcg112A?.TaxableLTCG112A ?? 0);
@@ -1263,11 +1354,13 @@ function buildITR2(input: BuildITRInput): object {
 function buildITR4(input: BuildITRInput): object {
   const { returnData: rd, client, sw, filingDate } = input;
   const date = filingDate ?? today();
+  const ay = rd.assessmentYear ?? '2026-27';
+  const cfg = getAYConfig(ay);
   const summary = computeIncomeSummary(rd);
   const capped = rd.deductions
     ? applyDeductionCaps(rd.deductions, summary.GrossTotalIncome)
     : applyDeductionCaps({ TotalChapVIADeductions: 0 } as DeductionsChapterVIA, 0);
-  const taxComp = computeTaxLiability(summary, rd.regime);
+  const taxComp = computeTaxLiability(summary, rd.regime, ay);
 
   const ltcg112ATotal = toInt(rd.ltcg112A?.TaxableLTCG112A ?? 0);
   const grossTotInc    = toInt(summary.GrossTotalIncome);
@@ -1316,7 +1409,7 @@ function buildITR4(input: BuildITRInput): object {
             clauseiv7provisio139i:       'N',
             AsseseeRepFlg:               'N',
             ResidentialStatus:           (client.residentialStatus ?? 'RES') === 'RNR' ? 'NOR' : (client.residentialStatus ?? 'RES'),
-            ItrFilingDueDate:            '2026-08-31',
+            ItrFilingDueDate:            cfg.dueDateAudit,
             ...(rd.regime === 'OLD' && f10?.optOut ? {
               Form10IEAFiledFlag:        'Y',
               Form10IEAAckNum:           f10.ackNo,
@@ -1681,9 +1774,11 @@ function buildITR5(input: BuildITRInput): object {
   const pl   = (rd as any).itr5PL ?? {};
   const upd  = gen.isUpdatedReturn ? (gen.updated ?? {}) : null;
   // AY start year: '2024-25' → '2024', '2025-26' → '2025'
-  const ayYear = rd.assessmentYear ? rd.assessmentYear.split('-')[0] : '2025';
+  const itr5AY = rd.assessmentYear ?? '2026-27';
+  const itr5Cfg = getAYConfig(itr5AY);
+  const ayYear = itr5AY.split('-')[0];
   // For updated return, use the selected updatedAY; otherwise use the return's own AY
-  const effectiveAYYear = upd ? (upd.updatedAY ?? rd.assessmentYear ?? '2025-26').split('-')[0] : ayYear;
+  const effectiveAYYear = upd ? (upd.updatedAY ?? itr5AY).split('-')[0] : ayYear;
 
   const toI = (v: unknown) => Math.round(Number(v) || 0);
 
@@ -1717,8 +1812,8 @@ function buildITR5(input: BuildITRInput): object {
     return 112500 + Math.round((inc - 1000000) * 0.30);
   }
   const taxOnNormal    = usesMMR ? Math.round(normalIncome * 0.30) : slabTaxOldRegime(normalIncome);
-  const taxOnSTCG111A  = Math.round(stcg111A * 0.20);    // 20% w.e.f. 23-Jul-2024 (Budget 2024)
-  const taxOnLTCG112A  = Math.round(ltcg112A * 0.125);   // 12.5% w.e.f. 23-Jul-2024
+  const taxOnSTCG111A  = Math.round(stcg111A * itr5Cfg.stcg111ARate);
+  const taxOnLTCG112A  = Math.round(Math.max(0, ltcg112A - itr5Cfg.ltcg112AExempt) * itr5Cfg.ltcg112ARate);
   const taxPayableOnTI = taxOnNormal + taxOnSTCG111A + taxOnLTCG112A;
 
   // Surcharge on normal income + special rate income

@@ -167,7 +167,7 @@ function recomputeFromState(state: Pick<
 >): { summary: IncomeSummary; taxComp: ITRTaxComputation } {
   const rd = buildReturnData(state as ReturnState);
   const summary = computeIncomeSummary(rd);
-  const taxComp = computeTaxLiability(summary, state.meta?.regime ?? 'NEW');
+  const taxComp = computeTaxLiability(summary, state.meta?.regime ?? 'NEW', state.meta?.assessmentYear ?? '2026-27');
   return { summary, taxComp };
 }
 

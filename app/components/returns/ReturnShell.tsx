@@ -218,7 +218,7 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate, fo
         if (data.formType === 'ITR-5') setActiveTab('itr5_general');
         const initialSummary = computeIncomeSummary(data);
         setSummary(initialSummary);
-        setTaxComp(computeTaxLiability(initialSummary, meta.regime));
+        setTaxComp(computeTaxLiability(initialSummary, meta.regime, data.assessmentYear ?? '2026-27'));
         // Auto-detect form type on load
         const detected = detectFormTypeFromReturnData(data);
         if (detected.formType !== meta.formType) setDetectedForm(detected);
@@ -235,7 +235,7 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate, fo
   const onScheduleChange = useCallback((newSummary: IncomeSummary) => {
     setSummary(newSummary);
     if (returnMeta) {
-      setTaxComp(computeTaxLiability(newSummary, returnMeta.regime));
+      setTaxComp(computeTaxLiability(newSummary, returnMeta.regime, returnMeta.assessmentYear ?? '2026-27'));
     }
     setSaveState('saving');
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
@@ -686,7 +686,7 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate, fo
                 setReturnData(rd);
                 const newSummary = computeIncomeSummary(rd);
                 setSummary(newSummary);
-                setTaxComp(computeTaxLiability(newSummary, rd.regime ?? returnMeta?.regime ?? 'NEW'));
+                setTaxComp(computeTaxLiability(newSummary, rd.regime ?? returnMeta?.regime ?? 'NEW', returnMeta?.assessmentYear ?? '2026-27'));
                 onScheduleChange(newSummary);
                 runDetection(rd);
               }}
@@ -703,7 +703,7 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate, fo
                 setReturnData(rd);
                 const newSummary = computeIncomeSummary(rd);
                 setSummary(newSummary);
-                setTaxComp(computeTaxLiability(newSummary, rd.regime ?? returnMeta?.regime ?? 'NEW'));
+                setTaxComp(computeTaxLiability(newSummary, rd.regime ?? returnMeta?.regime ?? 'NEW', returnMeta?.assessmentYear ?? '2026-27'));
                 onScheduleChange(newSummary);
                 runDetection(rd);
               }}
@@ -719,7 +719,7 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate, fo
                 setReturnData(rd);
                 const newSummary = computeIncomeSummary(rd);
                 setSummary(newSummary);
-                setTaxComp(computeTaxLiability(newSummary, rd.regime ?? returnMeta?.regime ?? 'NEW'));
+                setTaxComp(computeTaxLiability(newSummary, rd.regime ?? returnMeta?.regime ?? 'NEW', returnMeta?.assessmentYear ?? '2026-27'));
                 onScheduleChange(newSummary);
                 runDetection(rd);
               }}
@@ -777,7 +777,7 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate, fo
                 setReturnData(rd);
                 const newSummary = computeIncomeSummary(rd);
                 setSummary(newSummary);
-                setTaxComp(computeTaxLiability(newSummary, rd.regime ?? returnMeta?.regime ?? 'NEW'));
+                setTaxComp(computeTaxLiability(newSummary, rd.regime ?? returnMeta?.regime ?? 'NEW', returnMeta?.assessmentYear ?? '2026-27'));
                 onScheduleChange(newSummary);
                 runDetection(rd);
               }}
@@ -793,7 +793,7 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate, fo
                 setReturnData(rd);
                 const newSummary = computeIncomeSummary(rd);
                 setSummary(newSummary);
-                setTaxComp(computeTaxLiability(newSummary, rd.regime ?? returnMeta?.regime ?? 'NEW'));
+                setTaxComp(computeTaxLiability(newSummary, rd.regime ?? returnMeta?.regime ?? 'NEW', returnMeta?.assessmentYear ?? '2026-27'));
                 onScheduleChange(newSummary);
                 runDetection(rd);
               }}
