@@ -81,7 +81,20 @@ interface Props {
   returnId: number;
   maintainsRegularBooks: boolean;
   initialData?: Partial<PLState> | null;
-  onSaved?: () => void;
+  onSaved?: (data: PLState) => void;
+}
+
+const PL_INP = 'w-full border border-gray-200 rounded px-2 py-1 text-sm text-right focus:outline-none focus:border-blue-500';
+
+function Row({ label, field, pl, set }: { label: string; field: keyof PLState; pl: PLState; set: (k: keyof PLState, v: string) => void }) {
+  return (
+    <tr>
+      <td className="py-1 pr-2"><span className="text-sm text-gray-700">{label}</span></td>
+      <td className="py-1 w-44">
+        <input type="number" className={PL_INP} value={pl[field] || ''} onChange={e => set(field, e.target.value)} />
+      </td>
+    </tr>
+  );
 }
 
 export default function ITR5PL({ returnId, maintainsRegularBooks, initialData, onSaved }: Props) {
@@ -103,7 +116,7 @@ export default function ITR5PL({ returnId, maintainsRegularBooks, initialData, o
         body: JSON.stringify(data),
       });
       setSavedAt(new Date());
-      onSaved?.();
+      onSaved?.(data);
     } finally {
       setSaving(false);
     }
@@ -117,20 +130,6 @@ export default function ITR5PL({ returnId, maintainsRegularBooks, initialData, o
       return next;
     });
   }, [save]);
-
-  const inp = 'w-full border border-gray-200 rounded px-2 py-1 text-sm text-right focus:outline-none focus:border-blue-500';
-  const lbl = 'text-sm text-gray-700';
-
-  function Row({ label, field }: { label: string; field: keyof PLState }) {
-    return (
-      <tr>
-        <td className="py-1 pr-2"><span className={lbl}>{label}</span></td>
-        <td className="py-1 w-44">
-          <input type="number" className={inp} value={pl[field] || ''} onChange={e => set(field, e.target.value)} />
-        </td>
-      </tr>
-    );
-  }
 
   function ComputedRow({ label, value }: { label: string; value: number }) {
     return (
@@ -160,12 +159,12 @@ export default function ITR5PL({ returnId, maintainsRegularBooks, initialData, o
             <h3 className="text-sm font-semibold text-gray-700 mb-3">65(i) — Business Income</h3>
             <table className="w-full border-collapse">
               <tbody>
-                <Row label="(a) Gross receipts — Electronic mode" field="BizGrossReceiptsElectronic" />
-                <Row label="(b) Gross receipts — Other mode" field="BizGrossReceiptsOther" />
+                <Row pl={pl} set={set} label="(a) Gross receipts — Electronic mode" field="BizGrossReceiptsElectronic" />
+                <Row pl={pl} set={set} label="(b) Gross receipts — Other mode" field="BizGrossReceiptsOther" />
                 <ComputedRow label="Total Gross Receipts" value={pl.BizGrossReceiptsElectronic + pl.BizGrossReceiptsOther} />
-                <Row label="(c) Gross Profit" field="BizGrossProfit" />
-                <Row label="(d) Expenses" field="BizExpenses" />
-                <Row label="(e) Net Profit [c − d]" field="BizNetProfit" />
+                <Row pl={pl} set={set} label="(c) Gross Profit" field="BizGrossProfit" />
+                <Row pl={pl} set={set} label="(d) Expenses" field="BizExpenses" />
+                <Row pl={pl} set={set} label="(e) Net Profit [c − d]" field="BizNetProfit" />
               </tbody>
             </table>
           </div>
@@ -174,12 +173,12 @@ export default function ITR5PL({ returnId, maintainsRegularBooks, initialData, o
             <h3 className="text-sm font-semibold text-gray-700 mb-3">65(ii) — Profession Income</h3>
             <table className="w-full border-collapse">
               <tbody>
-                <Row label="(a) Gross receipts — Electronic mode" field="ProfGrossReceiptsElectronic" />
-                <Row label="(b) Gross receipts — Other mode" field="ProfGrossReceiptsOther" />
+                <Row pl={pl} set={set} label="(a) Gross receipts — Electronic mode" field="ProfGrossReceiptsElectronic" />
+                <Row pl={pl} set={set} label="(b) Gross receipts — Other mode" field="ProfGrossReceiptsOther" />
                 <ComputedRow label="Total Gross Receipts" value={pl.ProfGrossReceiptsElectronic + pl.ProfGrossReceiptsOther} />
-                <Row label="(c) Gross Profit" field="ProfGrossProfit" />
-                <Row label="(d) Expenses" field="ProfExpenses" />
-                <Row label="(e) Net Profit [c − d]" field="ProfNetProfit" />
+                <Row pl={pl} set={set} label="(c) Gross Profit" field="ProfGrossProfit" />
+                <Row pl={pl} set={set} label="(d) Expenses" field="ProfExpenses" />
+                <Row pl={pl} set={set} label="(e) Net Profit [c − d]" field="ProfNetProfit" />
               </tbody>
             </table>
           </div>
@@ -198,18 +197,18 @@ export default function ITR5PL({ returnId, maintainsRegularBooks, initialData, o
             <h3 className="text-sm font-semibold text-gray-700 mb-3">Income</h3>
             <table className="w-full border-collapse">
               <tbody>
-                <Row label="Gross Profit from Trading (item 15)" field="GrossProfitFromTrading" />
-                <Row label="Other Income — Rent" field="OtherIncomeRent" />
-                <Row label="Other Income — Commission" field="OtherIncomeCommission" />
-                <Row label="Other Income — Dividend" field="OtherIncomeDividend" />
-                <Row label="Other Income — Interest" field="OtherIncomeInterest" />
-                <Row label="Other Income — Profit on Sale of Fixed Assets" field="OtherIncomeSaleFixedAsset" />
-                <Row label="Other Income — Profit on Investments (STT paid)" field="OtherIncomeInvSTT" />
-                <Row label="Other Income — Profit on Other Investments" field="OtherIncomeOtherInv" />
-                <Row label="Other Income — Forex Gain / Loss (Sec. 43AA)" field="OtherIncomeForexGainLoss" />
-                <Row label="Other Income — Inventory Converted to Capital Asset" field="OtherIncomeInvToCapital" />
-                <Row label="Other Income — Agricultural Income" field="OtherIncomeAgricultural" />
-                <Row label="Other Income — Miscellaneous" field="OtherIncomeOther" />
+                <Row pl={pl} set={set} label="Gross Profit from Trading (item 15)" field="GrossProfitFromTrading" />
+                <Row pl={pl} set={set} label="Other Income — Rent" field="OtherIncomeRent" />
+                <Row pl={pl} set={set} label="Other Income — Commission" field="OtherIncomeCommission" />
+                <Row pl={pl} set={set} label="Other Income — Dividend" field="OtherIncomeDividend" />
+                <Row pl={pl} set={set} label="Other Income — Interest" field="OtherIncomeInterest" />
+                <Row pl={pl} set={set} label="Other Income — Profit on Sale of Fixed Assets" field="OtherIncomeSaleFixedAsset" />
+                <Row pl={pl} set={set} label="Other Income — Profit on Investments (STT paid)" field="OtherIncomeInvSTT" />
+                <Row pl={pl} set={set} label="Other Income — Profit on Other Investments" field="OtherIncomeOtherInv" />
+                <Row pl={pl} set={set} label="Other Income — Forex Gain / Loss (Sec. 43AA)" field="OtherIncomeForexGainLoss" />
+                <Row pl={pl} set={set} label="Other Income — Inventory Converted to Capital Asset" field="OtherIncomeInvToCapital" />
+                <Row pl={pl} set={set} label="Other Income — Agricultural Income" field="OtherIncomeAgricultural" />
+                <Row pl={pl} set={set} label="Other Income — Miscellaneous" field="OtherIncomeOther" />
               </tbody>
             </table>
           </div>
@@ -218,26 +217,26 @@ export default function ITR5PL({ returnId, maintainsRegularBooks, initialData, o
             <h3 className="text-sm font-semibold text-gray-700 mb-3">Expenditure</h3>
             <table className="w-full border-collapse">
               <tbody>
-                <Row label="Freight Outward" field="FreightOutward" />
-                <Row label="Power & Fuel" field="PowerAndFuel" />
-                <Row label="Rents" field="Rents" />
-                <Row label="Repairs — Building" field="RepairsBuilding" />
-                <Row label="Repairs — Machinery" field="RepairsMachinery" />
-                <Row label="Employee Compensation (total)" field="TotalEmployeeComp" />
-                <Row label="Insurance" field="TotalInsurance" />
-                <Row label="Workmen / Staff Welfare" field="WorkmenWelfare" />
-                <Row label="Advertisement" field="Advertisement" />
-                <Row label="Commission" field="TotalCommission" />
-                <Row label="Professional / Legal Fees" field="TotalProfFees" />
-                <Row label="Travelling Expenses" field="TravellingExpenses" />
-                <Row label="Telephone / Internet" field="TelephoneExpenses" />
-                <Row label="Donation" field="Donation" />
-                <Row label="Rates & Taxes (excl. Income Tax)" field="TotalRatesAndTaxes" />
-                <Row label="Audit Fee" field="AuditFee" />
-                <Row label="Partners' Salary / Remuneration" field="PartnersSalary" />
-                <Row label="Other Expenses" field="OtherExpenses" />
-                <Row label="Bad Debts" field="TotalBadDebts" />
-                <Row label="Depreciation" field="DepreciationPL" />
+                <Row pl={pl} set={set} label="Freight Outward" field="FreightOutward" />
+                <Row pl={pl} set={set} label="Power & Fuel" field="PowerAndFuel" />
+                <Row pl={pl} set={set} label="Rents" field="Rents" />
+                <Row pl={pl} set={set} label="Repairs — Building" field="RepairsBuilding" />
+                <Row pl={pl} set={set} label="Repairs — Machinery" field="RepairsMachinery" />
+                <Row pl={pl} set={set} label="Employee Compensation (total)" field="TotalEmployeeComp" />
+                <Row pl={pl} set={set} label="Insurance" field="TotalInsurance" />
+                <Row pl={pl} set={set} label="Workmen / Staff Welfare" field="WorkmenWelfare" />
+                <Row pl={pl} set={set} label="Advertisement" field="Advertisement" />
+                <Row pl={pl} set={set} label="Commission" field="TotalCommission" />
+                <Row pl={pl} set={set} label="Professional / Legal Fees" field="TotalProfFees" />
+                <Row pl={pl} set={set} label="Travelling Expenses" field="TravellingExpenses" />
+                <Row pl={pl} set={set} label="Telephone / Internet" field="TelephoneExpenses" />
+                <Row pl={pl} set={set} label="Donation" field="Donation" />
+                <Row pl={pl} set={set} label="Rates & Taxes (excl. Income Tax)" field="TotalRatesAndTaxes" />
+                <Row pl={pl} set={set} label="Audit Fee" field="AuditFee" />
+                <Row pl={pl} set={set} label="Partners' Salary / Remuneration" field="PartnersSalary" />
+                <Row pl={pl} set={set} label="Other Expenses" field="OtherExpenses" />
+                <Row pl={pl} set={set} label="Bad Debts" field="TotalBadDebts" />
+                <Row pl={pl} set={set} label="Depreciation" field="DepreciationPL" />
               </tbody>
             </table>
           </div>
@@ -246,11 +245,11 @@ export default function ITR5PL({ returnId, maintainsRegularBooks, initialData, o
             <h3 className="text-sm font-semibold text-gray-700 mb-3">Profit Appropriation</h3>
             <table className="w-full border-collapse">
               <tbody>
-                <Row label="Net Profit Before Taxes" field="NetProfitBeforeTaxes" />
-                <Row label="Provision for Current Tax" field="ProvisionCurrentTax" />
-                <Row label="Profit After Tax" field="ProfitAfterTax" />
-                <Row label="Balance B/F from previous year" field="BalanceBroughtForward" />
-                <Row label="Transfer to Reserves" field="TransferToReserves" />
+                <Row pl={pl} set={set} label="Net Profit Before Taxes" field="NetProfitBeforeTaxes" />
+                <Row pl={pl} set={set} label="Provision for Current Tax" field="ProvisionCurrentTax" />
+                <Row pl={pl} set={set} label="Profit After Tax" field="ProfitAfterTax" />
+                <Row pl={pl} set={set} label="Balance B/F from previous year" field="BalanceBroughtForward" />
+                <Row pl={pl} set={set} label="Transfer to Reserves" field="TransferToReserves" />
               </tbody>
             </table>
           </div>

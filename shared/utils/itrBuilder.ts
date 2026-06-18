@@ -1781,6 +1781,7 @@ function buildITR5(input: BuildITRInput): object {
   const effectiveAYYear = ayToYear(effectiveAY);
 
   const toI = (v: unknown) => Math.round(Number(v) || 0);
+  const bp5 = (rd as any).itr5BP ?? {};
 
   // ── Income computations ───────────────────────────────────────────────────
   const hpIncome   = toI(rd.houseProperty?.TotalIncomeFromHP);
@@ -1792,8 +1793,24 @@ function buildITR5(input: BuildITRInput): object {
   const totalLTCG  = ltcg112A;
   const totalCG    = totalSTCG + totalLTCG;
 
-  // ITR-5 business/profession income from P&L
-  const bpIncome   = toI(pl.BizNetProfit) + toI(pl.ProfNetProfit);
+  // ITR-5 business/profession income
+  // Regular books: use adjusted taxable income (net profit + additions - cross-heads - deductions)
+  // No-account case: use BizNetProfit + ProfNetProfit from the no-account P&L fields
+  const bpIncome = gen.maintainsRegularBooks
+    ? (() => {
+        const netProfit     = toI(pl.NetProfitBeforeTaxes);
+        const additions     = toI(bp5.personalExpenses) + toI(bp5.inadmissibleU40aIa) + toI(bp5.inadmissibleU40A3)
+                            + toI(bp5.provisionIncomeTax) + toI(bp5.salaryToPartnersExcess)
+                            + toI(bp5.interestToPartnersExcess) + toI(bp5.otherAdditions);
+        const crossHeads    = toI(bp5.dividendCreditedToPL) + toI(bp5.interestCreditedToPL)
+                            + toI(bp5.rentalIncomeCreditedToPL) + toI(bp5.capitalGainCreditedToPL)
+                            + toI(bp5.otherCrossHeadDeductions);
+        const deductions    = toI(bp5.depreciationITAct) + toI(bp5.deductionU35) + toI(bp5.deductionU10AA)
+                            + toI(bp5.deductionU80IC) + toI(bp5.otherBPDeductions);
+        const fromOtherHeads = toI(bp5.amtFromOtherHeadsToBP);
+        return netProfit + additions + fromOtherHeads - crossHeads - deductions;
+      })()
+    : toI(pl.BizNetProfit) + toI(pl.ProfNetProfit);
 
   // Income taxed at special rates is excluded from normal slab computation
   const specialRateIncome = stcg111A + ltcg112A;
@@ -2290,6 +2307,55 @@ function buildITR5(input: BuildITRInput): object {
             TotDebitsToPL:      totDebitsToPL,
           },
         },
+
+        // ── ScheduleBP (regular books case) ──────────────────────────────
+        ...(!noAccountCase ? (() => {
+          const netProfit       = toI(pl.NetProfitBeforeTaxes);
+          const additions       = toI(bp5.personalExpenses) + toI(bp5.inadmissibleU40aIa) + toI(bp5.inadmissibleU40A3)
+                                + toI(bp5.provisionIncomeTax) + toI(bp5.salaryToPartnersExcess)
+                                + toI(bp5.interestToPartnersExcess) + toI(bp5.otherAdditions);
+          const crossHeads      = toI(bp5.dividendCreditedToPL) + toI(bp5.interestCreditedToPL)
+                                + toI(bp5.rentalIncomeCreditedToPL) + toI(bp5.capitalGainCreditedToPL)
+                                + toI(bp5.otherCrossHeadDeductions);
+          const bpDeds          = toI(bp5.depreciationITAct) + toI(bp5.deductionU35) + toI(bp5.deductionU10AA)
+                                + toI(bp5.deductionU80IC) + toI(bp5.otherBPDeductions);
+          const fromOtherHeads  = toI(bp5.amtFromOtherHeadsToBP);
+          const taxableBPIncome = netProfit + additions + fromOtherHeads - crossHeads - bpDeds;
+          return {
+            ScheduleBP: {
+              NetProfitOfBusOrProf: netProfit,
+              AdditionsToNetProfit: additions,
+              AmtDebToCPAofBusorProf: {
+                PersonalExpenses:           toI(bp5.personalExpenses),
+                InadmissU40aIA:             toI(bp5.inadmissibleU40aIa),
+                InadmissU40A3:              toI(bp5.inadmissibleU40A3),
+                ProvisionIncomeTax:         toI(bp5.provisionIncomeTax),
+                ExcessSalaryPartners40b:    toI(bp5.salaryToPartnersExcess),
+                ExcessInterestPartners40b:  toI(bp5.interestToPartnersExcess),
+                OtherInadmissExpenses:      toI(bp5.otherAdditions),
+                TotAmtDebToCPAofBusorProf:  additions,
+              },
+              AmtCrToP_L_NotTaxblBP: {
+                DividendCreditedToPL:     toI(bp5.dividendCreditedToPL),
+                InterestCreditedToPL:     toI(bp5.interestCreditedToPL),
+                RentalIncomeCreditedToPL: toI(bp5.rentalIncomeCreditedToPL),
+                CapGainCreditedToPL:      toI(bp5.capitalGainCreditedToPL),
+                OtherCrossHeadAmts:       toI(bp5.otherCrossHeadDeductions),
+                TotAmtCrToP_L_NotTaxblBP: crossHeads,
+              },
+              DeductFrmNetProfit: {
+                DepreciationITAct:  toI(bp5.depreciationITAct),
+                DeductionU35:       toI(bp5.deductionU35),
+                DeductionU10AA:     toI(bp5.deductionU10AA),
+                DeductionU80IC:     toI(bp5.deductionU80IC),
+                OtherDeductions:    toI(bp5.otherBPDeductions),
+                TotDeductFrmNetProfit: bpDeds,
+              },
+              IncChargblFromOtherHeads: fromOtherHeads,
+              IncChargblUnderBP: Math.max(0, taxableBPIncome),
+            },
+          };
+        })() : {}),
 
         // ── ScheduleHP ────────────────────────────────────────────────────
         ScheduleHP: rd.houseProperty

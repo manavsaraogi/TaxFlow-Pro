@@ -242,7 +242,11 @@ interface OtherRowProps {
 }
 function OtherRow({ entry, onChange, onRemove }: OtherRowProps) {
   const preset = OTHER_INCOME_TYPES.find(t => t.value === entry.description || t.label === entry.description);
+  // isCustom is true when user has selected "Other (describe below)…" or entry has no preset match
+  const [isCustom, setIsCustom] = useState(!preset);
   const [customDesc, setCustomDesc] = useState(preset ? '' : entry.description);
+
+  const selectValue = preset ? preset.value : (isCustom ? 'custom' : '');
 
   return (
     <div className="os-entry-row card">
@@ -251,12 +255,17 @@ function OtherRow({ entry, onChange, onRemove }: OtherRowProps) {
           <label className="form-label">Nature of Income</label>
           <select
             className="form-input"
-            value={preset?.value ?? (entry.description ? 'custom' : '')}
+            value={selectValue}
             onChange={(e) => {
               const val = e.target.value;
-              if (val === 'custom' || val === '') {
+              if (val === 'custom') {
+                setIsCustom(true);
                 onChange(entry.id, { description: customDesc });
+              } else if (val === '') {
+                setIsCustom(false);
+                onChange(entry.id, { description: '' });
               } else {
+                setIsCustom(false);
                 const found = OTHER_INCOME_TYPES.find(t => t.value === val);
                 onChange(entry.id, { description: found ? found.label : val });
               }
@@ -271,13 +280,14 @@ function OtherRow({ entry, onChange, onRemove }: OtherRowProps) {
             ))}
             <option value="custom">Other (describe below)…</option>
           </select>
-          {(preset?.value === 'other' || (!preset && entry.description) || (entry.description === customDesc && customDesc)) && (
+          {isCustom && (
             <input
               type="text"
               className="form-input"
               style={{ marginTop: '4px', fontSize: '0.82rem' }}
-              value={customDesc || (preset?.value === 'other' ? (entry.description === preset.label ? '' : entry.description) : entry.description)}
+              value={customDesc}
               placeholder="Describe the nature of income…"
+              autoFocus
               onChange={(e) => {
                 setCustomDesc(e.target.value);
                 onChange(entry.id, { description: e.target.value });

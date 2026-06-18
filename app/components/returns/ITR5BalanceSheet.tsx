@@ -102,10 +102,36 @@ function fmt(n: number) {
   return `${s}₹${abs.toLocaleString('en-IN')}`;
 }
 
+const INP = 'w-full border border-gray-200 rounded px-2 py-1 text-sm text-right focus:outline-none focus:border-blue-500';
+
+function Row({ label, field, sub, bs, set }: {
+  label: string;
+  field: keyof BSState;
+  sub?: boolean;
+  bs: BSState;
+  set: (key: keyof BSState, val: string) => void;
+}) {
+  return (
+    <tr>
+      <td className="py-1 pr-2">
+        <span className={sub ? 'text-xs text-gray-500 pl-4' : 'text-sm text-gray-700'}>{label}</span>
+      </td>
+      <td className="py-1 w-40">
+        <input
+          type="number"
+          className={INP}
+          value={bs[field] || ''}
+          onChange={e => set(field, e.target.value)}
+        />
+      </td>
+    </tr>
+  );
+}
+
 interface Props {
   returnId: number;
   initialData?: Partial<BSState> | null;
-  onSaved?: () => void;
+  onSaved?: (data: BSState) => void;
 }
 
 export default function ITR5BalanceSheet({ returnId, initialData, onSaved }: Props) {
@@ -127,7 +153,7 @@ export default function ITR5BalanceSheet({ returnId, initialData, onSaved }: Pro
         body: JSON.stringify(data),
       });
       setSavedAt(new Date());
-      onSaved?.();
+      onSaved?.(data);
     } finally {
       setSaving(false);
     }
@@ -169,31 +195,10 @@ export default function ITR5BalanceSheet({ returnId, initialData, onSaved }: Pro
   const balanced = Math.abs(totalSources - totalApplication) < 2;
 
   const inp = 'w-full border border-gray-200 rounded px-2 py-1 text-sm text-right focus:outline-none focus:border-blue-500';
-  const lbl = 'text-sm text-gray-700';
-  const sub = 'text-xs text-gray-500 pl-4';
-  const tot = 'bg-gray-50 font-semibold text-sm text-gray-800';
-
-  function Row({ label, field, className = '' }: { label: string; field: keyof BSState; className?: string }) {
-    return (
-      <tr className={className}>
-        <td className="py-1 pr-2">
-          <span className={className.includes('sub') ? sub : lbl}>{label}</span>
-        </td>
-        <td className="py-1 w-40">
-          <input
-            type="number"
-            className={inp}
-            value={bs[field] || ''}
-            onChange={e => set(field, e.target.value)}
-          />
-        </td>
-      </tr>
-    );
-  }
 
   function TotalRow({ label, value }: { label: string; value: number }) {
     return (
-      <tr className={tot}>
+      <tr className="bg-gray-50 font-semibold text-sm text-gray-800">
         <td className="py-1.5 pr-2 font-semibold">{label}</td>
         <td className="py-1.5 text-right pr-1 text-blue-700">{fmt(value)}</td>
       </tr>
@@ -219,32 +224,32 @@ export default function ITR5BalanceSheet({ returnId, initialData, onSaved }: Pro
           <h3 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-3">Sources of Funds</h3>
           <table className="w-full border-collapse">
             <tbody>
-              <Row label="Partners' / Members' Capital" field="PartnersCapital" />
-              <Row label="Reserves — Revaluation" field="ReservesRevaluation" className="sub" />
-              <Row label="Reserves — Capital" field="ReservesCapital" className="sub" />
-              <Row label="Reserves — Statutory" field="ReservesStatutory" className="sub" />
-              <Row label="Reserves — Other" field="ReservesOther" className="sub" />
-              <Row label="P&L Credit Balance" field="ReservesPLCredit" className="sub" />
+              <Row label="Partners' / Members' Capital" field="PartnersCapital" bs={bs} set={set} />
+              <Row label="Reserves — Revaluation" field="ReservesRevaluation" sub bs={bs} set={set} />
+              <Row label="Reserves — Capital" field="ReservesCapital" sub bs={bs} set={set} />
+              <Row label="Reserves — Statutory" field="ReservesStatutory" sub bs={bs} set={set} />
+              <Row label="Reserves — Other" field="ReservesOther" sub bs={bs} set={set} />
+              <Row label="P&L Credit Balance" field="ReservesPLCredit" sub bs={bs} set={set} />
               <TotalRow label="Total Partners' Fund" value={totalPartnersReserves} />
 
               <tr><td colSpan={2} className="pt-3 pb-1"><span className="text-xs font-semibold text-gray-500">Secured Loans</span></td></tr>
-              <Row label="Foreign Currency Loans" field="SecuredFCYLoans" className="sub" />
-              <Row label="From Banks (Rupee)" field="SecuredLoansFromBanks" className="sub" />
-              <Row label="From Others (Rupee)" field="SecuredLoansFromOthers" className="sub" />
+              <Row label="Foreign Currency Loans" field="SecuredFCYLoans" sub bs={bs} set={set} />
+              <Row label="From Banks (Rupee)" field="SecuredLoansFromBanks" sub bs={bs} set={set} />
+              <Row label="From Others (Rupee)" field="SecuredLoansFromOthers" sub bs={bs} set={set} />
               <TotalRow label="Total Secured Loans" value={totalSecuredLoans} />
 
               <tr><td colSpan={2} className="pt-3 pb-1"><span className="text-xs font-semibold text-gray-500">Unsecured Loans</span></td></tr>
-              <Row label="Foreign Currency Loans" field="UnsecuredFCYLoans" className="sub" />
-              <Row label="From Banks (Rupee)" field="UnsecuredLoansFromBanks" className="sub" />
-              <Row label="From persons u/s 40A(2)(b)" field="UnsecuredLoansFrom40A2b" className="sub" />
-              <Row label="From Others (Rupee)" field="UnsecuredLoansFromOthers" className="sub" />
+              <Row label="Foreign Currency Loans" field="UnsecuredFCYLoans" sub bs={bs} set={set} />
+              <Row label="From Banks (Rupee)" field="UnsecuredLoansFromBanks" sub bs={bs} set={set} />
+              <Row label="From persons u/s 40A(2)(b)" field="UnsecuredLoansFrom40A2b" sub bs={bs} set={set} />
+              <Row label="From Others (Rupee)" field="UnsecuredLoansFromOthers" sub bs={bs} set={set} />
               <TotalRow label="Total Unsecured Loans" value={totalUnsecuredLoans} />
 
-              <Row label="Deferred Tax Liability" field="DeferredTaxLiability" />
+              <Row label="Deferred Tax Liability" field="DeferredTaxLiability" bs={bs} set={set} />
 
               <tr><td colSpan={2} className="pt-3 pb-1"><span className="text-xs font-semibold text-gray-500">Advances</span></td></tr>
-              <Row label="From persons u/s 40A(2)(b)" field="AdvancesFrom40A2b" className="sub" />
-              <Row label="From Others" field="AdvancesFromOthers" className="sub" />
+              <Row label="From persons u/s 40A(2)(b)" field="AdvancesFrom40A2b" sub bs={bs} set={set} />
+              <Row label="From Others" field="AdvancesFromOthers" sub bs={bs} set={set} />
               <TotalRow label="Total Advances" value={totalAdvances} />
 
               <tr className="border-t-2 border-gray-400 bg-blue-50">
@@ -261,78 +266,78 @@ export default function ITR5BalanceSheet({ returnId, initialData, onSaved }: Pro
           <table className="w-full border-collapse">
             <tbody>
               <tr><td colSpan={2} className="pb-1"><span className="text-xs font-semibold text-gray-500">Fixed Assets</span></td></tr>
-              <Row label="Gross Block" field="GrossBlock" className="sub" />
-              <Row label="Less: Depreciation" field="Depreciation" className="sub" />
+              <Row label="Gross Block" field="GrossBlock" sub bs={bs} set={set} />
+              <Row label="Less: Depreciation" field="Depreciation" sub bs={bs} set={set} />
               <TotalRow label="Net Block" value={netBlock} />
-              <Row label="Capital WIP" field="CapitalWIP" className="sub" />
+              <Row label="Capital WIP" field="CapitalWIP" sub bs={bs} set={set} />
               <TotalRow label="Total Fixed Assets" value={totalFixedAssets} />
 
               <tr><td colSpan={2} className="pt-3 pb-1"><span className="text-xs font-semibold text-gray-500">Long-term Investments</span></td></tr>
-              <Row label="Immovable Property" field="LTInvProperty" className="sub" />
-              <Row label="Listed Equity" field="LTInvListedEquity" className="sub" />
-              <Row label="Unlisted Equity" field="LTInvUnlistedEquity" className="sub" />
-              <Row label="Pref. Shares" field="LTInvPrefShares" className="sub" />
-              <Row label="Govt / Trust Securities" field="LTInvGovtTrust" className="sub" />
-              <Row label="Debentures / Bonds" field="LTInvDebentures" className="sub" />
-              <Row label="Mutual Funds" field="LTInvMF" className="sub" />
-              <Row label="Others" field="LTInvOthers" className="sub" />
+              <Row label="Immovable Property" field="LTInvProperty" sub bs={bs} set={set} />
+              <Row label="Listed Equity" field="LTInvListedEquity" sub bs={bs} set={set} />
+              <Row label="Unlisted Equity" field="LTInvUnlistedEquity" sub bs={bs} set={set} />
+              <Row label="Pref. Shares" field="LTInvPrefShares" sub bs={bs} set={set} />
+              <Row label="Govt / Trust Securities" field="LTInvGovtTrust" sub bs={bs} set={set} />
+              <Row label="Debentures / Bonds" field="LTInvDebentures" sub bs={bs} set={set} />
+              <Row label="Mutual Funds" field="LTInvMF" sub bs={bs} set={set} />
+              <Row label="Others" field="LTInvOthers" sub bs={bs} set={set} />
               <TotalRow label="Total LT Investments" value={totalLTInv} />
 
               <tr><td colSpan={2} className="pt-3 pb-1"><span className="text-xs font-semibold text-gray-500">Short-term Investments</span></td></tr>
-              <Row label="Listed Equity" field="STInvListedEquity" className="sub" />
-              <Row label="Unlisted Equity" field="STInvUnlistedEquity" className="sub" />
-              <Row label="Pref. Shares" field="STInvPrefShares" className="sub" />
-              <Row label="Govt / Trust Securities" field="STInvGovtTrust" className="sub" />
-              <Row label="Debentures / Bonds" field="STInvDebentures" className="sub" />
-              <Row label="Mutual Funds" field="STInvMF" className="sub" />
-              <Row label="Others" field="STInvOthers" className="sub" />
+              <Row label="Listed Equity" field="STInvListedEquity" sub bs={bs} set={set} />
+              <Row label="Unlisted Equity" field="STInvUnlistedEquity" sub bs={bs} set={set} />
+              <Row label="Pref. Shares" field="STInvPrefShares" sub bs={bs} set={set} />
+              <Row label="Govt / Trust Securities" field="STInvGovtTrust" sub bs={bs} set={set} />
+              <Row label="Debentures / Bonds" field="STInvDebentures" sub bs={bs} set={set} />
+              <Row label="Mutual Funds" field="STInvMF" sub bs={bs} set={set} />
+              <Row label="Others" field="STInvOthers" sub bs={bs} set={set} />
               <TotalRow label="Total ST Investments" value={totalSTInv} />
 
               <tr><td colSpan={2} className="pt-3 pb-1"><span className="text-xs font-semibold text-gray-500">Inventories</span></td></tr>
-              <Row label="Raw Material" field="InventoriesRawMaterial" className="sub" />
-              <Row label="WIP" field="InventoriesWIP" className="sub" />
-              <Row label="Finished Goods" field="InventoriesFinishedGoods" className="sub" />
-              <Row label="Stock-in-Trade" field="InventoriesStockInTrade" className="sub" />
-              <Row label="Others" field="InventoriesOthers" className="sub" />
+              <Row label="Raw Material" field="InventoriesRawMaterial" sub bs={bs} set={set} />
+              <Row label="WIP" field="InventoriesWIP" sub bs={bs} set={set} />
+              <Row label="Finished Goods" field="InventoriesFinishedGoods" sub bs={bs} set={set} />
+              <Row label="Stock-in-Trade" field="InventoriesStockInTrade" sub bs={bs} set={set} />
+              <Row label="Others" field="InventoriesOthers" sub bs={bs} set={set} />
               <TotalRow label="Total Inventories" value={totalInventories} />
 
               <tr><td colSpan={2} className="pt-3 pb-1"><span className="text-xs font-semibold text-gray-500">Sundry Debtors</span></td></tr>
-              <Row label="Outstanding > 1 year" field="SundryDebtorsMoreThan1Yr" className="sub" />
-              <Row label="Others" field="SundryDebtorsOthers" className="sub" />
+              <Row label="Outstanding > 1 year" field="SundryDebtorsMoreThan1Yr" sub bs={bs} set={set} />
+              <Row label="Others" field="SundryDebtorsOthers" sub bs={bs} set={set} />
               <TotalRow label="Total Debtors" value={totalDebtors} />
 
               <tr><td colSpan={2} className="pt-3 pb-1"><span className="text-xs font-semibold text-gray-500">Cash & Bank Balances</span></td></tr>
-              <Row label="Balance with Banks" field="BalanceWithBanks" className="sub" />
-              <Row label="Cash-in-Hand" field="CashInHand" className="sub" />
-              <Row label="Other Cash / Bank" field="OtherCashBankBalances" className="sub" />
+              <Row label="Balance with Banks" field="BalanceWithBanks" sub bs={bs} set={set} />
+              <Row label="Cash-in-Hand" field="CashInHand" sub bs={bs} set={set} />
+              <Row label="Other Cash / Bank" field="OtherCashBankBalances" sub bs={bs} set={set} />
               <TotalRow label="Total Cash & Bank" value={totalCashBank} />
 
-              <Row label="Other Current Assets" field="OtherCurrentAssets" />
+              <Row label="Other Current Assets" field="OtherCurrentAssets" bs={bs} set={set} />
               <TotalRow label="Total Current Assets" value={totalCurrentAssets} />
 
               <tr><td colSpan={2} className="pt-3 pb-1"><span className="text-xs font-semibold text-gray-500">Loans & Advances</span></td></tr>
-              <Row label="Recoverable in cash or kind" field="LoansRecoverable" className="sub" />
-              <Row label="Deposits / Others" field="LoansDepositsToOthers" className="sub" />
-              <Row label="Advance Tax / TDS" field="LoansRevenueAuthorities" className="sub" />
+              <Row label="Recoverable in cash or kind" field="LoansRecoverable" sub bs={bs} set={set} />
+              <Row label="Deposits / Others" field="LoansDepositsToOthers" sub bs={bs} set={set} />
+              <Row label="Advance Tax / TDS" field="LoansRevenueAuthorities" sub bs={bs} set={set} />
               <TotalRow label="Total Loans & Advances" value={totalLoansAdv} />
 
               <tr><td colSpan={2} className="pt-3 pb-1"><span className="text-xs font-semibold text-red-500">Less: Current Liabilities</span></td></tr>
-              <Row label="Sundry Creditors > 1 yr" field="CLSundryCreditors1Yr" className="sub" />
-              <Row label="Sundry Creditors Others" field="CLSundryCreditsOthers" className="sub" />
-              <Row label="Liability for Leased Assets" field="CLLeasedAssets" className="sub" />
-              <Row label="Interest Accrued on Leased Asset" field="CLInterestOnLeasedAsset" className="sub" />
-              <Row label="Interest Accrued but Not Due" field="CLInterestAccruedNotDue" className="sub" />
-              <Row label="Income Received in Advance" field="CLIncomeReceivedInAdvance" className="sub" />
-              <Row label="Other Payables" field="CLOtherPayables" className="sub" />
-              <Row label="Other Liabilities" field="CLOther" className="sub" />
-              <Row label="Provisions — Income Tax" field="ProvisionsIncomeTax" className="sub" />
-              <Row label="Provisions — Leave / Gratuity / Superannuation" field="ProvisionsLeaveGratuity" className="sub" />
-              <Row label="Provisions — Others" field="ProvisionsOther" className="sub" />
+              <Row label="Sundry Creditors > 1 yr" field="CLSundryCreditors1Yr" sub bs={bs} set={set} />
+              <Row label="Sundry Creditors Others" field="CLSundryCreditsOthers" sub bs={bs} set={set} />
+              <Row label="Liability for Leased Assets" field="CLLeasedAssets" sub bs={bs} set={set} />
+              <Row label="Interest Accrued on Leased Asset" field="CLInterestOnLeasedAsset" sub bs={bs} set={set} />
+              <Row label="Interest Accrued but Not Due" field="CLInterestAccruedNotDue" sub bs={bs} set={set} />
+              <Row label="Income Received in Advance" field="CLIncomeReceivedInAdvance" sub bs={bs} set={set} />
+              <Row label="Other Payables" field="CLOtherPayables" sub bs={bs} set={set} />
+              <Row label="Other Liabilities" field="CLOther" sub bs={bs} set={set} />
+              <Row label="Provisions — Income Tax" field="ProvisionsIncomeTax" sub bs={bs} set={set} />
+              <Row label="Provisions — Leave / Gratuity / Superannuation" field="ProvisionsLeaveGratuity" sub bs={bs} set={set} />
+              <Row label="Provisions — Others" field="ProvisionsOther" sub bs={bs} set={set} />
               <TotalRow label="Total CL & Provisions" value={totalCL} />
 
-              <Row label="Misc. Expenditure (unamortised)" field="MiscExpenditure" />
-              <Row label="Deferred Tax Asset" field="DeferredTaxAsset" />
-              <Row label="Debit Balance in P&L" field="DebitPLBalance" />
+              <Row label="Misc. Expenditure (unamortised)" field="MiscExpenditure" bs={bs} set={set} />
+              <Row label="Deferred Tax Asset" field="DeferredTaxAsset" bs={bs} set={set} />
+              <Row label="Debit Balance in P&L" field="DebitPLBalance" bs={bs} set={set} />
 
               <tr className="border-t-2 border-gray-400 bg-blue-50">
                 <td className="py-2 font-bold text-gray-900">TOTAL APPLICATION</td>

@@ -34,6 +34,7 @@ import ScheduleFinancialParticulars from './ScheduleFinancialParticulars';
 import ITR5General from './ITR5General';
 import ITR5BalanceSheet from './ITR5BalanceSheet';
 import ITR5PL from './ITR5PL';
+import ITR5BP from './ITR5BP';
 import TaxSummary from './TaxSummary';
 import Verification from './Verification';
 
@@ -213,7 +214,15 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate, fo
           acknowledgementNumber: data.acknowledgementNumber,
         };
         setReturnMeta(meta);
-        setReturnData(data);
+        // Parse ITR-5 JSON blobs from DB strings → objects
+        const parseJson = (v: unknown) => { try { return v ? JSON.parse(v as string) : null; } catch { return null; } };
+        setReturnData({
+          ...data,
+          itr5General:      data.itr5GeneralJson      ? parseJson(data.itr5GeneralJson)      : undefined,
+          itr5BalanceSheet: data.itr5BalanceSheetJson  ? parseJson(data.itr5BalanceSheetJson)  : undefined,
+          itr5PL:           data.itr5PLJson            ? parseJson(data.itr5PLJson)            : undefined,
+          itr5BP:           data.itr5BPJson            ? parseJson(data.itr5BPJson)            : undefined,
+        });
         // Set default tab based on form type
         if (data.formType === 'ITR-5') setActiveTab('itr5_general');
         const initialSummary = computeIncomeSummary(data);
@@ -694,7 +703,20 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate, fo
             />
           )}
 
-          {activeTab === 'business_profession' && (
+          {activeTab === 'business_profession' && returnMeta?.formType === 'ITR-5' && (
+            <ITR5BP
+              returnId={returnMeta.id}
+              maintainsRegularBooks={(returnData as any)?.itr5General?.maintainsRegularBooks ?? false}
+              netProfitFromPL={(returnData as any)?.itr5PL?.NetProfitBeforeTaxes ?? 0}
+              initialData={(returnData as any)?.itr5BP}
+              onSaved={(data) => {
+                setReturnData((prev: any) => ({ ...prev, itr5BP: data }));
+                setDirty(false);
+              }}
+            />
+          )}
+
+          {activeTab === 'business_profession' && returnMeta?.formType !== 'ITR-5' && (
             <ScheduleBP
               returnId={String(returnMeta.id)}
               returnData={returnData ?? {} as any}
@@ -743,7 +765,10 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate, fo
               <ITR5General
                 returnId={returnMeta.id}
                 initialData={(returnData as any)?.itr5General}
-                onSaved={() => setDirty(false)}
+                onSaved={(data) => {
+                  setReturnData((prev: any) => ({ ...prev, itr5General: data }));
+                  setDirty(false);
+                }}
               />
             </div>
           )}
@@ -753,7 +778,10 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate, fo
               <ITR5BalanceSheet
                 returnId={returnMeta.id}
                 initialData={(returnData as any)?.itr5BalanceSheet}
-                onSaved={() => setDirty(false)}
+                onSaved={(data) => {
+                  setReturnData((prev: any) => ({ ...prev, itr5BalanceSheet: data }));
+                  setDirty(false);
+                }}
               />
             </div>
           )}
@@ -764,7 +792,10 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate, fo
                 returnId={returnMeta.id}
                 maintainsRegularBooks={(returnData as any)?.itr5General?.maintainsRegularBooks ?? false}
                 initialData={(returnData as any)?.itr5PL}
-                onSaved={() => setDirty(false)}
+                onSaved={(data) => {
+                  setReturnData((prev: any) => ({ ...prev, itr5PL: data }));
+                  setDirty(false);
+                }}
               />
             </div>
           )}

@@ -184,7 +184,7 @@ const UPDATE_REASONS: [UpdateReason, string][] = [
 interface Props {
   returnId: number;
   initialData?: Partial<ITR5GeneralState> | null;
-  onSaved?: () => void;
+  onSaved?: (data: ITR5GeneralState) => void;
 }
 
 export default function ITR5General({ returnId, initialData, onSaved }: Props) {
@@ -197,6 +197,21 @@ export default function ITR5General({ returnId, initialData, onSaved }: Props) {
     if (initialData) setForm({ ...EMPTY, ...initialData });
   }, [initialData]);
 
+  // Flush debounce immediately on unmount so tab-switches don't lose pending saves
+  const formRef = useRef<ITR5GeneralState>({ ...EMPTY, ...initialData });
+  useEffect(() => {
+    formRef.current = form;
+  });
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+        save(formRef.current);
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const save = useCallback(async (data: ITR5GeneralState) => {
     setSaving(true);
     try {
@@ -206,7 +221,7 @@ export default function ITR5General({ returnId, initialData, onSaved }: Props) {
         body: JSON.stringify(data),
       });
       setSavedAt(new Date());
-      onSaved?.();
+      onSaved?.(data);
     } finally {
       setSaving(false);
     }
@@ -304,18 +319,38 @@ export default function ITR5General({ returnId, initialData, onSaved }: Props) {
 
         <div>
           <label className={lbl}>Main activity / nature of business</label>
-          <select className={inp} value={form.businessCode}
-            onChange={e => update({ businessCode: e.target.value })}>
-            {BUSINESS_CODE_OPTIONS.map(o => (
-              <option key={o.value} value={o.value}>{o.label}</option>
-            ))}
-            <option value="">Other (enter code below)</option>
-          </select>
-          {!BUSINESS_CODE_OPTIONS.find(o => o.value === form.businessCode) && (
-            <input className={`${inp} mt-2`} value={form.businessCode}
-              onChange={e => update({ businessCode: e.target.value })}
-              placeholder="Enter 5-digit activity code" />
-          )}
+          {(() => {
+            const isPreset = BUSINESS_CODE_OPTIONS.some(o => o.value === form.businessCode);
+            return (
+              <>
+                <select
+                  className={inp}
+                  value={isPreset ? form.businessCode : '__other__'}
+                  onChange={e => {
+                    if (e.target.value === '__other__') {
+                      update({ businessCode: '' });
+                    } else {
+                      update({ businessCode: e.target.value });
+                    }
+                  }}
+                >
+                  {BUSINESS_CODE_OPTIONS.map(o => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                  <option value="__other__">Other (enter code manually)…</option>
+                </select>
+                {!isPreset && (
+                  <input
+                    className={`${inp} mt-2`}
+                    value={form.businessCode}
+                    onChange={e => update({ businessCode: e.target.value })}
+                    placeholder="Enter 5-digit activity code (e.g. 21008)"
+                    autoFocus
+                  />
+                )}
+              </>
+            );
+          })()}
         </div>
       </Section>
 
