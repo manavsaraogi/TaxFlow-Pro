@@ -116,6 +116,7 @@ export async function PUT(request: NextRequest, { params }: Params) {
       stateCode: body.stateCode ?? body.state ?? existing.stateCode,
       pinCode: (body.pinCode ?? body.pincode) ? Number(body.pinCode ?? body.pincode) : existing.pinCode,
       aadhaarNumber: body.aadhaarNumber ?? existing.aadhaarNumber,
+      assesseeType: body.assesseeType ?? existing.assesseeType,
       residentialStatus: body.residentialStatus ?? existing.residentialStatus,
       employerCategory: body.employerCategory ?? existing.employerCategory,
       taxRegimePreference: body.taxRegimePreference ?? existing.taxRegimePreference,
