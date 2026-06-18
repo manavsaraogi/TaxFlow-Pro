@@ -3,6 +3,15 @@ import { getAuthContext } from '@/lib/api-auth';
 import { prisma } from '@/lib/prisma';
 import { encryptPassword } from '@/lib/portal-encrypt';
 
+function panToAssesseeType(pan: string) {
+  const ch = pan.charAt(3).toUpperCase();
+  const map: Record<string, string> = {
+    P: 'INDIVIDUAL', H: 'HUF', F: 'FIRM', A: 'AOP',
+    T: 'AOP', B: 'BOI', C: 'DOMESTIC_COMPANY', J: 'AJP', L: 'AJP',
+  };
+  return map[ch] ?? null;
+}
+
 /**
  * POST /api/clients/from-prefill
  *
@@ -75,7 +84,7 @@ export async function POST(request: NextRequest) {
           firmId: auth.firmId,
           pan: parsed.pan.toUpperCase(),
           fullName: parsed.fullName || parsed.pan,
-          assesseeType: 'INDIVIDUAL',
+          assesseeType: panToAssesseeType(parsed.pan) ?? 'INDIVIDUAL',
           taxRegimePreference: parsed.regime || 'NEW',
           portalUsername: parsed.pan.toUpperCase(),
           ...(Object.fromEntries(Object.entries(clientData).filter(([, v]) => v !== undefined)) as any),

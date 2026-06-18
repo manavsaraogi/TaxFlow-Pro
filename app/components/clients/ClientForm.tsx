@@ -11,6 +11,17 @@
 
 import { useState, useEffect, useCallback } from 'react';
 
+// ─── PAN → Assessee Type ──────────────────────────────────────────────────────
+
+function panToAssesseeType(pan: string): AssesseeType | null {
+  const ch = pan.charAt(3).toUpperCase();
+  const map: Record<string, AssesseeType> = {
+    P: 'INDIVIDUAL', H: 'HUF', F: 'FIRM', A: 'AOP',
+    T: 'AOP', B: 'BOI', C: 'DOMESTIC_COMPANY', J: 'AJP', L: 'AJP',
+  };
+  return map[ch] ?? null;
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type AssesseeType =
@@ -373,6 +384,10 @@ export default function ClientForm({ clientId, onSuccess, onCancel }: ClientForm
         updated.pan = value.toUpperCase();
         if (!isEdit && prev.portalUsername === prev.pan) {
           updated.portalUsername = updated.pan;
+        }
+        if (updated.pan.length >= 4) {
+          const derived = panToAssesseeType(updated.pan);
+          if (derived) updated.assesseeType = derived;
         }
       }
       return updated;

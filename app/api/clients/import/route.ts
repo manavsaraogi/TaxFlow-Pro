@@ -2,6 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthContext } from '@/lib/api-auth';
 import { prisma } from '@/lib/prisma';
 
+function panToAssesseeType(pan: string) {
+  const ch = (pan ?? '').charAt(3).toUpperCase();
+  const map: Record<string, string> = {
+    P: 'INDIVIDUAL', H: 'HUF', F: 'FIRM', A: 'AOP',
+    T: 'AOP', B: 'BOI', C: 'DOMESTIC_COMPANY', J: 'AJP', L: 'AJP',
+  };
+  return map[ch] ?? null;
+}
+
 /**
  * POST /api/clients/import
  * Body: { clients: Array<ClientImportRecord> }
@@ -126,7 +135,7 @@ export async function POST(request: NextRequest) {
             firmId: auth.firmId,
             pan,
             fullName,
-            assesseeType: (raw.assesseeType as any) ?? 'INDIVIDUAL',
+            assesseeType: (raw.assesseeType as any) ?? panToAssesseeType(pan) ?? 'INDIVIDUAL',
             dateOfBirth: dob ? new Date(dob) : null,
             mobileNumber: mobile ?? null,
             email: raw.email ?? null,

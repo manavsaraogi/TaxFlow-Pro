@@ -10,6 +10,19 @@ const ASSESSEE_LABELS: Record<string, string> = {
   FIRM: 'Firm', LLP: 'LLP', AOP: 'AOP', BOI: 'BOI', AJP: 'AJP', OTHER: 'Other',
 };
 
+const PAN_TYPE_LABELS: Record<string, string> = {
+  P: 'Individual', H: 'HUF', F: 'Firm', A: 'AOP',
+  T: 'Trust', B: 'BOI', C: 'Company', J: 'AJP', L: 'Local Authority', G: 'Government',
+};
+
+function resolveAssesseeLabel(pan: string, dbType: string): string {
+  const panChar = (pan ?? '').charAt(3).toUpperCase();
+  const fromPan = PAN_TYPE_LABELS[panChar];
+  // If DB says Individual but PAN says otherwise, trust PAN
+  if (fromPan && dbType === 'INDIVIDUAL' && fromPan !== 'Individual') return fromPan;
+  return ASSESSEE_LABELS[dbType] ?? dbType;
+}
+
 const RESIDENTIAL_LABELS: Record<string, string> = {
   RES: 'Resident', NRI: 'Non-Resident (NRI)', RNR: 'Resident but Not Ordinarily Resident',
 };
@@ -165,7 +178,7 @@ export function ClientDetail({ clientId, onNavigate }: ClientDetailProps) {
                   {client.fullName}
                 </h1>
                 <span className="badge badge-neutral">
-                  {ASSESSEE_LABELS[client.assesseeType] ?? client.assesseeType}
+                  {resolveAssesseeLabel(client.pan, client.assesseeType)}
                 </span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
@@ -352,7 +365,7 @@ function OverviewTab({ client }: { client: ClientData }) {
         <InfoRows rows={[
           { label: 'Full Name', value: client.fullName },
           { label: 'PAN', value: client.pan, mono: true },
-          { label: 'Assessee Type', value: ASSESSEE_LABELS[client.assesseeType] ?? client.assesseeType },
+          { label: 'Assessee Type', value: resolveAssesseeLabel(client.pan, client.assesseeType) },
           { label: 'Date of Birth', value: client.dateOfBirth ? new Date(client.dateOfBirth).toLocaleDateString('en-IN') : '—' },
           { label: 'Residential Status', value: RESIDENTIAL_LABELS[client.residentialStatus] ?? client.residentialStatus },
           { label: 'Aadhaar', value: client.aadhaarNumber ?? '—', mono: true },
