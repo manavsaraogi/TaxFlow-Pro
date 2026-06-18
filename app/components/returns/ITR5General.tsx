@@ -51,6 +51,10 @@ interface ITR5GeneralState {
   businessCode: string;
   maintainsRegularBooks: boolean;
   isAuditRequired: boolean;
+  accountingMethod: 'MERCANTILE' | 'CASH';
+  icdsApplicable: boolean;
+  presumptiveTaxation: '' | '44AD' | '44ADA' | '44AE';
+  auditSection: '' | '44AB(a)' | '44AB(b)' | '44AB(c)' | '44AB(d)';
   auditorName: string;
   auditorMembership: string;
   auditFirmName: string;
@@ -95,6 +99,13 @@ interface ITR5GeneralState {
   totalTurnover: number;
   gstRegistered: boolean;
   gstin: string;
+  hasDeemedDividend2_22e: boolean;
+  hasMSMERegistration: boolean;
+  msmeRegistrationNo: string;
+  hasUnlistedSharesTransfer: boolean;
+  hasBroughtForwardLoss: boolean;
+  liableForAMT: boolean;
+  optNewTaxRegime115BAC: boolean;
 }
 
 const EMPTY_MEMBER: ITR5Member = {
@@ -121,6 +132,10 @@ const EMPTY: ITR5GeneralState = {
   dateOfFormation: '',
   businessCode: '19009',
   maintainsRegularBooks: false,
+  accountingMethod: 'MERCANTILE',
+  icdsApplicable: false,
+  presumptiveTaxation: '',
+  auditSection: '',
   isAuditRequired: false,
   auditorName: '',
   auditorMembership: '',
@@ -165,6 +180,13 @@ const EMPTY: ITR5GeneralState = {
   totalTurnover: 0,
   gstRegistered: false,
   gstin: '',
+  hasDeemedDividend2_22e: false,
+  hasMSMERegistration: false,
+  msmeRegistrationNo: '',
+  hasUnlistedSharesTransfer: false,
+  hasBroughtForwardLoss: false,
+  liableForAMT: false,
+  optNewTaxRegime115BAC: false,
 };
 
 const ENTITY_OPTIONS: { value: EntityType; label: string; hint: string }[] = [
@@ -392,612 +414,319 @@ export default function ITR5General({ returnId, initialData, onSaved }: Props) {
   const updateMember = (i: number, patch: Partial<ITR5Member>) =>
     update({ members: form.members.map((m, idx) => idx === i ? { ...m, ...patch } : m) });
 
-  const inp = 'w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white';
-  const lbl = 'block text-sm font-medium text-gray-700 mb-1.5';
+  const inp = 'w-full border border-gray-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-blue-500 bg-white';
+  const lbl = 'block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide';
 
   const usesMMR = !form.sharesDeterminable || form.anyMemberExceedsExemption;
 
   return (
-    <div className="max-w-2xl space-y-5">
+    <div className="grid grid-cols-2 gap-4 items-start">
 
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-semibold text-gray-900">General Information</h2>
-          <p className="text-xs text-gray-400 mt-0.5">Basic details about the organisation filing ITR-5</p>
-        </div>
-        <div className="text-xs">
-          {saving && <span className="text-blue-500 animate-pulse">Saving…</span>}
-          {!saving && savedAt && <span className="text-green-600">Saved {savedAt.toLocaleTimeString()}</span>}
-        </div>
-      </div>
+      {/* ── LEFT COLUMN ── */}
+      <div className="space-y-3">
 
-      {/* ── Organisation Details ─────────────────────────────────────────── */}
-      <Section title="Organisation Details">
-        <div>
-          <label className={lbl}>What type of organisation is this?</label>
-          <div className="space-y-2">
-            {ENTITY_OPTIONS.map(opt => (
-              <label key={opt.value} className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
-                form.entityType === opt.value
-                  ? 'border-blue-500 bg-blue-50'
-                  : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-              }`}>
-                <input
-                  type="radio"
-                  name="entityType"
-                  value={opt.value}
-                  checked={form.entityType === opt.value}
-                  onChange={() => update({ entityType: opt.value })}
-                  className="mt-0.5 accent-blue-600"
-                />
-                <div>
-                  <div className="text-sm font-medium text-gray-800">{opt.label}</div>
-                  <div className="text-xs text-gray-400 mt-0.5">{opt.hint}</div>
-                </div>
-              </label>
-            ))}
-          </div>
+        {/* Header + save status */}
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-bold text-gray-800 uppercase tracking-wide">Part A — General Information</h2>
+          <span className="text-xs text-gray-400">{saving ? 'Saving…' : savedAt ? `Saved ${savedAt.toLocaleTimeString()}` : ''}</span>
         </div>
 
-        <div className="grid grid-cols-2 gap-4 pt-1">
+        {/* Organisation Details */}
+        <Section title="Organisation">
           <div>
-            <label className={lbl}>Sub-category (if applicable)</label>
-            <select className={inp} value={form.subStatus} onChange={e => update({ subStatus: e.target.value })}>
-              <option value="">Auto-detected from type above</option>
-              {SUB_STATUS_OPTIONS.map(o => (
-                <option key={o.value} value={o.value}>{o.label}</option>
+            <p className="text-xs text-gray-500 mb-1.5">Type of Organisation</p>
+            <div className="grid grid-cols-2 gap-1">
+              {ENTITY_OPTIONS.map(opt => (
+                <label key={opt.value} className={`flex items-center gap-2 px-2 py-1.5 rounded border cursor-pointer text-xs transition-colors ${
+                  form.entityType === opt.value ? 'border-blue-500 bg-blue-50 text-blue-800 font-semibold' : 'border-gray-200 hover:bg-gray-50 text-gray-700'
+                }`}>
+                  <input type="radio" name="entityType" value={opt.value} checked={form.entityType === opt.value}
+                    onChange={() => update({ entityType: opt.value })} className="accent-blue-600 flex-shrink-0" />
+                  <span>{opt.label}</span>
+                </label>
               ))}
-            </select>
-            <p className="text-xs text-gray-400 mt-1">For a Trust (not under ITR-7) → select "Trust (other than ITR-7 eligible)"</p>
-          </div>
-          <div>
-            <label className={lbl}>Date of Formation / Registration</label>
-            <input type="date" className={inp} value={form.dateOfFormation}
-              onChange={e => update({ dateOfFormation: e.target.value })} />
-          </div>
-        </div>
-
-        <div>
-          <label className={lbl}>Main activity / nature of business</label>
-          <BusinessCodeSearch
-            value={form.businessCode}
-            onChange={code => update({ businessCode: code })}
-            inputClass={inp}
-          />
-        </div>
-      </Section>
-
-      {/* ── Books & Audit ────────────────────────────────────────────────── */}
-      <Section title="Books of Accounts & Audit">
-        <ToggleCard
-          id="regularBooks"
-          checked={form.maintainsRegularBooks}
-          onChange={v => update({ maintainsRegularBooks: v })}
-          title="Organisation maintains regular books of accounts"
-          description="Cashbook, ledger, vouchers etc. maintained throughout the year"
-        />
-        <ToggleCard
-          id="auditReq"
-          checked={form.isAuditRequired}
-          onChange={v => update({ isAuditRequired: v })}
-          title="Audit is required (Sec 44AB, 12A, 10(23C), etc.)"
-          description="If total receipts exceed ₹2.5 crore, or if required by the trust registration"
-        />
-
-        {form.isAuditRequired && (
-          <div className="border border-gray-100 rounded-lg p-4 space-y-4 bg-gray-50">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Auditor Details</p>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className={lbl}>Auditor's Name</label>
-                <input className={inp} value={form.auditorName} onChange={e => update({ auditorName: e.target.value })} placeholder="CA full name" />
-              </div>
-              <div>
-                <label className={lbl}>Membership No.</label>
-                <input className={inp} value={form.auditorMembership} onChange={e => update({ auditorMembership: e.target.value })} placeholder="e.g. 123456" />
-              </div>
-              <div>
-                <label className={lbl}>Audit Firm Name</label>
-                <input className={inp} value={form.auditFirmName} onChange={e => update({ auditFirmName: e.target.value })} placeholder="Firm name" />
-              </div>
-              <div>
-                <label className={lbl}>Firm Registration No.</label>
-                <input className={inp} value={form.auditFirmRegNo} onChange={e => update({ auditFirmRegNo: e.target.value })} placeholder="FRN number" />
-              </div>
-              <div>
-                <label className={lbl}>Firm PAN</label>
-                <input className={inp} value={form.auditFirmPAN} onChange={e => update({ auditFirmPAN: e.target.value.toUpperCase() })} placeholder="AAAAA9999A" maxLength={10} />
-              </div>
-              <div>
-                <label className={lbl}>Audit Report Date</label>
-                <input type="date" className={inp} value={form.auditReportDate} onChange={e => update({ auditReportDate: e.target.value })} />
-              </div>
-              <div>
-                <label className={lbl}>Audit Report Ack. No.</label>
-                <input className={inp} value={form.auditAckNo} onChange={e => update({ auditAckNo: e.target.value })} placeholder="Acknowledgement number" />
-              </div>
-              <div>
-                <label className={lbl}>UDIN</label>
-                <input className={inp} value={form.udin} onChange={e => update({ udin: e.target.value })} placeholder="Unique Document Identification No." />
-              </div>
             </div>
           </div>
-        )}
-      </Section>
-
-      {/* ── How is tax calculated? ───────────────────────────────────────── */}
-      <Section title="How should tax be calculated?">
-        <p className="text-sm text-gray-500 -mt-1">
-          For an AOP/Trust/BOI, the tax rate depends on whether each member's share of income is known.
-        </p>
-
-        <ToggleCard
-          id="sharesDet"
-          checked={form.sharesDeterminable}
-          onChange={v => update({ sharesDeterminable: v, anyMemberExceedsExemption: false })}
-          title="The share of each member in the income is known"
-          description="You can clearly say what percentage of income belongs to each trustee/member"
-        />
-
-        {form.sharesDeterminable && (
-          <ToggleCard
-            id="memberExceeds"
-            checked={form.anyMemberExceedsExemption}
-            onChange={v => update({ anyMemberExceedsExemption: v })}
-            title="Any member's total income (including their share) is more than ₹2,50,000"
-            description="This includes income from all sources, not just the share from this organisation"
-            color="amber"
-          />
-        )}
-
-        {/* Result badge */}
-        <div className={`flex items-start gap-3 p-4 rounded-lg border ${usesMMR ? 'bg-orange-50 border-orange-200' : 'bg-green-50 border-green-200'}`}>
-          <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-sm font-bold ${usesMMR ? 'bg-orange-100 text-orange-700' : 'bg-green-100 text-green-700'}`}>
-            {usesMMR ? '%' : '='}
-          </div>
-          <div>
-            <p className={`text-sm font-semibold ${usesMMR ? 'text-orange-800' : 'text-green-800'}`}>
-              {usesMMR ? 'Tax at Maximum Marginal Rate (30%)' : 'Tax at Slab Rates'}
-            </p>
-            <p className={`text-xs mt-0.5 ${usesMMR ? 'text-orange-600' : 'text-green-600'}`}>
-              {usesMMR
-                ? '30% on normal income + 20% on STCG + 12.5% on LTCG · Surcharge (if applicable) · 4% Health & Education Cess'
-                : 'Normal tax slabs (0/5/20/30%) + surcharge if applicable + 4% Health & Education Cess'}
-            </p>
-          </div>
-        </div>
-      </Section>
-
-      {/* ── Trustees / Members ───────────────────────────────────────────── */}
-      <Section
-        title="Trustees / Members / Partners"
-        action={<button onClick={addMember} className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 font-medium">+ Add Person</button>}
-        hint="Required for Trust/AOP — list all trustees, settlors, beneficiaries, and partners"
-      >
-        {form.members.length === 0 && (
-          <div className="text-center py-6 text-sm text-gray-400 border-2 border-dashed border-gray-200 rounded-lg">
-            No trustees or members added yet.<br/>
-            <span className="text-xs">Click "Add Person" to add trustees, settlors, beneficiaries, or partners.</span>
-          </div>
-        )}
-
-        {form.members.map((m, i) => (
-          <div key={i} className="border border-gray-200 rounded-lg overflow-hidden">
-            {/* Member header */}
-            <div className="flex items-center justify-between px-4 py-2.5 bg-gray-50 border-b border-gray-200">
-              <div className="flex items-center gap-2">
-                <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center">{i + 1}</span>
-                <span className="text-sm font-medium text-gray-700">{m.name || 'New Person'}</span>
-                {m.status && <span className="text-xs px-2 py-0.5 bg-white border border-gray-200 rounded-full text-gray-500">{MEMBER_STATUS_OPTIONS.find(o => o.value === m.status)?.label}</span>}
-              </div>
-              <button onClick={() => removeMember(i)} className="text-xs text-red-500 hover:text-red-700 font-medium">Remove</button>
-            </div>
-
-            <div className="p-4 space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="col-span-2">
-                  <label className={lbl}>Full Name</label>
-                  <input className={inp} value={m.name} onChange={e => updateMember(i, { name: e.target.value })} placeholder="Full name as per PAN" />
-                </div>
-                <div>
-                  <label className={lbl}>Role in the Organisation</label>
-                  <select className={inp} value={m.status} onChange={e => updateMember(i, { status: e.target.value as MemberStatus })}>
-                    {MEMBER_STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className={lbl}>Share in Income (%)</label>
-                  <input type="number" className={inp} value={m.sharePercentage} min={0} max={100} step={0.01}
-                    placeholder="0"
-                    onChange={e => updateMember(i, { sharePercentage: parseFloat(e.target.value) || 0 })} />
-                </div>
-                <div>
-                  <label className={lbl}>PAN</label>
-                  <input className={`${inp} font-mono uppercase`} value={m.pan} onChange={e => updateMember(i, { pan: e.target.value.toUpperCase() })} placeholder="AAAAA9999A" maxLength={10} />
-                </div>
-                <div>
-                  <label className={lbl}>Aadhaar Number</label>
-                  <input className={inp} value={m.aadhaar} onChange={e => updateMember(i, { aadhaar: e.target.value.replace(/\D/g,'') })} placeholder="12-digit number" maxLength={12} />
-                </div>
-                <div>
-                  <label className={lbl}>Interest Rate Paid (%)</label>
-                  <input type="number" className={inp} value={m.rateOfInterest} min={0} max={100} step={0.01}
-                    placeholder="0"
-                    onChange={e => updateMember(i, { rateOfInterest: parseFloat(e.target.value) || 0 })} />
-                </div>
-                <div>
-                  <label className={lbl}>Remuneration / Salary Paid (₹)</label>
-                  <input type="number" className={inp} value={m.remunerationPaid} min={0}
-                    placeholder="0"
-                    onChange={e => updateMember(i, { remunerationPaid: parseInt(e.target.value) || 0 })} />
-                </div>
-              </div>
-
-              <details className="group">
-                <summary className="cursor-pointer text-xs text-blue-600 hover:text-blue-800 font-medium select-none list-none flex items-center gap-1">
-                  <span className="group-open:rotate-90 transition-transform inline-block">▶</span>
-                  Address (required for filing)
-                </summary>
-                <div className="grid grid-cols-2 gap-3 mt-3 pt-3 border-t border-gray-100">
-                  <div>
-                    <label className={lbl}>Flat / Door No.</label>
-                    <input className={inp} value={m.flatNo} onChange={e => updateMember(i, { flatNo: e.target.value })} />
-                  </div>
-                  <div>
-                    <label className={lbl}>Building / Premises Name</label>
-                    <input className={inp} value={m.buildingName} onChange={e => updateMember(i, { buildingName: e.target.value })} />
-                  </div>
-                  <div>
-                    <label className={lbl}>Street / Road</label>
-                    <input className={inp} value={m.streetName} onChange={e => updateMember(i, { streetName: e.target.value })} />
-                  </div>
-                  <div>
-                    <label className={lbl}>Locality / Area</label>
-                    <input className={inp} value={m.localityOrArea} onChange={e => updateMember(i, { localityOrArea: e.target.value })} />
-                  </div>
-                  <div>
-                    <label className={lbl}>City / Town</label>
-                    <input className={inp} value={m.cityOrTownOrDistrict} onChange={e => updateMember(i, { cityOrTownOrDistrict: e.target.value })} />
-                  </div>
-                  <div>
-                    <label className={lbl}>State</label>
-                    <select className={inp} value={m.stateCode} onChange={e => updateMember(i, { stateCode: e.target.value })}>
-                      {STATE_CODES.map(([code, name]) => <option key={code} value={code}>{name}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className={lbl}>PIN Code</label>
-                    <input className={inp} value={m.pinCode} onChange={e => updateMember(i, { pinCode: e.target.value.replace(/\D/g,'') })} maxLength={6} placeholder="6 digits" />
-                  </div>
-                </div>
-              </details>
-            </div>
-          </div>
-        ))}
-      </Section>
-
-      {/* ── Interest on Tax u/s 234A/234B/234C/234F ──────────────────────── */}
-      <Section
-        title="Interest & Fees (if any)"
-        hint="Leave at 0 if not applicable. These are added on top of the computed tax. 234A = interest for late filing, 234B = advance tax shortfall, 234C = instalment deferral, 234F = late filing fee."
-      >
-        <div className="grid grid-cols-2 gap-4">
-          {([
-            ['interest234A', '234A — Late Filing Interest (₹)'],
-            ['interest234B', '234B — Advance Tax Shortfall (₹)'],
-            ['interest234C', '234C — Instalment Deferral (₹)'],
-            ['interest234F', '234F — Late Filing Fee (₹)'],
-          ] as const).map(([field, label]) => (
-            <div key={field}>
-              <label className="block text-xs font-medium text-gray-600 mb-1">{label}</label>
-              <input
-                type="number"
-                min={0}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                value={(form as any)[field] || ''}
-                onChange={e => update({ [field]: Number(e.target.value) || 0 } as any)}
-              />
-            </div>
-          ))}
-        </div>
-      </Section>
-
-      {/* ── Updated Return 139(8A) ───────────────────────────────────────── */}
-      <Section title="Filing Type">
-        <ToggleCard
-          id="updatedReturn"
-          checked={form.isUpdatedReturn}
-          onChange={v => update({ isUpdatedReturn: v })}
-          title="This is an Updated Return (filed under Section 139(8A))"
-          description="Use this if you are correcting or adding income to a return that was already filed"
-        />
-
-        {form.isUpdatedReturn && (
-          <div className="space-y-4 border border-gray-200 rounded-lg p-4 bg-gray-50">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Updated Return Details</p>
-
-            {/* FY picker */}
+          <div className="grid grid-cols-2 gap-2 mt-2">
             <div>
-              <label className={lbl}>Which year's return are you updating?</label>
-              <div className="flex gap-3">
-                {(['2024-25', '2025-26'] as UpdatedAY[]).map(ay => (
-                  <label key={ay} className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border cursor-pointer text-sm font-medium transition-colors ${
-                    form.updated.updatedAY === ay ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
-                  }`}>
-                    <input type="radio" name="updatedAY" value={ay} checked={form.updated.updatedAY === ay}
-                      onChange={() => {
-                        const startYear = parseInt(ay.split('-')[0]);
-                        const ayEndDate = new Date(startYear + 1, 2, 31);
-                        const monthsFromEnd = (new Date().getFullYear() - ayEndDate.getFullYear()) * 12 + new Date().getMonth() - ayEndDate.getMonth();
-                        const period: UpdatedPeriod = monthsFromEnd <= 12 ? '1' : monthsFromEnd <= 24 ? '2' : monthsFromEnd <= 36 ? '3' : '4';
-                        updateUpd({ updatedAY: ay, periodCode: period });
-                      }}
-                      className="accent-blue-600"
-                    />
-                    FY {ay}
-                  </label>
-                ))}
-              </div>
+              <label className={lbl}>Sub-category</label>
+              <select className={inp} value={form.subStatus} onChange={e => update({ subStatus: e.target.value })}>
+                <option value="">Auto from above</option>
+                {SUB_STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
             </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className={lbl}>Original Acknowledgement No.</label>
-                <input className={`${inp} font-mono`} value={form.updated.origAckNo}
-                  onChange={e => updateUpd({ origAckNo: e.target.value.replace(/\D/g,'').slice(0,15) })}
-                  placeholder="15-digit number" maxLength={15} />
-              </div>
-              <div>
-                <label className={lbl}>Date of Original Filing</label>
-                <input type="date" className={inp} value={form.updated.origFilingDate}
-                  onChange={e => updateUpd({ origFilingDate: e.target.value })} />
-              </div>
-              <div>
-                <label className={lbl}>Was a return filed earlier for this year?</label>
-                <select className={inp} value={form.updated.previouslyFiled ? 'Y' : 'N'}
-                  onChange={e => updateUpd({ previouslyFiled: e.target.value === 'Y' })}>
-                  <option value="Y">Yes — filed on time or with delay</option>
-                  <option value="N">No — this is the first return for this year</option>
-                </select>
-              </div>
-              {form.updated.previouslyFiled && (
-                <div>
-                  <label className={lbl}>How was the earlier return filed?</label>
-                  <select className={inp} value={form.updated.previousFilingType}
-                    onChange={e => updateUpd({ previousFilingType: e.target.value as '1' | '2' })}>
-                    <option value="1">Filed on time (Section 139(1))</option>
-                    <option value="2">Filed late or as revised return</option>
-                  </select>
-                </div>
-              )}
-              <div className="col-span-2">
-                <label className={lbl}>Time period of this updated return</label>
-                <select className={inp} value={form.updated.periodCode}
-                  onChange={e => updateUpd({ periodCode: e.target.value as UpdatedPeriod })}>
-                  <option value="1">Within 1 year of the end of the assessment year</option>
-                  <option value="2">Between 1 and 2 years after end of assessment year</option>
-                  <option value="3">Between 2 and 3 years after end of assessment year</option>
-                  <option value="4">Between 3 and 4 years after end of assessment year</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Reasons */}
             <div>
-              <label className={lbl}>Why are you updating the return? (select all that apply)</label>
-              <div className="space-y-2">
-                {UPDATE_REASONS.map(([code, label]) => (
-                  <label key={code} className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer text-sm transition-colors ${
-                    (form.updated.reasons ?? []).includes(code)
-                      ? 'border-blue-400 bg-blue-50 text-blue-800'
-                      : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
-                  }`}>
-                    <input type="checkbox"
-                      checked={(form.updated.reasons ?? []).includes(code)}
-                      onChange={() => toggleReason(code)}
-                      className="w-4 h-4 accent-blue-600 flex-shrink-0"
-                    />
-                    {label}
-                  </label>
-                ))}
-              </div>
+              <label className={lbl}>Date of Formation</label>
+              <input type="date" className={inp} value={form.dateOfFormation} onChange={e => update({ dateOfFormation: e.target.value })} />
             </div>
           </div>
-        )}
-      </Section>
-
-      {/* ── GST & Turnover ───────────────────────────────────────────────── */}
-      <Section title="GST &amp; Turnover">
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className={lbl}>Total Turnover / Gross Receipts for the Year (₹)</label>
-            <input type="number" min={0} className={inp} value={form.totalTurnover || ''}
-              onChange={e => update({ totalTurnover: Number(e.target.value) || 0 })} />
-            <p className="text-xs text-gray-400 mt-1">Used to determine audit applicability and GST reconciliation</p>
+          <div className="mt-2">
+            <label className={lbl}>Nature of Business / Activity</label>
+            <BusinessCodeSearch value={form.businessCode} onChange={code => update({ businessCode: code })} inputClass={inp} />
           </div>
-          <div>
-            <label className={lbl}>Agricultural income for the year (₹)</label>
-            <input type="number" min={0} className={inp} value={form.agriculturalIncome || ''}
-              onChange={e => update({ agriculturalIncome: Number(e.target.value) || 0 })} />
+          <div className="grid grid-cols-2 gap-2 mt-2">
+            <div>
+              <label className={lbl}>Total Turnover / Gross Receipts (₹)</label>
+              <input type="number" min={0} className={inp} value={form.totalTurnover || ''} onChange={e => update({ totalTurnover: Number(e.target.value) || 0 })} />
+            </div>
+            <div>
+              <label className={lbl}>Agricultural Income (₹)</label>
+              <input type="number" min={0} className={inp} value={form.agriculturalIncome || ''} onChange={e => update({ agriculturalIncome: Number(e.target.value) || 0 })} />
+            </div>
           </div>
-        </div>
-        <ToggleCard
-          id="gstReg"
-          checked={form.gstRegistered}
-          onChange={v => update({ gstRegistered: v })}
-          title="Entity is registered under GST"
-          description="GSTIN required if registered"
-        />
-        {form.gstRegistered && (
-          <div>
-            <label className={lbl}>GSTIN</label>
-            <input className={`${inp} font-mono uppercase`} value={form.gstin}
-              onChange={e => update({ gstin: e.target.value.toUpperCase() })}
-              placeholder="22AAAAA0000A1Z5" maxLength={15} />
-          </div>
-        )}
-        <ToggleCard
-          id="vda"
-          checked={form.hasVirtualDigitalAssets}
-          onChange={v => update({ hasVirtualDigitalAssets: v })}
-          title="Entity has income from Virtual Digital Assets (crypto, NFTs etc.)"
-          description="Taxable at 30% u/s 115BBH; Schedule VDA must be filled"
-          color="amber"
-        />
-        <ToggleCard
-          id="agri"
-          checked={form.hasAgriculturalIncome}
-          onChange={v => update({ hasAgriculturalIncome: v })}
-          title="Entity has agricultural income"
-          description="Relevant for partial integration with business income for tax computation"
-        />
-      </Section>
-
-      {/* ── Transfer Pricing & International Transactions ────────────────── */}
-      <Section
-        title="Transfer Pricing &amp; International Transactions"
-        hint="Answer based on transactions during the financial year. These questions flow directly into Part A-General(2) of the ITR-5."
-      >
-        <ToggleCard
-          id="intl92B"
-          checked={form.hasInternationalTransactions92B}
-          onChange={v => update({ hasInternationalTransactions92B: v, hasFiled3CEB: false, hasSecondaryAdjustment92CE: false })}
-          title="Entity has entered into international transactions with associated enterprises (u/s 92B)"
-          description="Transactions with group companies, subsidiaries, or associated enterprises outside India"
-          color="amber"
-        />
-        {form.hasInternationalTransactions92B && (
-          <div className="ml-4 space-y-3 border-l-2 border-amber-200 pl-4">
-            <ToggleCard
-              id="form3CEB"
-              checked={form.hasFiled3CEB}
-              onChange={v => update({ hasFiled3CEB: v })}
-              title="Form 3CEB (Transfer Pricing Report) has been / will be filed u/s 92E"
-              description="Mandatory if international transactions exceed ₹1 crore in aggregate"
-            />
-            <ToggleCard
-              id="sec92CE"
-              checked={form.hasSecondaryAdjustment92CE}
-              onChange={v => update({ hasSecondaryAdjustment92CE: v, secondaryAdjustmentAmount92CE: 0 })}
-              title="Secondary adjustment applies u/s 92CE"
-              description="Where a primary transfer pricing adjustment has been made and the excess money has not been repatriated"
-              color="amber"
-            />
-            {form.hasSecondaryAdjustment92CE && (
-              <div>
-                <label className={lbl}>Amount of secondary adjustment (₹)</label>
-                <input type="number" min={0} className={inp} value={form.secondaryAdjustmentAmount92CE || ''}
-                  onChange={e => update({ secondaryAdjustmentAmount92CE: Number(e.target.value) || 0 })} />
-              </div>
+          <div className="grid grid-cols-2 gap-2 mt-1">
+            <div className="flex items-center gap-2">
+              <input type="checkbox" id="gstReg" checked={form.gstRegistered} onChange={e => update({ gstRegistered: e.target.checked })} className="accent-blue-600" />
+              <label htmlFor="gstReg" className="text-xs text-gray-700 cursor-pointer">GST Registered</label>
+            </div>
+            {form.gstRegistered && (
+              <input className={`${inp} font-mono uppercase`} value={form.gstin} onChange={e => update({ gstin: e.target.value.toUpperCase() })} placeholder="GSTIN" maxLength={15} />
             )}
           </div>
-        )}
+        </Section>
 
-        <ToggleCard
-          id="sdt92BA"
-          checked={form.hasSpecifiedDomesticTransactions92BA}
-          onChange={v => update({ hasSpecifiedDomesticTransactions92BA: v })}
-          title="Entity has specified domestic transactions u/s 92BA"
-          description="Transactions with domestic related parties exceeding ₹20 crore — TP provisions apply"
-        />
+        {/* Books & Audit */}
+        <Section title="Books of Accounts &amp; Audit">
+          <div className="mb-2">
+            <p className="text-xs text-gray-500 mb-1 font-medium">Method of Accounting</p>
+            <div className="flex gap-2">
+              {([['MERCANTILE','Mercantile (Accrual)'],['CASH','Cash Basis']] as const).map(([v,l]) => (
+                <label key={v} className={`flex items-center gap-1.5 px-3 py-1.5 rounded border cursor-pointer text-xs font-medium flex-1 justify-center ${form.accountingMethod===v?'border-blue-500 bg-blue-50 text-blue-700':'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+                  <input type="radio" name="accMethod" value={v} checked={form.accountingMethod===v} onChange={()=>update({accountingMethod:v})} className="accent-blue-600"/> {l}
+                </label>
+              ))}
+            </div>
+          </div>
+          <YesNo label="Maintains regular books of accounts u/s 44AA" checked={form.maintainsRegularBooks} onChange={v => update({ maintainsRegularBooks: v })} />
+          <div className="mt-1">
+            <label className={lbl}>Presumptive Taxation (if applicable)</label>
+            <select className={inp} value={form.presumptiveTaxation} onChange={e => update({ presumptiveTaxation: e.target.value as any })}>
+              <option value="">Not applicable</option>
+              <option value="44AD">Sec 44AD — Business (turnover ≤ ₹3 Cr)</option>
+              <option value="44ADA">Sec 44ADA — Profession (receipts ≤ ₹75 L)</option>
+              <option value="44AE">Sec 44AE — Goods carriages</option>
+            </select>
+          </div>
+          <YesNo label="ICDS (Income Computation & Disclosure Standards) applicable" checked={form.icdsApplicable} onChange={v => update({ icdsApplicable: v })} />
+          <YesNo label="Tax Audit required u/s 44AB" checked={form.isAuditRequired} onChange={v => update({ isAuditRequired: v })} />
+          {form.isAuditRequired && (
+            <div className="mt-1">
+              <label className={lbl}>Audit Section</label>
+              <select className={inp} value={form.auditSection} onChange={e => update({ auditSection: e.target.value as any })}>
+                <option value="">Select</option>
+                <option value="44AB(a)">44AB(a) — Business turnover {'>'} ₹1 Cr (or ₹10 Cr if digital)</option>
+                <option value="44AB(b)">44AB(b) — Profession receipts {'>'} ₹50 L</option>
+                <option value="44AB(c)">44AB(c) — Opted for presumptive but declaring lower profit</option>
+                <option value="44AB(d)">44AB(d) — Trust / 10(23C) / 12A eligible</option>
+              </select>
+            </div>
+          )}
+          {form.isAuditRequired && (
+            <div className="mt-2 pt-2 border-t border-gray-100">
+              <p className="text-xs font-semibold text-gray-500 mb-2">Auditor Details</p>
+              <div className="grid grid-cols-2 gap-2">
+                <div><label className={lbl}>Auditor Name</label><input className={inp} value={form.auditorName} onChange={e => update({ auditorName: e.target.value })} placeholder="CA full name" /></div>
+                <div><label className={lbl}>Membership No.</label><input className={inp} value={form.auditorMembership} onChange={e => update({ auditorMembership: e.target.value })} placeholder="ICAI number" /></div>
+                <div><label className={lbl}>Firm Name</label><input className={inp} value={form.auditFirmName} onChange={e => update({ auditFirmName: e.target.value })} /></div>
+                <div><label className={lbl}>Firm Reg. No.</label><input className={inp} value={form.auditFirmRegNo} onChange={e => update({ auditFirmRegNo: e.target.value })} /></div>
+                <div><label className={lbl}>Firm PAN</label><input className={`${inp} uppercase font-mono`} value={form.auditFirmPAN} maxLength={10} onChange={e => update({ auditFirmPAN: e.target.value.toUpperCase() })} /></div>
+                <div><label className={lbl}>Audit Report Date</label><input type="date" className={inp} value={form.auditReportDate} onChange={e => update({ auditReportDate: e.target.value })} /></div>
+                <div><label className={lbl}>Ack. No.</label><input className={inp} value={form.auditAckNo} onChange={e => update({ auditAckNo: e.target.value })} /></div>
+                <div><label className={lbl}>UDIN</label><input className={inp} value={form.udin} onChange={e => update({ udin: e.target.value })} /></div>
+              </div>
+            </div>
+          )}
+        </Section>
 
-        <ToggleCard
-          id="nja94A"
-          checked={form.hasNotifiedJurisdictionalTransactions94A}
-          onChange={v => update({ hasNotifiedJurisdictionalTransactions94A: v })}
-          title="Transactions with persons in Notified Jurisdictional Areas u/s 94A"
-          description="Countries identified by CBDT where no effective exchange of information exists (e.g. Cyprus in earlier years)"
-          color="amber"
-        />
+        {/* Tax Rate */}
+        <Section title="Tax Rate (AOP / BOI / Trust)">
+          <YesNo label="Share of each member in income is determinable" checked={form.sharesDeterminable} onChange={v => update({ sharesDeterminable: v, anyMemberExceedsExemption: false })} />
+          {form.sharesDeterminable && (
+            <YesNo label="Any member's total income exceeds ₹2,50,000" checked={form.anyMemberExceedsExemption} onChange={v => update({ anyMemberExceedsExemption: v })} warn />
+          )}
+          <div className={`mt-2 text-xs font-semibold px-2 py-1.5 rounded ${usesMMR ? 'bg-orange-50 text-orange-800' : 'bg-green-50 text-green-800'}`}>
+            Tax Rate: {usesMMR ? 'Maximum Marginal Rate (30%)' : 'Slab Rates'}
+          </div>
+        </Section>
 
-        <ToggleCard
-          id="relParty"
-          checked={form.hasRelatedPartyTransactions40A2b}
-          onChange={v => update({ hasRelatedPartyTransactions40A2b: v })}
-          title="Payments to related parties covered u/s 40A(2)(b)"
-          description="Payments to directors, partners, relatives, or associated concerns that may be disallowed if excessive"
-        />
-      </Section>
+        {/* Members */}
+        <Section title="Trustees / Members / Partners" action={<button onClick={addMember} className="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700">+ Add</button>}>
+          {form.members.length === 0 && (
+            <p className="text-xs text-gray-400 text-center py-3 border border-dashed border-gray-200 rounded">No members added. Click + Add to begin.</p>
+          )}
+          {form.members.map((m, i) => (
+            <div key={i} className="border border-gray-200 rounded mb-2 overflow-hidden">
+              <div className="flex items-center justify-between px-3 py-1.5 bg-gray-50 border-b border-gray-100">
+                <span className="text-xs font-medium text-gray-700">{i + 1}. {m.name || 'New Person'} <span className="text-gray-400 font-normal">— {MEMBER_STATUS_OPTIONS.find(o => o.value === m.status)?.label}</span></span>
+                <button onClick={() => removeMember(i)} className="text-xs text-red-500 hover:text-red-700">Remove</button>
+              </div>
+              <div className="p-2 grid grid-cols-3 gap-2">
+                <div className="col-span-3"><label className={lbl}>Full Name</label><input className={inp} value={m.name} onChange={e => updateMember(i, { name: e.target.value })} placeholder="Name as per PAN" /></div>
+                <div><label className={lbl}>Role</label><select className={inp} value={m.status} onChange={e => updateMember(i, { status: e.target.value as MemberStatus })}>{MEMBER_STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select></div>
+                <div><label className={lbl}>Share %</label><input type="number" className={inp} value={m.sharePercentage || ''} min={0} max={100} onChange={e => updateMember(i, { sharePercentage: parseFloat(e.target.value) || 0 })} /></div>
+                <div><label className={lbl}>PAN</label><input className={`${inp} uppercase font-mono`} value={m.pan} maxLength={10} onChange={e => updateMember(i, { pan: e.target.value.toUpperCase() })} /></div>
+                <div><label className={lbl}>Aadhaar</label><input className={inp} value={m.aadhaar} maxLength={12} onChange={e => updateMember(i, { aadhaar: e.target.value.replace(/\D/g,'') })} /></div>
+                <div><label className={lbl}>Interest Rate %</label><input type="number" className={inp} value={m.rateOfInterest || ''} onChange={e => updateMember(i, { rateOfInterest: parseFloat(e.target.value) || 0 })} /></div>
+                <div><label className={lbl}>Remuneration (₹)</label><input type="number" className={inp} value={m.remunerationPaid || ''} onChange={e => updateMember(i, { remunerationPaid: parseInt(e.target.value) || 0 })} /></div>
+                <details className="col-span-3 group">
+                  <summary className="text-xs text-blue-600 cursor-pointer select-none">▶ Address</summary>
+                  <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-gray-100">
+                    <div><label className={lbl}>Flat/Door</label><input className={inp} value={m.flatNo} onChange={e => updateMember(i, { flatNo: e.target.value })} /></div>
+                    <div><label className={lbl}>Building</label><input className={inp} value={m.buildingName} onChange={e => updateMember(i, { buildingName: e.target.value })} /></div>
+                    <div><label className={lbl}>Street</label><input className={inp} value={m.streetName} onChange={e => updateMember(i, { streetName: e.target.value })} /></div>
+                    <div><label className={lbl}>Locality</label><input className={inp} value={m.localityOrArea} onChange={e => updateMember(i, { localityOrArea: e.target.value })} /></div>
+                    <div><label className={lbl}>City</label><input className={inp} value={m.cityOrTownOrDistrict} onChange={e => updateMember(i, { cityOrTownOrDistrict: e.target.value })} /></div>
+                    <div><label className={lbl}>State</label><select className={inp} value={m.stateCode} onChange={e => updateMember(i, { stateCode: e.target.value })}>{STATE_CODES.map(([c, n]) => <option key={c} value={c}>{n}</option>)}</select></div>
+                    <div><label className={lbl}>PIN</label><input className={inp} value={m.pinCode} maxLength={6} onChange={e => updateMember(i, { pinCode: e.target.value.replace(/\D/g,'') })} /></div>
+                  </div>
+                </details>
+              </div>
+            </div>
+          ))}
+        </Section>
 
-      {/* ── Foreign Assets & Income ──────────────────────────────────────── */}
-      <Section title="Foreign Assets &amp; Foreign Income">
-        <ToggleCard
-          id="foreignAssets"
-          checked={form.hasForeignAssets}
-          onChange={v => update({ hasForeignAssets: v })}
-          title="Entity holds assets located outside India"
-          description="Foreign bank accounts, shares in foreign companies, immovable property abroad, etc. — Schedule FA must be filled"
-          color="amber"
-        />
-        <ToggleCard
-          id="foreignIncome"
-          checked={form.hasForeignIncome}
-          onChange={v => update({ hasForeignIncome: v })}
-          title="Entity has income from foreign sources during the year"
-          description="Dividends, interest, royalties, capital gains on foreign assets — Schedule FSI required"
-        />
-        <ToggleCard
-          id="form15CA"
-          checked={form.hasFiled15CA15CB}
-          onChange={v => update({ hasFiled15CA15CB: v })}
-          title="Form 15CA / 15CB has been filed for foreign remittances"
-          description="Required when remitting money outside India — certificate from CA and self-declaration"
-        />
-        <ToggleCard
-          id="foreignSub"
-          checked={form.isForeignSubsidiary}
-          onChange={v => update({ isForeignSubsidiary: v })}
-          title="Entity is a subsidiary / associate of a foreign company"
-          description="Relevant for Country-by-Country Reporting (CbCR) and BEPS compliance"
-        />
-        <ToggleCard
-          id="indAS"
-          checked={form.financialStatementsIndAS}
-          onChange={v => update({ financialStatementsIndAS: v })}
-          title="Financial statements are prepared under Ind AS"
-          description="Indian Accounting Standards (converged with IFRS) — affects ICDS adjustments in Schedule BP"
-        />
-      </Section>
+        {/* Interest & Fees */}
+        <Section title="Interest &amp; Fees on Tax (u/s 234)">
+          <div className="grid grid-cols-2 gap-2">
+            {([['interest234A','234A — Late Filing Interest'],['interest234B','234B — Advance Tax Shortfall'],['interest234C','234C — Instalment Deferral'],['interest234F','234F — Late Filing Fee']] as const).map(([f,l]) => (
+              <div key={f}><label className={lbl}>{l} (₹)</label><input type="number" min={0} className={inp} value={(form as any)[f] || ''} onChange={e => update({ [f]: Number(e.target.value)||0 } as any)} /></div>
+            ))}
+          </div>
+        </Section>
 
-      {/* ── Special Deductions Claimed ───────────────────────────────────── */}
-      <Section
-        title="Special Deductions &amp; Incentives"
-        hint="Tick whichever your organisation is claiming. The relevant schedule will need to be filled separately."
-      >
-        <div className="grid grid-cols-1 gap-2">
-          <ToggleCard id="c10AA" checked={form.claims10AA} onChange={v => update({ claims10AA: v })}
-            title="Deduction u/s 10AA — Special Economic Zone (SEZ) units"
-            description="Export profits from SEZ units — Schedule 10AA must be filled" />
-          <ToggleCard id="c80IA" checked={form.claims80IA} onChange={v => update({ claims80IA: v })}
-            title="Deduction u/s 80-IA — Infrastructure, telecom, power, SEZ developers"
-            description="100% deduction for eligible infrastructure businesses" />
-          <ToggleCard id="c80IB" checked={form.claims80IB} onChange={v => update({ claims80IB: v })}
-            title="Deduction u/s 80-IB — Industrial undertakings / hotels / hospitals"
-            description="Time-limited profit deduction for eligible businesses" />
-          <ToggleCard id="c80IC" checked={form.claims80IC} onChange={v => update({ claims80IC: v })}
-            title="Deduction u/s 80-IC — Special category state undertakings"
-            description="North-East, J&K, Himachal Pradesh, Uttarakhand — eligible industries" />
-          <ToggleCard id="c80IE" checked={form.claims80IE} onChange={v => update({ claims80IE: v })}
-            title="Deduction u/s 80-IE — North-Eastern states eligible businesses"
-            description="Manufacturing/hotel/adventure/eco-tourism activities in North-East" />
-          <ToggleCard id="c80JJA" checked={form.claims80JJA} onChange={v => update({ claims80JJA: v })}
-            title="Deduction u/s 80JJA — Business of collecting / processing bio-degradable waste"
-            description="100% deduction for 5 years from commencement" />
-          <ToggleCard id="c80JJAA" checked={form.claims80JJAA} onChange={v => update({ claims80JJAA: v })}
-            title="Deduction u/s 80JJAA — New employees' cost (30% for 3 years)"
-            description="For businesses subject to tax audit — additional wages to new employees" />
-          <ToggleCard id="c80P" checked={form.claims80P} onChange={v => update({ claims80P: v })}
-            title="Deduction u/s 80P — Co-operative society income exemption"
-            description="Applies only to co-operative societies — various sub-sections" />
+        {/* Updated Return */}
+        <Section title="Filing Type">
+          <YesNo label="This is an Updated Return u/s 139(8A)" checked={form.isUpdatedReturn} onChange={v => update({ isUpdatedReturn: v })} />
+          {form.isUpdatedReturn && (
+            <div className="mt-2 pt-2 border-t border-gray-100 space-y-2">
+              <div className="flex gap-2">
+                {(['2024-25','2025-26'] as UpdatedAY[]).map(ay => (
+                  <label key={ay} className={`flex items-center gap-1.5 px-3 py-1.5 rounded border cursor-pointer text-xs font-medium ${form.updated.updatedAY === ay ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-600'}`}>
+                    <input type="radio" name="updatedAY" value={ay} checked={form.updated.updatedAY === ay}
+                      onChange={() => { const sy=parseInt(ay.split('-')[0]); const ay2=new Date(sy+1,2,31); const m=(new Date().getFullYear()-ay2.getFullYear())*12+new Date().getMonth()-ay2.getMonth(); const p:UpdatedPeriod=m<=12?'1':m<=24?'2':m<=36?'3':'4'; updateUpd({ updatedAY: ay, periodCode: p }); }}
+                      className="accent-blue-600" /> FY {ay}
+                  </label>
+                ))}
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div><label className={lbl}>Original Ack. No.</label><input className={`${inp} font-mono`} value={form.updated.origAckNo} maxLength={15} onChange={e => updateUpd({ origAckNo: e.target.value.replace(/\D/g,'').slice(0,15) })} placeholder="15 digits" /></div>
+                <div><label className={lbl}>Original Filing Date</label><input type="date" className={inp} value={form.updated.origFilingDate} onChange={e => updateUpd({ origFilingDate: e.target.value })} /></div>
+                <div><label className={lbl}>Previously Filed?</label>
+                  <select className={inp} value={form.updated.previouslyFiled?'Y':'N'} onChange={e => updateUpd({ previouslyFiled: e.target.value==='Y' })}>
+                    <option value="Y">Yes</option><option value="N">No — first return</option>
+                  </select>
+                </div>
+                <div><label className={lbl}>Period of Updated Return</label>
+                  <select className={inp} value={form.updated.periodCode} onChange={e => updateUpd({ periodCode: e.target.value as UpdatedPeriod })}>
+                    <option value="1">Within 1 year of AY end</option>
+                    <option value="2">1–2 years after AY end</option>
+                    <option value="3">2–3 years after AY end</option>
+                    <option value="4">3–4 years after AY end</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-gray-500 mb-1">Reasons for update (select all applicable)</p>
+                <div className="grid grid-cols-1 gap-0.5">
+                  {UPDATE_REASONS.map(([code, label]) => (
+                    <label key={code} className="flex items-center gap-2 text-xs py-0.5 cursor-pointer">
+                      <input type="checkbox" checked={(form.updated.reasons??[]).includes(code)} onChange={() => toggleReason(code)} className="accent-blue-600" />
+                      {label}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </Section>
+      </div>
+
+      {/* ── RIGHT COLUMN — Compliance Questions ── */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-bold text-gray-800 uppercase tracking-wide">Part A-General (2) — Compliance</h2>
         </div>
-      </Section>
+
+        {/* Transfer Pricing */}
+        <Section title="Transfer Pricing">
+          <YesNo label="International transactions with associated enterprises u/s 92B" checked={form.hasInternationalTransactions92B} onChange={v => update({ hasInternationalTransactions92B: v, hasFiled3CEB: false, hasSecondaryAdjustment92CE: false })} warn />
+          {form.hasInternationalTransactions92B && <>
+            <YesNo label="Form 3CEB (TP report) filed/to be filed u/s 92E" checked={form.hasFiled3CEB} onChange={v => update({ hasFiled3CEB: v })} />
+            <YesNo label="Secondary adjustment u/s 92CE applicable" checked={form.hasSecondaryAdjustment92CE} onChange={v => update({ hasSecondaryAdjustment92CE: v, secondaryAdjustmentAmount92CE: 0 })} warn />
+            {form.hasSecondaryAdjustment92CE && <div className="mt-1"><label className={lbl}>Secondary Adjustment Amount (₹)</label><input type="number" min={0} className={inp} value={form.secondaryAdjustmentAmount92CE||''} onChange={e => update({ secondaryAdjustmentAmount92CE: Number(e.target.value)||0 })} /></div>}
+          </>}
+          <YesNo label="Specified domestic transactions u/s 92BA (>₹20 Cr)" checked={form.hasSpecifiedDomesticTransactions92BA} onChange={v => update({ hasSpecifiedDomesticTransactions92BA: v })} />
+          <YesNo label="Transactions in notified jurisdictional areas u/s 94A" checked={form.hasNotifiedJurisdictionalTransactions94A} onChange={v => update({ hasNotifiedJurisdictionalTransactions94A: v })} warn />
+          <YesNo label="Payments to related parties covered u/s 40A(2)(b)" checked={form.hasRelatedPartyTransactions40A2b} onChange={v => update({ hasRelatedPartyTransactions40A2b: v })} />
+        </Section>
+
+        {/* Foreign */}
+        <Section title="Foreign Assets &amp; Income">
+          <YesNo label="Entity holds assets outside India (Schedule FA required)" checked={form.hasForeignAssets} onChange={v => update({ hasForeignAssets: v })} warn />
+          <YesNo label="Income from foreign sources (Schedule FSI required)" checked={form.hasForeignIncome} onChange={v => update({ hasForeignIncome: v })} />
+          <YesNo label="Form 15CA / 15CB filed for foreign remittances" checked={form.hasFiled15CA15CB} onChange={v => update({ hasFiled15CA15CB: v })} />
+          <YesNo label="Entity is subsidiary / associate of a foreign company" checked={form.isForeignSubsidiary} onChange={v => update({ isForeignSubsidiary: v })} />
+          <YesNo label="Financial statements prepared under Ind AS" checked={form.financialStatementsIndAS} onChange={v => update({ financialStatementsIndAS: v })} />
+        </Section>
+
+        {/* Assets */}
+        <Section title="Income &amp; Assets Disclosure">
+          <YesNo label="Income from Virtual Digital Assets (crypto/NFT) — Sec 115BBH" checked={form.hasVirtualDigitalAssets} onChange={v => update({ hasVirtualDigitalAssets: v })} warn />
+          <YesNo label="Agricultural income — partial integration applies" checked={form.hasAgriculturalIncome} onChange={v => update({ hasAgriculturalIncome: v })} />
+          <YesNo label="Transfer of unlisted shares (FMV basis u/s 50CA/56(2)(x))" checked={form.hasUnlistedSharesTransfer} onChange={v => update({ hasUnlistedSharesTransfer: v })} />
+          <YesNo label="Deemed dividend u/s 2(22)(e) — loans/advances by closely-held co." checked={form.hasDeemedDividend2_22e} onChange={v => update({ hasDeemedDividend2_22e: v })} warn />
+          <YesNo label="Brought forward losses / unabsorbed depreciation from earlier years" checked={form.hasBroughtForwardLoss} onChange={v => update({ hasBroughtForwardLoss: v })} />
+          <YesNo label="Liable to Alternate Minimum Tax (AMT) u/s 115JC" checked={form.liableForAMT} onChange={v => update({ liableForAMT: v })} />
+        </Section>
+
+        {/* Tax Regime & MSME */}
+        <Section title="Tax Regime &amp; Other Disclosures">
+          <YesNo label="Opt for new tax regime u/s 115BAC (Co-operative: 115BAD / 115BAE)" checked={form.optNewTaxRegime115BAC} onChange={v => update({ optNewTaxRegime115BAC: v })} />
+          <YesNo label="MSME / Udyam registered entity" checked={form.hasMSMERegistration} onChange={v => update({ hasMSMERegistration: v, msmeRegistrationNo: '' })} />
+          {form.hasMSMERegistration && (
+            <div className="mt-1"><label className={lbl}>Udyam Registration No.</label>
+              <input className={`${inp} uppercase font-mono`} value={form.msmeRegistrationNo} onChange={e => update({ msmeRegistrationNo: e.target.value.toUpperCase() })} placeholder="UDYAM-XX-00-0000000" />
+            </div>
+          )}
+        </Section>
+
+        {/* Special Deductions */}
+        <Section title="Special Deductions Claimed (Chapter VI-A / 10AA)">
+          <p className="text-xs text-gray-400 mb-1">Tick whichever applies — the relevant schedule must be filled</p>
+          <YesNo label="10AA — SEZ unit export profits" checked={form.claims10AA} onChange={v => update({ claims10AA: v })} />
+          <YesNo label="80-IA — Infrastructure / telecom / power / SEZ developer" checked={form.claims80IA} onChange={v => update({ claims80IA: v })} />
+          <YesNo label="80-IB — Industrial undertakings / hotels / hospitals" checked={form.claims80IB} onChange={v => update({ claims80IB: v })} />
+          <YesNo label="80-IC — Special category state undertakings (NE / J&K)" checked={form.claims80IC} onChange={v => update({ claims80IC: v })} />
+          <YesNo label="80-IE — North-Eastern states eligible businesses" checked={form.claims80IE} onChange={v => update({ claims80IE: v })} />
+          <YesNo label="80JJA — Processing bio-degradable waste business" checked={form.claims80JJA} onChange={v => update({ claims80JJA: v })} />
+          <YesNo label="80JJAA — 30% of additional employee cost for 3 years" checked={form.claims80JJAA} onChange={v => update({ claims80JJAA: v })} />
+          <YesNo label="80P — Co-operative society income exemption" checked={form.claims80P} onChange={v => update({ claims80P: v })} />
+        </Section>
+      </div>
 
     </div>
   );
 }
 
 // ── Shared sub-components ─────────────────────────────────────────────────────
+
+function YesNo({ label, checked, onChange, warn = false }: {
+  label: string; checked: boolean; onChange: (v: boolean) => void; warn?: boolean;
+}) {
+  return (
+    <div className={`flex items-center justify-between py-1 border-b border-gray-100 last:border-0 ${warn && checked ? 'bg-amber-50 -mx-2 px-2' : ''}`}>
+      <span className={`text-xs flex-1 pr-3 ${warn && checked ? 'text-amber-800 font-medium' : 'text-gray-700'}`}>{label}</span>
+      <div className="flex items-center gap-3 flex-shrink-0">
+        <label className={`flex items-center gap-1 cursor-pointer text-xs ${checked ? 'text-blue-700 font-bold' : 'text-gray-400'}`}>
+          <input type="radio" checked={checked} onChange={() => onChange(true)} className="accent-blue-600 w-3 h-3" /> Yes
+        </label>
+        <label className={`flex items-center gap-1 cursor-pointer text-xs ${!checked ? 'text-gray-700 font-bold' : 'text-gray-400'}`}>
+          <input type="radio" checked={!checked} onChange={() => onChange(false)} className="accent-gray-500 w-3 h-3" /> No
+        </label>
+      </div>
+    </div>
+  );
+}
 
 function Section({ title, hint, action, children }: {
   title: string;
@@ -1006,36 +735,22 @@ function Section({ title, hint, action, children }: {
   children: React.ReactNode;
 }) {
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-4">
-      <div className="flex items-start justify-between">
-        <div>
-          <h3 className="text-sm font-semibold text-gray-800">{title}</h3>
-          {hint && <p className="text-xs text-gray-400 mt-0.5">{hint}</p>}
-        </div>
+    <div className="bg-white border border-gray-200 rounded p-3">
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="text-xs font-bold text-gray-600 uppercase tracking-wide">{title}</h3>
         {action}
       </div>
-      {children}
+      {hint && <p className="text-xs text-gray-400 mb-2">{hint}</p>}
+      <div className="space-y-1">{children}</div>
     </div>
   );
 }
 
-function ToggleCard({ id, checked, onChange, title, description, color = 'blue' }: {
-  id: string;
-  checked: boolean;
-  onChange: (v: boolean) => void;
-  title: string;
-  description: string;
-  color?: 'blue' | 'amber';
+// Legacy alias — kept for compatibility
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function ToggleCard({ title, color = 'blue', onChange, checked }: {
+  id: string; checked: boolean; onChange: (v: boolean) => void;
+  title: string; description: string; color?: 'blue' | 'amber';
 }) {
-  const accent = color === 'amber' ? 'accent-amber-600' : 'accent-blue-600';
-  const activeBorder = color === 'amber' ? 'border-amber-400 bg-amber-50' : 'border-blue-400 bg-blue-50';
-  return (
-    <label className={`flex items-start gap-3 p-3.5 rounded-lg border cursor-pointer transition-colors ${checked ? activeBorder : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'}`}>
-      <input type="checkbox" id={id} checked={checked} onChange={e => onChange(e.target.checked)} className={`w-4 h-4 mt-0.5 flex-shrink-0 ${accent}`} />
-      <div>
-        <p className="text-sm font-medium text-gray-800">{title}</p>
-        <p className="text-xs text-gray-400 mt-0.5">{description}</p>
-      </div>
-    </label>
-  );
+  return <YesNo label={title} checked={checked} onChange={onChange} warn={color === 'amber'} />;
 }
