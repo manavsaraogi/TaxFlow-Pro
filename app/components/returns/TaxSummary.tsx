@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import type { ReturnData, TaxRegime } from '@/shared/types/itr';
+import { computeBP5 } from './ITR5BP';
 
 // â"€â"€â"€ Types â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
@@ -11,6 +12,7 @@ interface TaxInputs {
   housePropertyIncome: number;       // can be negative (loss capped at -2,00,000)
   otherSourcesIncome: number;
   lotteryIncome: number;             // flat 30%
+  businessIncome: number;            // ITR-5: net income from Schedule BP (Item 48)
 
   // Deductions
   standardDeduction: number;         // â‚¹75,000 under new; â‚¹50,000 old (from salary schedule)
@@ -27,6 +29,11 @@ interface TaxInputs {
   assessmentYear: string;
   filingDate: string;                // for 234A interest
   dueDate: string;                   // normally Jul 31
+
+  // ITR-5 specific
+  formType: string;
+  entityType: string;                // 'FIRM' | 'LLP' | 'AOP' | 'BOI' | 'COOP' | 'LA' | 'AJP'
+  usesMMR: boolean;                  // AOP/BOI taxed at Maximum Marginal Rate
 }
 
 interface TaxComputation {
@@ -118,6 +125,20 @@ function surchargeRate(income: number): number {
   return 0;
 }
 
+// Firm / LLP surcharge: 12% flat if income > ₹1 Cr (not tiered)
+function firmSurchargeRate(income: number): number {
+  return income > 10_000_000 ? 0.12 : 0;
+}
+
+// Co-operative society slabs (old regime)
+function computeCoopTax(income: number): number {
+  if (income <= 10_000) return 0;
+  let tax = 0;
+  if (income > 20_000)  { tax += (income - 20_000) * 0.20; income = 20_000; }
+  if (income > 10_000)  { tax += (income - 10_000) * 0.10; }
+  return Math.floor(tax);
+}
+
 // â"€â"€â"€ Helpers â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 const fmt = (n: number) => '₹' + Math.abs(n).toLocaleString('en-IN');
@@ -174,32 +195,45 @@ const Row = ({
 // â"€â"€â"€ Computation engine â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 function computeTax(inp: TaxInputs): TaxComputation {
-  const hpIncome = Math.max(inp.housePropertyIncome, -200_000); // HP loss cap
-  const grossTotalIncome = Math.max(
-    0,
-    inp.grossSalary - inp.standardDeduction + hpIncome + inp.otherSourcesIncome + inp.lotteryIncome
-  );
+  const isITR5 = inp.formType === 'ITR-5';
+  const isFirmOrLLP = isITR5 && (inp.entityType === 'FIRM' || inp.entityType === 'LLP');
+  const isCoop = isITR5 && inp.entityType === 'COOP';
+  const isAOPMMR = isITR5 && inp.usesMMR;
 
-  const totalDeductions = inp.regime?.toLowerCase() === 'old' ? inp.chapterVIADeductions : 0;
+  const hpIncome = Math.max(inp.housePropertyIncome, -200_000);
+  const grossTotalIncome = isITR5
+    ? Math.max(0, inp.businessIncome + hpIncome + inp.otherSourcesIncome + inp.lotteryIncome)
+    : Math.max(0, inp.grossSalary - inp.standardDeduction + hpIncome + inp.otherSourcesIncome + inp.lotteryIncome);
+
+  const totalDeductions = inp.regime?.toLowerCase() === 'old' && !isITR5 ? inp.chapterVIADeductions : 0;
   const taxableIncome = Math.max(0, grossTotalIncome - totalDeductions);
   const lotteryIncome = inp.lotteryIncome;
   const normalTaxableIncome = Math.max(0, taxableIncome - lotteryIncome);
 
-  const taxOnNormalIncome =
-    inp.regime?.toLowerCase() === 'old'
+  let taxOnNormalIncome: number;
+  if (isFirmOrLLP || isAOPMMR) {
+    taxOnNormalIncome = Math.floor(normalTaxableIncome * 0.30);
+  } else if (isCoop) {
+    // new regime 115BAD: 22%, old: slab
+    taxOnNormalIncome = inp.regime?.toLowerCase() === 'new'
+      ? Math.floor(normalTaxableIncome * 0.22)
+      : computeCoopTax(normalTaxableIncome);
+  } else {
+    taxOnNormalIncome = inp.regime?.toLowerCase() === 'old'
       ? computeOldRegimeTax(normalTaxableIncome)
       : computeNewRegimeTax(normalTaxableIncome);
+  }
   const taxOnLottery = Math.floor(lotteryIncome * 0.30);
   const grossTax = taxOnNormalIncome + taxOnLottery;
 
-  const sRate = surchargeRate(taxableIncome);
+  const sRate = isFirmOrLLP ? firmSurchargeRate(taxableIncome) : surchargeRate(taxableIncome);
   const surcharge = Math.floor(grossTax * sRate);
   const taxAfterSurcharge = grossTax + surcharge;
 
-  // Rebate 87A
-  const rebateLimit = inp.regime?.toLowerCase() === 'new' ? 700_000 : 500_000;
-  const rebateCap = inp.regime?.toLowerCase() === 'new' ? 25_000 : 12_500;
-  const rebate87A = taxableIncome <= rebateLimit ? Math.min(taxAfterSurcharge, rebateCap) : 0;
+  // No rebate 87A for firms/LLPs/co-ops
+  const rebateLimit = inp.regime?.toLowerCase() === 'new' ? 1_200_000 : 500_000;
+  const rebateCap = inp.regime?.toLowerCase() === 'new' ? 60_000 : 12_500;
+  const rebate87A = (!isITR5 && taxableIncome <= rebateLimit) ? Math.min(taxAfterSurcharge, rebateCap) : 0;
   const taxAfterRebate = Math.max(0, taxAfterSurcharge - rebate87A);
 
   const cess = Math.floor(taxAfterRebate * 0.04);
@@ -227,7 +261,6 @@ function computeTax(inp: TaxInputs): TaxComputation {
 // â"€â"€â"€ Default inputs (mock / fallback) â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 function buildDefaultInputs(rd: any): TaxInputs {
-  // rd is the raw Prisma API response (data from GET /api/returns/[id])
   const tdsEntries: any[] = rd?.tdsEntries ?? [];
   const taxPayments: any[] = rd?.taxPayments ?? [];
   const hpSchedule: any[] = rd?.hpSchedule ?? [];
@@ -237,21 +270,45 @@ function buildDefaultInputs(rd: any): TaxInputs {
   const selfAssessmentTax = taxPayments.filter((p: any) => p.paymentType !== 'ADVANCE').reduce((s: number, p: any) => s + (p.totalAmount ?? 0), 0);
   const hpIncome = hpSchedule.reduce((s: number, hp: any) => s + (hp.incomeOfHP ?? 0), 0);
 
+  // ITR-5: compute business income from BP schedule
+  const formType: string = rd?.formType ?? '';
+  let businessIncome = 0;
+  let entityType = 'AOP';
+  let usesMMR = false;
+  if (formType === 'ITR-5') {
+    const itr5General = rd?.itr5General ?? (rd?.itr5GeneralJson ? JSON.parse(rd.itr5GeneralJson) : null);
+    const itr5PL = rd?.itr5PL ?? (rd?.itr5PLJson ? JSON.parse(rd.itr5PLJson) : null);
+    const itr5BP = rd?.itr5BP ?? (rd?.itr5BPJson ? JSON.parse(rd.itr5BPJson) : null);
+    entityType = itr5General?.entityType ?? 'AOP';
+    usesMMR = !itr5General?.sharesDeterminable || itr5General?.anyMemberExceedsExemption;
+    const netProfitFromPL = itr5PL?.NetProfitBeforeTaxes ?? 0;
+    if (itr5BP) {
+      const computed = computeBP5(itr5BP, netProfitFromPL);
+      businessIncome = computed.Item48 ?? 0;
+    } else {
+      businessIncome = netProfitFromPL;
+    }
+  }
+
   return {
     grossSalary: rd?.salarySchedule?.totalGrossSalary ?? 0,
     housePropertyIncome: hpIncome,
     otherSourcesIncome: rd?.osSchedule?.incomeFromOtherSources ?? 0,
     lotteryIncome: 0,
+    businessIncome,
     standardDeduction: rd?.salarySchedule?.deductionUs16ia ?? 75_000,
     chapterVIADeductions: rd?.deductionSchedule?.totalChapVIAAllowed ?? 0,
     homeLoanInterest: 0,
     tdsTCS,
     advanceTax,
     selfAssessmentTax,
-    regime: (rd?.assessmentYear?.regime ?? 'NEW') as TaxRegime,
-    assessmentYear: rd?.assessmentYear?.ayLabel ?? 'AY 2026-27',
+    regime: (rd?.regime ?? rd?.assessmentYear?.regime ?? 'NEW') as TaxRegime,
+    assessmentYear: rd?.assessmentYear ?? rd?.assessmentYear?.ayLabel ?? 'AY 2026-27',
     filingDate: new Date().toISOString().slice(0, 10),
     dueDate: '2026-07-31',
+    formType,
+    entityType,
+    usesMMR,
   };
 }
 
@@ -355,8 +412,13 @@ export default function TaxSummary({ returnId, returnData }: Props) {
         <table className="data-table" style={{ width: '100%' }}>
           <tbody>
             {/* Income */}
-            <Row label="Gross Salary (after standard deduction)" value={Math.max(0, inputs.grossSalary - inputs.standardDeduction)}
-              sub={`Standard deduction: ₹${inputs.standardDeduction.toLocaleString('en-IN')}`} />
+            {inputs.formType === 'ITR-5' ? (
+              <Row label="Income from Business / Profession (Schedule BP — Item 48)" value={inputs.businessIncome}
+                sub="Net income after all BP adjustments and depreciation" />
+            ) : (
+              <Row label="Gross Salary (after standard deduction)" value={Math.max(0, inputs.grossSalary - inputs.standardDeduction)}
+                sub={`Standard deduction: ₹${inputs.standardDeduction.toLocaleString('en-IN')}`} />
+            )}
             <Row label="Income from House Property" value={inputs.housePropertyIncome}
               sub={inputs.housePropertyIncome < 0 ? 'Loss (capped at ₹2,00,000 set-off)' : undefined} />
             <Row label="Income from Other Sources" value={inputs.otherSourcesIncome} />
@@ -378,8 +440,13 @@ export default function TaxSummary({ returnId, returnData }: Props) {
             )}
 
             {/* Tax computation */}
-            <Row label="Tax on Normal Income (slab)" value={c.taxOnNormalIncome}
-              sub={inputs.regime?.toLowerCase() === 'new' ? 'New regime slabs' : 'Old regime slabs'} separator />
+            <Row label="Tax on Normal Income" value={c.taxOnNormalIncome}
+              sub={
+                (inputs.entityType === 'FIRM' || inputs.entityType === 'LLP') ? 'Flat rate @ 30% (Firm/LLP)' :
+                inputs.entityType === 'COOP' ? (inputs.regime?.toLowerCase() === 'new' ? 'Co-operative — Sec 115BAD @ 22%' : 'Co-operative society slabs') :
+                inputs.usesMMR ? 'Maximum Marginal Rate @ 30% (AOP/BOI)' :
+                inputs.regime?.toLowerCase() === 'new' ? 'New regime slabs (FY 2025-26)' : 'Old regime slabs'
+              } separator />
             {c.lotteryIncome > 0 && (
               <Row label="Tax on Lottery @ 30% (u/s 115BB)" value={c.taxOnLottery} />
             )}
