@@ -689,7 +689,11 @@ function DocumentsTab({ clientId, returns }: { clientId: number; returns?: Retur
 
 function suggestFormType(client: ClientData): { formType: string; reason: string } {
   if (client.assesseeType === 'FIRM') return { formType: 'ITR-5', reason: 'Firm / LLP' };
+  if (client.assesseeType === 'AOP') return { formType: 'ITR-5', reason: 'AOP / Trust / BOI' };
+  if (client.assesseeType === 'BOI') return { formType: 'ITR-5', reason: 'AOP / Trust / BOI' };
   if (client.assesseeType === 'HUF') return { formType: 'ITR-2', reason: 'HUF assessee' };
+  if (client.assesseeType === 'DOMESTIC_COMPANY') return { formType: 'ITR-6', reason: 'Domestic Company' };
+  if (client.assesseeType === 'FOREIGN_COMPANY') return { formType: 'ITR-6', reason: 'Foreign Company' };
   const rs = (client as any).residentialStatus as string | undefined;
   if (rs === 'NRI' || rs === 'RNR') return { formType: 'ITR-2', reason: 'Non-resident / RNOR' };
   return { formType: 'ITR-1', reason: 'Salary + up to 1 house property + other sources' };
@@ -707,7 +711,7 @@ function NewReturnModal({ client, onClose, onCreated }: {
   const { formType: autoFormType, reason: autoFormReason } = suggestFormType(client);
 
   const [ayLabel, setAyLabel] = useState(defaultAY);
-  const [formType] = useState(autoFormType);
+  const [formType, setFormType] = useState(autoFormType);
   const [regime, setRegime] = useState('NEW');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -762,19 +766,19 @@ function NewReturnModal({ client, onClose, onCreated }: {
           </div>
 
           <div className="form-group">
-            <label className="form-label">ITR Form (auto-selected)</label>
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: '10px',
-              padding: '10px 12px', borderRadius: '6px',
-              background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
-            }}>
-              <span style={{
-                fontSize: '15px', fontWeight: 700, color: 'var(--brand-text)',
-                background: 'rgba(212,160,23,0.12)', borderRadius: '4px',
-                padding: '2px 8px',
-              }}>{formType}</span>
-              <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{autoFormReason}</span>
-            </div>
+            <label className="form-label">
+              ITR Form
+              {formType === autoFormType && (
+                <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 400, marginLeft: '6px' }}>
+                  (auto-selected)
+                </span>
+              )}
+            </label>
+            <select className="form-select" value={formType} onChange={(e) => setFormType(e.target.value)}>
+              {['ITR-1', 'ITR-2', 'ITR-3', 'ITR-4', 'ITR-5', 'ITR-6', 'ITR-7'].map((f) => (
+                <option key={f} value={f}>{f}</option>
+              ))}
+            </select>
           </div>
 
           <div className="form-group">
