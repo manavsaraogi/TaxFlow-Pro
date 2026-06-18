@@ -688,15 +688,27 @@ function DocumentsTab({ clientId, returns }: { clientId: number; returns?: Retur
 // ── ITR form suggestion helper ────────────────────────────────────────────────
 
 function suggestFormType(client: ClientData): { formType: string; reason: string } {
-  if (client.assesseeType === 'FIRM') return { formType: 'ITR-5', reason: 'Firm / LLP' };
-  if (client.assesseeType === 'AOP') return { formType: 'ITR-5', reason: 'AOP / Trust / BOI' };
-  if (client.assesseeType === 'BOI') return { formType: 'ITR-5', reason: 'AOP / Trust / BOI' };
-  if (client.assesseeType === 'HUF') return { formType: 'ITR-2', reason: 'HUF assessee' };
-  if (client.assesseeType === 'DOMESTIC_COMPANY') return { formType: 'ITR-6', reason: 'Domestic Company' };
-  if (client.assesseeType === 'FOREIGN_COMPANY') return { formType: 'ITR-6', reason: 'Foreign Company' };
-  const rs = (client as any).residentialStatus as string | undefined;
-  if (rs === 'NRI' || rs === 'RNR') return { formType: 'ITR-2', reason: 'Non-resident / RNOR' };
-  return { formType: 'ITR-1', reason: 'Salary + up to 1 house property + other sources' };
+  // PAN 4th character is the authoritative taxpayer-type code
+  const panType = (client.pan ?? '').charAt(3).toUpperCase();
+  switch (panType) {
+    case 'H': return { formType: 'ITR-2', reason: 'HUF (PAN type H)' };
+    case 'F': return { formType: 'ITR-5', reason: 'Firm / LLP (PAN type F)' };
+    case 'A': return { formType: 'ITR-5', reason: 'AOP (PAN type A)' };
+    case 'T': return { formType: 'ITR-5', reason: 'Trust (PAN type T)' };
+    case 'B': return { formType: 'ITR-5', reason: 'BOI (PAN type B)' };
+    case 'J': return { formType: 'ITR-5', reason: 'Artificial Juridical Person (PAN type J)' };
+    case 'L': return { formType: 'ITR-5', reason: 'Local Authority (PAN type L)' };
+    case 'C': return { formType: 'ITR-6', reason: 'Company (PAN type C)' };
+    case 'G': return { formType: 'ITR-7', reason: 'Government / Section 139(6) (PAN type G)' };
+    case 'P': {
+      // Individual — refine based on residential status
+      const rs = (client as any).residentialStatus as string | undefined;
+      if (rs === 'NRI' || rs === 'RNR') return { formType: 'ITR-2', reason: 'Non-resident individual' };
+      return { formType: 'ITR-1', reason: 'Individual (PAN type P)' };
+    }
+    default:
+      return { formType: 'ITR-1', reason: 'Individual' };
+  }
 }
 
 function NewReturnModal({ client, onClose, onCreated }: {
