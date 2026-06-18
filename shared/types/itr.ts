@@ -864,6 +864,9 @@ export interface ITR5General {
   auditAckNo?:           string;
   udin?:                 string;
   members:               ITR5Member[]; // PartnerOrMemberInfo (Table F for trusts)
+  // Tax rate determination (Section 167B)
+  sharesDeterminable:    boolean;      // true → slab rates possible; false → MMR 30%
+  anyMemberExceedsExemption: boolean; // if shares determinable AND any member > basic exemption → MMR
   // 139(8A) updated return
   isUpdatedReturn:       boolean;
   updated?:              ITR5Updated | null;

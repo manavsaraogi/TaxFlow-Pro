@@ -1700,19 +1700,46 @@ function buildITR5(input: BuildITRInput): object {
   // ITR-5 business/profession income from P&L
   const bpIncome   = toI(pl.BizNetProfit) + toI(pl.ProfNetProfit);
 
-  const grossTotalIncome = bpIncome + Math.max(0, hpIncome) + totalCG + Math.max(0, osIncome);
+  // Income taxed at special rates is excluded from normal slab computation
+  const specialRateIncome = stcg111A + ltcg112A;
+  const normalIncome      = Math.max(0, bpIncome + Math.max(0, hpIncome) + stcgOther + Math.max(0, osIncome));
+  const grossTotalIncome  = normalIncome + specialRateIncome;
 
-  // AOP taxed at Maximum Marginal Rate (30%) — no basic exemption, no 87A rebate
-  const taxOnNormalIncome = Math.round(grossTotalIncome * 0.30);
-  const taxOnSTCG111A    = Math.round(stcg111A * 0.20);   // 20% post-July 2024
-  const taxOnLTCG112A   = Math.round(ltcg112A * 0.125);   // 12.5%
-  const taxPayableOnTI  = taxOnNormalIncome + taxOnSTCG111A + taxOnLTCG112A;
+  // Section 167B: determine tax rate regime
+  // MMR applies when: (a) shares indeterminate OR (b) shares determinable but any member > basic exemption
+  const usesMMR = !gen.sharesDeterminable || gen.anyMemberExceedsExemption;
 
-  // Surcharge: 12% if income > 1Cr
-  const surchargeRate = grossTotalIncome > 10000000 ? 0.12 : 0;
-  const surcharge     = Math.round(taxPayableOnTI * surchargeRate);
-  const cess          = Math.round((taxPayableOnTI + surcharge) * 0.04);
-  const grossTaxLiab  = taxPayableOnTI + surcharge + cess;
+  // Tax on normal income
+  function slabTaxOldRegime(inc: number): number {
+    if (inc <= 250000)   return 0;
+    if (inc <= 500000)   return Math.round((inc - 250000) * 0.05);
+    if (inc <= 1000000)  return 12500 + Math.round((inc - 500000) * 0.20);
+    return 112500 + Math.round((inc - 1000000) * 0.30);
+  }
+  const taxOnNormal    = usesMMR ? Math.round(normalIncome * 0.30) : slabTaxOldRegime(normalIncome);
+  const taxOnSTCG111A  = Math.round(stcg111A * 0.20);    // 20% w.e.f. 23-Jul-2024 (Budget 2024)
+  const taxOnLTCG112A  = Math.round(ltcg112A * 0.125);   // 12.5% w.e.f. 23-Jul-2024
+  const taxPayableOnTI = taxOnNormal + taxOnSTCG111A + taxOnLTCG112A;
+
+  // Surcharge on normal income + special rate income
+  // Rates: 10% (>50L), 15% (>1Cr), 25% (>2Cr), 37% (>5Cr) — but 15% cap on STCG/LTCG surcharge
+  function getSurchargeRate(inc: number): number {
+    if (inc <= 5000000)   return 0;
+    if (inc <= 10000000)  return 0.10;
+    if (inc <= 20000000)  return 0.15;
+    if (inc <= 50000000)  return 0.25;
+    return 0.37;
+  }
+  // Surcharge on CG is capped at 15%
+  const cgSurchargeRate  = Math.min(getSurchargeRate(grossTotalIncome), 0.15);
+  const normalSurRate    = getSurchargeRate(grossTotalIncome);
+  const surchargeOnNormal = Math.round(taxOnNormal * normalSurRate);
+  const surchargeOnCG    = Math.round((taxOnSTCG111A + taxOnLTCG112A) * cgSurchargeRate);
+  const surcharge        = surchargeOnNormal + surchargeOnCG;
+
+  // Health & Education Cess: 4% on (tax + surcharge)
+  const cess         = Math.round((taxPayableOnTI + surcharge) * 0.04);
+  const grossTaxLiab = taxPayableOnTI + surcharge + cess;
 
   // Taxes paid
   const advTax   = toI(rd.taxPayments?.TotalAdvanceTax);
@@ -2324,10 +2351,10 @@ function buildITR5(input: BuildITRInput): object {
             TaxPayableOnTI:               taxPayableOnTI,
             Rebate87A:                    0,
             TaxPayableOnRebate:           taxPayableOnTI,
-            Surcharge25ofSI:              0,
-            SurchargeOnAboveCrore:        surcharge,
-            Surcharge25ofSIBeforeMarginal: 0,
-            SurchargeOnAboveCroreBeforeMarginal: 0,
+            Surcharge25ofSI:              surchargeOnCG,
+            SurchargeOnAboveCrore:        surchargeOnNormal,
+            Surcharge25ofSIBeforeMarginal: surchargeOnCG,
+            SurchargeOnAboveCroreBeforeMarginal: surchargeOnNormal,
             TotalSurcharge:               surcharge,
             EducationCess:                cess,
             GrossTaxLiability:            grossTaxLiab,

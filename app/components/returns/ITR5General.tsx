@@ -59,6 +59,8 @@ interface ITR5GeneralState {
   auditAckNo: string;
   udin: string;
   members: ITR5Member[];
+  sharesDeterminable: boolean;
+  anyMemberExceedsExemption: boolean;
   isUpdatedReturn: boolean;
   updated: ITR5Updated;
 }
@@ -97,6 +99,8 @@ const EMPTY: ITR5GeneralState = {
   auditAckNo: '',
   udin: '',
   members: [],
+  sharesDeterminable: false,
+  anyMemberExceedsExemption: false,
   isUpdatedReturn: false,
   updated: { ...EMPTY_UPDATED },
 };
@@ -274,6 +278,68 @@ export default function ITR5General({ returnId, initialData, onSaved }: Props) {
             />
             <span className="text-sm text-gray-700">Audit required (Sec 44AB / 12A / etc.)</span>
           </label>
+        </div>
+      </div>
+
+      {/* Tax Rate — Section 167B */}
+      <div className="bg-white border border-gray-200 rounded-lg p-5 space-y-4">
+        <div>
+          <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Tax Rate (Section 167B)</h3>
+          <p className="text-xs text-gray-400 mt-0.5">
+            Determines whether the AOP/BOI/Trust is taxed at slab rates or Maximum Marginal Rate (30%)
+          </p>
+        </div>
+
+        {/* Shares determinable? */}
+        <div className="flex items-start gap-3 p-3 rounded-md bg-gray-50 border border-gray-200">
+          <input
+            type="checkbox"
+            id="sharesDet"
+            checked={form.sharesDeterminable}
+            onChange={e => update({ sharesDeterminable: e.target.checked, anyMemberExceedsExemption: false })}
+            className="w-4 h-4 mt-0.5 accent-blue-600"
+          />
+          <div>
+            <label htmlFor="sharesDet" className="text-sm font-medium text-gray-700 cursor-pointer">
+              Shares / income of members are determinable
+            </label>
+            <p className="text-xs text-gray-400 mt-0.5">
+              Check if the share of each member in the income of the AOP/BOI is known. If unchecked → taxed at MMR (30%).
+            </p>
+          </div>
+        </div>
+
+        {/* If determinable — any member exceeds basic exemption? */}
+        {form.sharesDeterminable && (
+          <div className="flex items-start gap-3 p-3 rounded-md bg-amber-50 border border-amber-200">
+            <input
+              type="checkbox"
+              id="memberExceedsExemption"
+              checked={form.anyMemberExceedsExemption}
+              onChange={e => update({ anyMemberExceedsExemption: e.target.checked })}
+              className="w-4 h-4 mt-0.5 accent-amber-600"
+            />
+            <div>
+              <label htmlFor="memberExceedsExemption" className="text-sm font-medium text-gray-700 cursor-pointer">
+                Any member's total income exceeds the basic exemption limit (₹2,50,000)
+              </label>
+              <p className="text-xs text-gray-400 mt-0.5">
+                If yes → AOP taxed at MMR (30%) even though shares are determinable [Sec 167B(2)].
+                If no → taxed at slab rates.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Tax rate summary badge */}
+        <div className={`text-xs font-semibold px-3 py-2 rounded-md ${
+          (!form.sharesDeterminable || form.anyMemberExceedsExemption)
+            ? 'bg-red-50 text-red-700 border border-red-200'
+            : 'bg-green-50 text-green-700 border border-green-200'
+        }`}>
+          {(!form.sharesDeterminable || form.anyMemberExceedsExemption)
+            ? '⚡ Maximum Marginal Rate — 30% on normal income + applicable surcharge + 4% H&E Cess'
+            : '📊 Slab Rates — Old regime slabs + applicable surcharge + 4% H&E Cess'}
         </div>
       </div>
 
