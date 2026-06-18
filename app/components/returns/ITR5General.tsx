@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { NATURE_OF_BUSINESS_CODES_ITR5 } from '@/app/lib/itrCodes';
 
 type EntityType = 'AOP' | 'BOI' | 'AJP' | 'LA' | 'COOP' | 'FIRM' | 'LLP';
 
@@ -135,15 +136,6 @@ const SUB_STATUS_OPTIONS = [
   { value: '21', label: 'Investment Fund' },
 ];
 
-const BUSINESS_CODE_OPTIONS = [
-  { value: '19006', label: '19006 — Religious organisations' },
-  { value: '19009', label: '19009 — Social / community service (general)' },
-  { value: '19007', label: '19007 — Educational institutions' },
-  { value: '19008', label: '19008 — Health / medical services' },
-  { value: '01001', label: '01001 — Agriculture (crop growing)' },
-  { value: '09001', label: '09001 — Trading — retail' },
-  { value: '09002', label: '09002 — Trading — wholesale' },
-];
 
 const MEMBER_STATUS_OPTIONS: { value: MemberStatus; label: string }[] = [
   { value: 'TRUSTEE',          label: 'Trustee' },
@@ -180,6 +172,102 @@ const UPDATE_REASONS: [UpdateReason, string][] = [
   ['7', 'Wrong tax rate was applied'],
   ['OTH', 'Any other reason'],
 ];
+
+// ── Searchable business code dropdown ────────────────────────────────────────
+
+function BusinessCodeSearch({ value, onChange, inputClass }: {
+  value: string;
+  onChange: (code: string) => void;
+  inputClass: string;
+}) {
+  const match = NATURE_OF_BUSINESS_CODES_ITR5.find(c => c.code === value);
+  const [query, setQuery] = useState(match ? `${match.code} — ${match.description}` : value);
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  // Sync display when value changes from outside (e.g. initial load)
+  useEffect(() => {
+    const m = NATURE_OF_BUSINESS_CODES_ITR5.find(c => c.code === value);
+    setQuery(m ? `${m.code} — ${m.description}` : value);
+  }, [value]);
+
+  useEffect(() => {
+    function onClickOutside(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener('mousedown', onClickOutside);
+    return () => document.removeEventListener('mousedown', onClickOutside);
+  }, []);
+
+  const filtered = query.length >= 1
+    ? NATURE_OF_BUSINESS_CODES_ITR5.filter(c =>
+        c.code.includes(query) ||
+        c.description.toLowerCase().includes(query.toLowerCase()) ||
+        c.group.toLowerCase().includes(query.toLowerCase())
+      ).slice(0, 30)
+    : NATURE_OF_BUSINESS_CODES_ITR5;
+
+  // Group filtered results
+  const groups = filtered.reduce<Record<string, typeof filtered>>((acc, c) => {
+    (acc[c.group] ??= []).push(c);
+    return acc;
+  }, {});
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <input
+        type="text"
+        className={inputClass}
+        value={query}
+        placeholder="Search by code or description (e.g. 19006, religious, trading…)"
+        onFocus={() => setOpen(true)}
+        onChange={e => {
+          setQuery(e.target.value);
+          setOpen(true);
+          // If user clears the field, clear the code too
+          if (!e.target.value) onChange('');
+        }}
+      />
+      {open && filtered.length > 0 && (
+        <div style={{
+          position: 'absolute', zIndex: 50, top: '100%', left: 0, right: 0,
+          background: 'white', border: '1px solid #d1d5db', borderRadius: '6px',
+          boxShadow: '0 4px 16px rgba(0,0,0,0.12)', maxHeight: '280px', overflowY: 'auto',
+          marginTop: '2px',
+        }}>
+          {Object.entries(groups).map(([group, items]) => (
+            <div key={group}>
+              <div style={{ padding: '4px 10px', fontSize: '10px', fontWeight: 700, color: '#6b7280', background: '#f9fafb', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+                {group}
+              </div>
+              {items.map(c => (
+                <div
+                  key={c.code}
+                  style={{
+                    padding: '6px 12px', cursor: 'pointer', fontSize: '13px',
+                    background: c.code === value ? '#eff6ff' : 'white',
+                    borderLeft: c.code === value ? '3px solid #3b82f6' : '3px solid transparent',
+                  }}
+                  onMouseDown={e => {
+                    e.preventDefault();
+                    onChange(c.code);
+                    setQuery(`${c.code} — ${c.description}`);
+                    setOpen(false);
+                  }}
+                >
+                  <span style={{ fontFamily: 'monospace', color: '#2563eb', marginRight: '8px' }}>{c.code}</span>
+                  {c.description}
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 interface Props {
   returnId: number;
@@ -319,38 +407,11 @@ export default function ITR5General({ returnId, initialData, onSaved }: Props) {
 
         <div>
           <label className={lbl}>Main activity / nature of business</label>
-          {(() => {
-            const isPreset = BUSINESS_CODE_OPTIONS.some(o => o.value === form.businessCode);
-            return (
-              <>
-                <select
-                  className={inp}
-                  value={isPreset ? form.businessCode : '__other__'}
-                  onChange={e => {
-                    if (e.target.value === '__other__') {
-                      update({ businessCode: '' });
-                    } else {
-                      update({ businessCode: e.target.value });
-                    }
-                  }}
-                >
-                  {BUSINESS_CODE_OPTIONS.map(o => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
-                  ))}
-                  <option value="__other__">Other (enter code manually)…</option>
-                </select>
-                {!isPreset && (
-                  <input
-                    className={`${inp} mt-2`}
-                    value={form.businessCode}
-                    onChange={e => update({ businessCode: e.target.value })}
-                    placeholder="Enter 5-digit activity code (e.g. 21008)"
-                    autoFocus
-                  />
-                )}
-              </>
-            );
-          })()}
+          <BusinessCodeSearch
+            value={form.businessCode}
+            onChange={code => update({ businessCode: code })}
+            inputClass={inp}
+          />
         </div>
       </Section>
 

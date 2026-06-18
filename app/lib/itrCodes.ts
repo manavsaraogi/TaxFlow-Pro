@@ -319,6 +319,168 @@ export const STCG_OTHER_ASSET_TYPES: CGAssetType[] = [
   { value: 'other',            label: 'Any other capital asset', hint: '' },
 ];
 
+// ── Nature of Business codes for ITR-5 (5-digit codes) ───────────────────────
+// Source: ITR-5 AY 2026-27 portal schema — PartA_GEN2 NatOfBus dropdown
+
+export const NATURE_OF_BUSINESS_CODES_ITR5: NatureCode[] = [
+  // Agriculture
+  { code: '01001', description: 'Growing and manufacture of tea', group: 'Agriculture' },
+  { code: '01002', description: 'Growing and manufacture of coffee', group: 'Agriculture' },
+  { code: '01003', description: 'Growing and manufacture of rubber', group: 'Agriculture' },
+  { code: '01004', description: 'Growing of other crops / horticulture', group: 'Agriculture' },
+  { code: '01005', description: 'Agriculture — others', group: 'Agriculture' },
+  // Mining & Quarrying
+  { code: '02001', description: 'Mining of coal and lignite', group: 'Mining & Quarrying' },
+  { code: '02002', description: 'Extraction of crude petroleum and natural gas', group: 'Mining & Quarrying' },
+  { code: '02003', description: 'Mining of metal ores', group: 'Mining & Quarrying' },
+  { code: '02004', description: 'Mining of gems and precious stones', group: 'Mining & Quarrying' },
+  { code: '02005', description: 'Other mining and quarrying', group: 'Mining & Quarrying' },
+  // Manufacturing — Food, Beverages & Tobacco
+  { code: '03001', description: 'Manufacture and processing of food products', group: 'Mfg — Food/Beverages' },
+  { code: '03002', description: 'Flour & rice mills', group: 'Mfg — Food/Beverages' },
+  { code: '03003', description: 'Sugar manufacturing', group: 'Mfg — Food/Beverages' },
+  { code: '03004', description: 'Tea/coffee processing', group: 'Mfg — Food/Beverages' },
+  { code: '03005', description: 'Edible oils and vanaspati', group: 'Mfg — Food/Beverages' },
+  { code: '03006', description: 'Manufacture of beverages', group: 'Mfg — Food/Beverages' },
+  { code: '03007', description: 'Manufacture of tobacco products', group: 'Mfg — Food/Beverages' },
+  { code: '03008', description: 'Food processing — others', group: 'Mfg — Food/Beverages' },
+  // Manufacturing — Textiles & Leather
+  { code: '04001', description: 'Spinning, weaving and finishing of textiles', group: 'Mfg — Textiles' },
+  { code: '04002', description: 'Handlooms / powerlooms', group: 'Mfg — Textiles' },
+  { code: '04003', description: 'Manufacture of wearing apparel / garments', group: 'Mfg — Textiles' },
+  { code: '04004', description: 'Manufacture of leather and leather products', group: 'Mfg — Textiles' },
+  { code: '04005', description: 'Textiles, apparel and leather — others', group: 'Mfg — Textiles' },
+  // Manufacturing — Wood, Paper & Printing
+  { code: '05001', description: 'Sawmilling and planing of wood', group: 'Mfg — Wood/Paper' },
+  { code: '05002', description: 'Manufacture of wood and wood products', group: 'Mfg — Wood/Paper' },
+  { code: '05003', description: 'Manufacture of paper and paper products', group: 'Mfg — Wood/Paper' },
+  { code: '05004', description: 'Printing, publishing and allied activities', group: 'Mfg — Wood/Paper' },
+  { code: '05005', description: 'Wood, paper and printing — others', group: 'Mfg — Wood/Paper' },
+  // Manufacturing — Chemicals & Pharmaceuticals
+  { code: '06001', description: 'Manufacture of basic chemicals', group: 'Mfg — Chemicals' },
+  { code: '06002', description: 'Drugs and pharmaceuticals', group: 'Mfg — Chemicals' },
+  { code: '06003', description: 'Fertilizers, chemicals and paints', group: 'Mfg — Chemicals' },
+  { code: '06004', description: 'Petroleum and petrochemicals', group: 'Mfg — Chemicals' },
+  { code: '06005', description: 'Soaps, detergents and cosmetics', group: 'Mfg — Chemicals' },
+  { code: '06006', description: 'Chemicals and pharmaceuticals — others', group: 'Mfg — Chemicals' },
+  // Manufacturing — Rubber, Plastics & Non-metallic
+  { code: '07001', description: 'Manufacture of rubber products (tyres, tubes etc.)', group: 'Mfg — Rubber/Plastics' },
+  { code: '07002', description: 'Manufacture of plastics products', group: 'Mfg — Rubber/Plastics' },
+  { code: '07003', description: 'Manufacture of cement', group: 'Mfg — Rubber/Plastics' },
+  { code: '07004', description: 'Manufacture of glass and glass products', group: 'Mfg — Rubber/Plastics' },
+  { code: '07005', description: 'Marble and granite', group: 'Mfg — Rubber/Plastics' },
+  { code: '07006', description: 'Rubber, plastics and non-metallic — others', group: 'Mfg — Rubber/Plastics' },
+  // Manufacturing — Metals & Engineering
+  { code: '08001', description: 'Manufacture of basic metals (iron, steel)', group: 'Mfg — Metals/Engg' },
+  { code: '08002', description: 'Manufacture of non-ferrous metals', group: 'Mfg — Metals/Engg' },
+  { code: '08003', description: 'Manufacture of fabricated metal products', group: 'Mfg — Metals/Engg' },
+  { code: '08004', description: 'Manufacture of machinery and equipment', group: 'Mfg — Metals/Engg' },
+  { code: '08005', description: 'Manufacture of motor vehicles and auto parts', group: 'Mfg — Metals/Engg' },
+  { code: '08006', description: 'Electronics including computer hardware', group: 'Mfg — Metals/Engg' },
+  { code: '08007', description: 'Engineering goods — others', group: 'Mfg — Metals/Engg' },
+  // Trading
+  { code: '09001', description: 'Trading — retail', group: 'Trading' },
+  { code: '09002', description: 'Trading — wholesale', group: 'Trading' },
+  { code: '09003', description: 'Dealing in motor vehicles', group: 'Trading' },
+  { code: '09004', description: 'Dealing in fuels / petroleum products', group: 'Trading' },
+  { code: '09005', description: 'Import / export trading', group: 'Trading' },
+  { code: '09006', description: 'Trading — others', group: 'Trading' },
+  // Construction & Real Estate
+  { code: '10001', description: 'Construction of buildings', group: 'Construction/Real Estate' },
+  { code: '10002', description: 'Civil engineering and infrastructure', group: 'Construction/Real Estate' },
+  { code: '10003', description: 'Real estate developers / builders', group: 'Construction/Real Estate' },
+  { code: '10004', description: 'Real estate agents and brokers', group: 'Construction/Real Estate' },
+  { code: '10005', description: 'Construction and real estate — others', group: 'Construction/Real Estate' },
+  // Utilities & Energy
+  { code: '11001', description: 'Production and distribution of electricity', group: 'Utilities & Energy' },
+  { code: '11002', description: 'Manufacture and supply of gas / steam', group: 'Utilities & Energy' },
+  { code: '11003', description: 'Water supply and treatment', group: 'Utilities & Energy' },
+  { code: '11004', description: 'Waste collection and management', group: 'Utilities & Energy' },
+  { code: '11005', description: 'Power and energy — others', group: 'Utilities & Energy' },
+  // Transport, Storage & Logistics
+  { code: '12001', description: 'Land transport (road, railways)', group: 'Transport & Logistics' },
+  { code: '12002', description: 'Goods carriage / freight', group: 'Transport & Logistics' },
+  { code: '12003', description: 'Water transport', group: 'Transport & Logistics' },
+  { code: '12004', description: 'Air transport', group: 'Transport & Logistics' },
+  { code: '12005', description: 'Warehousing and storage', group: 'Transport & Logistics' },
+  { code: '12006', description: 'Postal and courier services', group: 'Transport & Logistics' },
+  { code: '12007', description: 'Travel agents and tour operators', group: 'Transport & Logistics' },
+  { code: '12008', description: 'Transport and logistics — others', group: 'Transport & Logistics' },
+  // Hotels & Restaurants
+  { code: '13001', description: 'Hotels, resorts and similar accommodation', group: 'Hotels & Restaurants' },
+  { code: '13002', description: 'Restaurants, cafes and food service', group: 'Hotels & Restaurants' },
+  { code: '13003', description: 'Catering services', group: 'Hotels & Restaurants' },
+  { code: '13004', description: 'Hotels and restaurants — others', group: 'Hotels & Restaurants' },
+  // Information Technology & Communication
+  { code: '14001', description: 'Software development', group: 'IT & Communication' },
+  { code: '14002', description: 'IT enabled services / BPO', group: 'IT & Communication' },
+  { code: '14003', description: 'Telecommunications', group: 'IT & Communication' },
+  { code: '14004', description: 'E-commerce', group: 'IT & Communication' },
+  { code: '14005', description: 'Cable TV, DTH and broadcasting', group: 'IT & Communication' },
+  { code: '14006', description: 'IT and communication — others', group: 'IT & Communication' },
+  // Financial Services
+  { code: '15001', description: 'Banking companies', group: 'Financial Services' },
+  { code: '15002', description: 'Insurance companies', group: 'Financial Services' },
+  { code: '15003', description: 'Non-banking finance companies (NBFC)', group: 'Financial Services' },
+  { code: '15004', description: 'Share brokers and sub-brokers', group: 'Financial Services' },
+  { code: '15005', description: 'Chit funds', group: 'Financial Services' },
+  { code: '15006', description: 'Money lending', group: 'Financial Services' },
+  { code: '15007', description: 'Leasing companies', group: 'Financial Services' },
+  { code: '15008', description: 'Mutual funds / investment trusts', group: 'Financial Services' },
+  { code: '15009', description: 'Financial services — others', group: 'Financial Services' },
+  // Professional Services
+  { code: '16001', description: 'Legal services', group: 'Professional Services' },
+  { code: '16002', description: 'Chartered accountants, auditors and tax consultants', group: 'Professional Services' },
+  { code: '16003', description: 'Architectural and engineering services', group: 'Professional Services' },
+  { code: '16004', description: 'Scientific research and development', group: 'Professional Services' },
+  { code: '16005', description: 'Advertising and market research', group: 'Professional Services' },
+  { code: '16006', description: 'Management consultancy', group: 'Professional Services' },
+  { code: '16007', description: 'Fashion designers', group: 'Professional Services' },
+  { code: '16008', description: 'Professional services — others', group: 'Professional Services' },
+  // Education
+  { code: '17001', description: 'Primary and secondary education', group: 'Education' },
+  { code: '17002', description: 'Higher education (colleges/universities)', group: 'Education' },
+  { code: '17003', description: 'Technical and vocational training', group: 'Education' },
+  { code: '17004', description: 'Computer training and coaching institutes', group: 'Education' },
+  { code: '17005', description: 'Education — others', group: 'Education' },
+  // Health & Medical
+  { code: '18001', description: 'Hospitals and nursing homes', group: 'Health & Medical' },
+  { code: '18002', description: 'Clinics and dispensaries', group: 'Health & Medical' },
+  { code: '18003', description: 'Pathology labs and diagnostic centres', group: 'Health & Medical' },
+  { code: '18004', description: 'Medical professionals (doctors, dentists)', group: 'Health & Medical' },
+  { code: '18005', description: 'Manufacture / dealing in medical equipment', group: 'Health & Medical' },
+  { code: '18006', description: 'Health and medical — others', group: 'Health & Medical' },
+  // Arts, Entertainment & Recreation
+  { code: '19001', description: 'Motion picture production and distribution', group: 'Arts & Entertainment' },
+  { code: '19002', description: 'Television channels and radio broadcasting', group: 'Arts & Entertainment' },
+  { code: '19003', description: 'Music and performing arts', group: 'Arts & Entertainment' },
+  { code: '19004', description: 'Sports clubs and recreation activities', group: 'Arts & Entertainment' },
+  { code: '19005', description: 'Amusement parks and gaming', group: 'Arts & Entertainment' },
+  { code: '19006', description: 'Religious organisations', group: 'Arts & Entertainment' },
+  { code: '19007', description: 'Educational institutions (schools/trusts)', group: 'Arts & Entertainment' },
+  { code: '19008', description: 'Health and medical services (charitable)', group: 'Arts & Entertainment' },
+  { code: '19009', description: 'Social / community service organisations', group: 'Arts & Entertainment' },
+  // Other Service Activities
+  { code: '20001', description: 'Repair of computers and household goods', group: 'Other Services' },
+  { code: '20002', description: 'Laundry, cleaning and dyeing', group: 'Other Services' },
+  { code: '20003', description: 'Beauty parlours and barber shops', group: 'Other Services' },
+  { code: '20004', description: 'Security agencies', group: 'Other Services' },
+  { code: '20005', description: 'Placement and staffing agencies', group: 'Other Services' },
+  { code: '20006', description: 'Other services — others', group: 'Other Services' },
+  // Trusts, NGOs, Associations & Societies
+  { code: '21001', description: 'Charitable trusts (registered u/s 12A/12AA)', group: 'Trusts & NGOs' },
+  { code: '21002', description: 'Religious trusts', group: 'Trusts & NGOs' },
+  { code: '21003', description: 'Sporting associations', group: 'Trusts & NGOs' },
+  { code: '21004', description: 'Trade unions', group: 'Trusts & NGOs' },
+  { code: '21005', description: 'Political parties', group: 'Trusts & NGOs' },
+  { code: '21006', description: 'Activities of membership organisations', group: 'Trusts & NGOs' },
+  { code: '21007', description: 'Cooperative societies', group: 'Trusts & NGOs' },
+  { code: '21008', description: 'Other personal service activities / societies', group: 'Trusts & NGOs' },
+  { code: '21009', description: 'Activities of households as employers', group: 'Trusts & NGOs' },
+  // Others
+  { code: '99999', description: 'Others (not elsewhere classified)', group: 'Others' },
+];
+
 // ── Helper utilities ──────────────────────────────────────────────────────────
 
 export function getCodeLabel(code: string, list: NatureCode[]): string {
