@@ -425,7 +425,7 @@ function computeTaxLiability(summary: IncomeSummary, regime: 'OLD' | 'NEW', ay: 
 // SCHEDULE BUILDERS — ITR-1 INCOME DEDUCTIONS
 // ─────────────────────────────────────────────────────────────────────────────
 
-function buildITR1IncomeDeductions(rd: ReturnData, summary: IncomeSummary, capped: ReturnType<typeof applyDeductionCaps>) {
+function buildITR1IncomeDeductions(rd: ReturnData, summary: IncomeSummary, capped: ReturnType<typeof applyDeductionCaps>, stdDedCap: number) {
   const sal = rd.salary;
   const hp = rd.houseProperty;
   const os = rd.otherSources;
@@ -446,7 +446,7 @@ function buildITR1IncomeDeductions(rd: ReturnData, summary: IncomeSummary, cappe
       : { TotalAllwncExemptUs10: 0 },
     NetSalary: toInt(sal?.NetSalary),
     DeductionUs16: toInt(sal?.TotalDeductionUs16),
-    DeductionUs16ia: capAt(sal?.DeductionUs16ia ?? 0, DEDUCTION_CAPS.StandardDeduction16ia),
+    DeductionUs16ia: capAt(sal?.DeductionUs16ia ?? 0, stdDedCap),
     EntertainmentAlw16ii: capAt(sal?.EntertainmentAlw16ii ?? 0, DEDUCTION_CAPS.EntertainmentAlw16ii),
     ProfessionalTaxUs16iii: capAt(sal?.ProfessionalTaxUs16iii ?? 0, DEDUCTION_CAPS.ProfessionalTax16iii),
     IncomeFromSal: toInt(sal?.IncomeFromSalary),
@@ -807,7 +807,7 @@ function buildITR1(input: BuildITRInput): object {
           AsseseeRepFlg: 'N',
           ItrFilingDueDate: cfg.dueDateIndividual,
         },
-        ITR1_IncomeDeductions: buildITR1IncomeDeductions(rd, summary, capped),
+        ITR1_IncomeDeductions: buildITR1IncomeDeductions(rd, summary, capped, rd.regime === 'NEW' ? cfg.stdDeduction_new : cfg.stdDeduction_old),
         ITR1_TaxComputation: {
           TotalTaxPayable:     toInt(taxComp.NetTaxPayable),    // tax on TI before rebate
           Rebate87A:           toInt(taxComp.Rebate87A),
@@ -1051,7 +1051,7 @@ function buildITR2(input: BuildITRInput): object {
               AllwncExtentExemptUs10:     toInt(rd.salary.AllwncExtentExemptUs10),
               NetSalary:                  toInt(rd.salary.NetSalary),
               DeductionUS16:              toInt(rd.salary.TotalDeductionUs16),
-              DeductionUnderSection16ia:  capAt(rd.salary.DeductionUs16ia, DEDUCTION_CAPS.StandardDeduction16ia),
+              DeductionUnderSection16ia:  capAt(rd.salary.DeductionUs16ia, rd.regime === 'NEW' ? cfg.stdDeduction_new : cfg.stdDeduction_old),
               EntertainmntalwncUs16ii:    capAt(rd.salary.EntertainmentAlw16ii, DEDUCTION_CAPS.EntertainmentAlw16ii),
               ProfessionalTaxUs16iii:     capAt(rd.salary.ProfessionalTaxUs16iii, DEDUCTION_CAPS.ProfessionalTax16iii),
               TotIncUnderHeadSalaries:    toInt(rd.salary.IncomeFromSalary),
@@ -1431,7 +1431,7 @@ function buildITR4(input: BuildITRInput): object {
           },
           NetSalary:                  toInt(rd.salary?.NetSalary),
           DeductionUs16:              toInt(rd.salary?.TotalDeductionUs16),
-          DeductionUs16ia:            capAt(rd.salary?.DeductionUs16ia ?? 0, DEDUCTION_CAPS.StandardDeduction16ia),
+          DeductionUs16ia:            capAt(rd.salary?.DeductionUs16ia ?? 0, rd.regime === 'NEW' ? cfg.stdDeduction_new : cfg.stdDeduction_old),
           EntertainmntalwncUs16ii:    capAt(rd.salary?.EntertainmentAlw16ii ?? 0, DEDUCTION_CAPS.EntertainmentAlw16ii),
           ProfessionalTaxUs16iii:     capAt(rd.salary?.ProfessionalTaxUs16iii ?? 0, DEDUCTION_CAPS.ProfessionalTax16iii),
           IncomeFromSal:              toInt(summary.IncomeFromSalary),
@@ -1450,7 +1450,7 @@ function buildITR4(input: BuildITRInput): object {
         },
         TaxComputation: {
           TotalTaxPayable:     toInt(taxComp.NetTaxPayable),
-          Rebate87A:           toInt(taxComp.Rebate87A),
+          Rebate87A:           detectStatusFromPAN(client.pan) === 'I' ? toInt(taxComp.Rebate87A) : 0,
           TaxPayableOnRebate:  toInt(taxComp.TaxAfterRebate),
           EducationCess:       toInt(taxComp.HealthEducationCess),
           GrossTaxLiability:   netTaxLiability,
@@ -1773,12 +1773,12 @@ function buildITR5(input: BuildITRInput): object {
   const bs   = (rd as any).itr5BalanceSheet ?? {};
   const pl   = (rd as any).itr5PL ?? {};
   const upd  = gen.isUpdatedReturn ? (gen.updated ?? {}) : null;
-  // AY start year: '2024-25' → '2024', '2025-26' → '2025'
   const itr5AY = rd.assessmentYear ?? '2026-27';
   const itr5Cfg = getAYConfig(itr5AY);
-  const ayYear = itr5AY.split('-')[0];
   // For updated return, use the selected updatedAY; otherwise use the return's own AY
-  const effectiveAYYear = upd ? (upd.updatedAY ?? itr5AY).split('-')[0] : ayYear;
+  const effectiveAY = upd ? (upd.updatedAY ?? itr5AY) : itr5AY;
+  // Portal expects the END year of the AY (e.g. "2026" for AY 2025-26)
+  const effectiveAYYear = ayToYear(effectiveAY);
 
   const toI = (v: unknown) => Math.round(Number(v) || 0);
 
@@ -1866,6 +1866,13 @@ function buildITR5(input: BuildITRInput): object {
   // Bank for refund — pulled from returnData bankAccounts
   const primaryBank = (rd as any).bankAccounts?.[0];
 
+  // Chapter VI-A deductions
+  const cappedVIA = rd.deductions
+    ? applyDeductionCaps(rd.deductions, grossTotalIncome)
+    : applyDeductionCaps({ TotalChapVIADeductions: 0 } as DeductionsChapterVIA, 0);
+  const viaDeductions = cappedVIA.TotalChapVIADeductions;
+  const totalIncome   = Math.max(0, grossTotalIncome - viaDeductions);
+
   const cylaInc = (n: number) => ({
     IncCYLA: { IncOfCurYrUnderThatHead: n, OthSrcLossNoRaceHorseSetoff: 0, IncOfCurYrAfterSetOff: n },
   });
@@ -1920,13 +1927,24 @@ function buildITR5(input: BuildITRInput): object {
     + toI(pl.OtherIncomeOther);
   const totCreditsToPL = toI(pl.GrossProfitFromTrading) + totOthIncome;
 
+  // Debit/expense side of P&L (regular books)
+  const totDebitsExpenses = toI(pl.FreightOutward) + toI(pl.PowerAndFuel) + toI(pl.Rents)
+    + toI(pl.RepairsBuilding) + toI(pl.RepairsMachinery) + toI(pl.TotalEmployeeComp)
+    + toI(pl.TotalInsurance) + toI(pl.WorkmenWelfare) + toI(pl.Advertisement)
+    + toI(pl.TotalCommission) + toI(pl.TotalProfFees) + toI(pl.TravellingExpenses)
+    + toI(pl.TelephoneExpenses) + toI(pl.Donation) + toI(pl.TotalRatesAndTaxes)
+    + toI(pl.AuditFee) + toI(pl.PartnersSalary) + toI(pl.OtherExpenses)
+    + toI(pl.TotalBadDebts) + toI(pl.DepreciationPL);
+  // TotDebitsToPL = all expenses + net profit (balancing figure) = TotCreditsToPL
+  const totDebitsToPL = totCreditsToPL;
+
   return {
     ITR: {
       ITR5: {
         CreationInfo: {
           SWVersionNo:      sw.SWVersionNo,
           SWCreatedBy:      sw.SWCreatedBy,
-          JSONCreatedBy:    sw.SWCreatedBy,
+          JSONCreatedBy:    sw.JSONCreatedBy,
           JSONCreationDate: date,
           IntermediaryCity: sw.IntermediaryCity ?? 'Delhi',
           Digest:           '-',
@@ -1990,7 +2008,7 @@ function buildITR5(input: BuildITRInput): object {
             ReturnFileSec: {
               IncomeTaxSec: incomeTaxSec,
             },
-            ResidentialStatus:     'RES',
+            ResidentialStatus:     (client.residentialStatus ?? 'RES') === 'RNR' ? 'NOR' : (client.residentialStatus ?? 'RES'),
             BusinessTrustFlag:     'N',
             InvstmntFundRefrdSec115UB: 'N',
             ForeignExchangeFlag:   'N',
@@ -2191,6 +2209,9 @@ function buildITR5(input: BuildITRInput): object {
             MiscExpndtr: toI(bs.MiscExpenditure),
             DeferredTaxAsset: toI(bs.DeferredTaxAsset),
             DebitBalPLAccount: toI(bs.DebitPLBalance),
+            TotAppFund: totFixedAsset + totInvestments
+              + totCurrAssetLoanAdv - (totCurrLiabilities + totProvisions)
+              + toI(bs.MiscExpenditure) + toI(bs.DeferredTaxAsset) + toI(bs.DebitPLBalance),
           },
         },
         // ── P&L ────────────────────────────────────────────────────────────
@@ -2243,6 +2264,30 @@ function buildITR5(input: BuildITRInput): object {
               TotOthIncome:               totOthIncome,
             },
             TotCreditsToPL: totCreditsToPL,
+          },
+          DebitsToPL: {
+            FreightOutward:     toI(pl.FreightOutward),
+            PowerAndFuel:       toI(pl.PowerAndFuel),
+            Rents:              toI(pl.Rents),
+            RepairsBuilding:    toI(pl.RepairsBuilding),
+            RepairsMachinery:   toI(pl.RepairsMachinery),
+            TotalEmployeeComp:  toI(pl.TotalEmployeeComp),
+            TotalInsurance:     toI(pl.TotalInsurance),
+            WorkmenWelfare:     toI(pl.WorkmenWelfare),
+            Advertisement:      toI(pl.Advertisement),
+            TotalCommission:    toI(pl.TotalCommission),
+            TotalProfFees:      toI(pl.TotalProfFees),
+            TravellingExpenses: toI(pl.TravellingExpenses),
+            TelephoneExpenses:  toI(pl.TelephoneExpenses),
+            Donation:           toI(pl.Donation),
+            TotalRatesAndTaxes: toI(pl.TotalRatesAndTaxes),
+            AuditFee:           toI(pl.AuditFee),
+            PartnersSalary:     toI(pl.PartnersSalary),
+            OtherExpenses:      toI(pl.OtherExpenses),
+            TotalBadDebts:      toI(pl.TotalBadDebts),
+            DepreciationPL:     toI(pl.DepreciationPL),
+            NetProfitBeforeTax: totDebitsToPL - totDebitsExpenses,
+            TotDebitsToPL:      totDebitsToPL,
           },
         },
 
@@ -2355,15 +2400,15 @@ function buildITR5(input: BuildITRInput): object {
 
         // ── ScheduleGST ───────────────────────────────────────────────────
         ScheduleGST: {
-          GSTINDtls: Array.isArray((rd as any).gstDetails)
-            ? (rd as any).gstDetails.map((g: any) => ({
-                GSTIN:             g.gstin ?? '',
-                GSTTurnover:       toI(g.turnover),
-                NameOfBusiness:    g.businessName ?? '',
+          GSTINDtls: Array.isArray(gen.gstDetails)
+            ? gen.gstDetails.map((g: any) => ({
+                GSTIN:              g.gstin ?? '',
+                GSTTurnover:        toI(g.turnover),
+                NameOfBusiness:     g.businessName ?? '',
                 RegistrationStatus: g.registrationStatus ?? 'REG',
               }))
             : [],
-          TotTurnover: toI((rd as any).gstTurnover),
+          TotTurnover: toI(gen.gstTurnover),
         },
 
         // ── ScheduleCYLA ─────────────────────────────────────────────────
@@ -2407,13 +2452,18 @@ function buildITR5(input: BuildITRInput): object {
         },
 
         // ── ScheduleEI (Exempt Income) ────────────────────────────────────
-        ScheduleEI: {
-          ExemptIncAgri:        0,
-          ExemptIncAgriType:    [],
-          ExemptIncAgriTotal:   0,
-          ExemptIncOthers:      Array.isArray((rd as any).exemptIncome) ? (rd as any).exemptIncome : [],
-          TotExemptInc:         0,
-        },
+        ScheduleEI: (() => {
+          const agriInc  = toI(gen.agriIncome);
+          const othItems = Array.isArray(gen.exemptIncome) ? gen.exemptIncome : [];
+          const othTotal = othItems.reduce((s: number, item: any) => s + toI(item.amount), 0);
+          return {
+            ExemptIncAgri:      agriInc,
+            ExemptIncAgriType:  [],
+            ExemptIncAgriTotal: agriInc,
+            ExemptIncOthers:    othItems,
+            TotExemptInc:       agriInc + othTotal,
+          };
+        })(),
 
         // ── PartB-TI ─────────────────────────────────────────────────────
         'PartB-TI': {
@@ -2448,11 +2498,11 @@ function buildITR5(input: BuildITRInput): object {
           BroughtFwdLossesSetoff:   0,
           GrossTotalIncome:         grossTotalIncome,
           IncChargeTaxSplRate111A112: stcg111A + ltcg112A,
-          DeductionsUnderScheduleVIA: 0,
-          TotalIncome:               grossTotalIncome,
+          DeductionsUnderScheduleVIA: viaDeductions,
+          TotalIncome:               totalIncome,
           IncChargeableTaxSplRates:  stcg111A + ltcg112A,
           NetAgricultureIncomeOrOtherIncomeForRate: 0,
-          AggregateIncome:           grossTotalIncome,
+          AggregateIncome:           totalIncome,
           LossesOfCurrentYearCarriedFwd: 0,
           DeemedIncomeUs115JC:       deemedIncome115JC,
         },
@@ -2484,6 +2534,7 @@ function buildITR5(input: BuildITRInput): object {
               IntrstPayUs234A: int234A,
               IntrstPayUs234B: int234B,
               IntrstPayUs234C: int234C,
+              IntrstPayUs234F: int234F,
               TotalIntrstPay:  totalInterest,
             },
             AggregateTaxInterestLiability: netTaxLiab,
