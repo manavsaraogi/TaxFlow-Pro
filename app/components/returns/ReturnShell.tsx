@@ -214,6 +214,8 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate, fo
         };
         setReturnMeta(meta);
         setReturnData(data);
+        // Set default tab based on form type
+        if (data.formType === 'ITR-5') setActiveTab('itr5_general');
         const initialSummary = computeIncomeSummary(data);
         setSummary(initialSummary);
         setTaxComp(computeTaxLiability(initialSummary, meta.regime));
