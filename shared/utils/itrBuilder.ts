@@ -332,8 +332,44 @@ function computeIncomeSummary(rd: ReturnData): IncomeSummary {
   const stcg111A = toInt(rd.stcg?.TotalSTCG111A);
   const stcgOther = toInt(rd.stcg?.TotalSTCGOther);
 
+  // ITR-5: business income from Schedule BP Item48, fallback to P&L NetProfitBeforeTaxes
+  const itr5BP = (rd as any).itr5BP;
+  const itr5PL = (rd as any).itr5PL;
+  let itr5BusinessIncome = 0;
+  if (itr5BP || itr5PL) {
+    if (itr5BP) {
+      // Inline BP Item48 calc: Item46 - Item47
+      // Item46 = Item43 + Item44 - Item45, Item47 = bp.Item47
+      const bp = itr5BP;
+      const netPL = toInt(itr5PL?.NetProfitBeforeTaxes);
+      const Item1  = netPL;
+      const Item6  = Item1 + toInt(bp.Item2) + toInt(bp.Item3a) + toInt(bp.Item3b) + toInt(bp.Item3c);
+      const Item10 = Item6 + toInt(bp.Item7) + toInt(bp.Item8) + toInt(bp.Item9);
+      const Item13 = Item10 - toInt(bp.Item11) - toInt(bp.Item12i) - toInt(bp.Item12ii);
+      const Item26 = Item13
+        - toInt(bp.Item14a) - toInt(bp.Item14b) - toInt(bp.Item14c) - toInt(bp.Item14d)
+        - toInt(bp.Item15) - toInt(bp.Item16) - toInt(bp.Item17) - toInt(bp.Item18)
+        - toInt(bp.Item19) - toInt(bp.Item20) - toInt(bp.Item21) - toInt(bp.Item22)
+        - toInt(bp.Item23) - toInt(bp.Item24) - toInt(bp.Item25);
+      const Item33 = Item26 - toInt(bp.Item27) - toInt(bp.Item28) - toInt(bp.Item29)
+        - toInt(bp.Item30) - toInt(bp.Item31) - toInt(bp.Item32);
+      const Item34 = Item33 + toInt(bp.Item33a);
+      const Item35Total = toInt(bp.Item35i_44AD)+toInt(bp.Item35ii_44ADA)+toInt(bp.Item35iii_44AE)
+        +toInt(bp.Item35iv_44B)+toInt(bp.Item35v_44BB)+toInt(bp.Item35vi_44BBA)
+        +toInt(bp.Item35vii_44BBB)+toInt(bp.Item35viii_44D)+toInt(bp.Item35ix_44DB);
+      const Item36 = Item34 + Item35Total;
+      const Item42 = Item36 + toInt(bp.Item37) + toInt(bp.Item38) + toInt(bp.Item39)
+        + toInt(bp.Item40) + toInt(bp.Item41);
+      const Item46 = toInt(bp.Item43) + toInt(bp.Item44) - toInt(bp.Item45);
+      const Item47 = toInt(bp.Item47);
+      itr5BusinessIncome = Item46 - Item47;
+    } else {
+      itr5BusinessIncome = toInt(itr5PL?.NetProfitBeforeTaxes);
+    }
+  }
+
   // Slab-income base (STCG other assets included, LTCG/111A excluded — taxed separately)
-  const grossTotal = salary + hp + os + presumptive + stcgOther;
+  const grossTotal = salary + hp + os + presumptive + stcgOther + itr5BusinessIncome;
   const grossTotalIncCG = grossTotal + ltcg112A + stcg111A;
 
   const deductions = rd.deductions
@@ -346,7 +382,7 @@ function computeIncomeSummary(rd: ReturnData): IncomeSummary {
     IncomeFromSalary: salary,
     IncomeFromHP: hp,
     IncomeFromOtherSources: os,
-    IncomeFromBusinessProfession: presumptive || undefined,
+    IncomeFromBusinessProfession: (presumptive || itr5BusinessIncome) || undefined,
     GrossTotalIncome: grossTotal,
     GrossTotalIncomeIncLTCG112A: (ltcg112A > 0 || stcg111A > 0) ? grossTotalIncCG : undefined,
     TotalDeductions: deductions,

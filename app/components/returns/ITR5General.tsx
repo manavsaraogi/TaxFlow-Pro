@@ -443,12 +443,24 @@ interface Props {
   onSaved?: (data: ITR5GeneralState) => void;
 }
 
+// ── Sub-tab IDs ────────────────────────────────────────────────────────────────
+
+type GenTab = 'basic' | 'books' | 'members' | 'compliance';
+
+const GEN_TABS: { id: GenTab; label: string }[] = [
+  { id: 'basic',      label: 'Basic Info' },
+  { id: 'books',      label: 'Books & Audit' },
+  { id: 'members',    label: 'Members / Partners' },
+  { id: 'compliance', label: 'Compliance Questions' },
+];
+
 // ── Component ──────────────────────────────────────────────────────────────────
 
 export default function ITR5General({ returnId, initialData, onSaved }: Props) {
   const [form, setForm] = useState<ITR5GeneralState>({ ...EMPTY, ...initialData });
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
+  const [activeTab, setActiveTab] = useState<GenTab>('basic');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const formRef = useRef<ITR5GeneralState>({ ...EMPTY, ...initialData });
 
@@ -485,19 +497,40 @@ export default function ITR5General({ returnId, initialData, onSaved }: Props) {
   const updateMember = (i: number, patch: Partial<ITR5Member>) =>
     update({ members: form.members.map((m, idx) => idx === i ? { ...m, ...patch } : m) });
 
-  const inp = 'w-full border border-gray-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-blue-500 bg-white';
-  const lbl = 'block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide';
+  const inp = 'w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white';
+  const lbl = 'block text-sm font-medium text-gray-700 mb-1';
   const usesMMR = !form.sharesDeterminable || form.anyMemberExceedsExemption;
 
-  return (
-    <div className="grid grid-cols-2 gap-4 items-start">
+  // ── render helpers ──
+  const F2 = ({ label, req, children }: { label: string; req?: boolean; children: React.ReactNode }) => (
+    <div>
+      <label className={lbl}>{req && <Req />}{label}</label>
+      {children}
+    </div>
+  );
 
-      {/* ── LEFT COLUMN ── */}
-      <div className="space-y-3">
+  return (
+    <div>
+      {/* ── Sub-tab header ── */}
+      <div className="flex items-center justify-between border-b border-gray-200">
+        <div className="flex">
+          {GEN_TABS.map(t => (
+            <button key={t.id} onClick={() => setActiveTab(t.id)}
+              className={`px-5 py-2.5 text-sm font-medium border-b-2 transition-colors ${activeTab === t.id ? 'border-blue-600 text-blue-700 bg-blue-50' : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+        <span className="text-xs text-gray-400 pr-4">{saving ? 'Saving…' : savedAt ? `Saved ${savedAt.toLocaleTimeString()}` : ''}</span>
+      </div>
+
+      <div className="pt-4">
+
+      {/* ═══════════════════════ TAB: BASIC INFO ═══════════════════════ */}
+      {activeTab === 'basic' && <div className="space-y-6 max-w-4xl">
 
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-bold text-gray-800 uppercase tracking-wide">Part A — General Information</h2>
-          <span className="text-xs text-gray-400">{saving ? 'Saving…' : savedAt ? `Saved ${savedAt.toLocaleTimeString()}` : ''}</span>
         </div>
 
         {/* Organisation */}
@@ -620,7 +653,9 @@ export default function ITR5General({ returnId, initialData, onSaved }: Props) {
           </div>
         </Section>
 
-        {/* Books, Audit & Accounting */}
+      </div>}
+      {/* ═══ TAB: BOOKS & AUDIT (moved here) ═══ */}
+      {activeTab === 'books' && <div className="space-y-6 max-w-4xl">
         <Section title="Books of Accounts &amp; Audit">
           <div className="mb-2">
             <p className="text-xs text-gray-500 mb-1 font-medium"><Req />Method of Accounting</p>
@@ -692,6 +727,9 @@ export default function ITR5General({ returnId, initialData, onSaved }: Props) {
           )}
         </Section>
 
+      </div>}
+      {/* ═══ Continue basic tab after books ═══ */}
+      {activeTab === 'basic' && <div className="space-y-6 max-w-4xl">
         {/* Special Flags: IFSC / DPIIT / MSME / FII */}
         <Section title="Special Registrations &amp; Status">
           <YesNo label="Unit in IFSC — income solely in convertible foreign exchange" checked={form.hasIFSCUnit} onChange={v => update({ hasIFSCUnit: v })} />
@@ -832,13 +870,10 @@ export default function ITR5General({ returnId, initialData, onSaved }: Props) {
           )}
         </Section>
 
-      </div>{/* end left column */}
-
-      {/* ── RIGHT COLUMN ── */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-bold text-gray-800 uppercase tracking-wide">Part A-General (2) — Members &amp; Compliance</h2>
-        </div>
+      </div>}
+      {/* ═══════════════════════ TAB: MEMBERS ═══════════════════════ */}
+      {activeTab === 'members' && <div className="space-y-6 max-w-4xl">
+        <h2 className="text-sm font-bold text-gray-800 uppercase tracking-wide">Part A-General (2) — Members &amp; Partners</h2>
 
         {/* Tax Rate */}
         <Section title="Tax Rate (AOP / BOI / Trust)">
@@ -912,6 +947,11 @@ export default function ITR5General({ returnId, initialData, onSaved }: Props) {
           ))}
         </Section>
 
+      </div>}
+      {/* ═══════════════════════ TAB: COMPLIANCE ═══════════════════════ */}
+      {activeTab === 'compliance' && <div className="space-y-6 max-w-4xl">
+        <h2 className="text-sm font-bold text-gray-800 uppercase tracking-wide">Compliance Questions — Part A-General (2)</h2>
+
         {/* Transfer Pricing */}
         <Section title="Transfer Pricing (Part A-General 2)">
           <YesNo label="International transactions with associated enterprises u/s 92B" checked={form.hasInternationalTransactions92B} onChange={v => update({ hasInternationalTransactions92B: v, hasFiled3CEB: false, hasSecondaryAdjustment92CE: false })} warn />
@@ -950,7 +990,7 @@ export default function ITR5General({ returnId, initialData, onSaved }: Props) {
 
         {/* Special Deductions */}
         <Section title="Special Deductions Claimed (Ch. VI-A / 10AA)">
-          <p className="text-xs text-gray-400 mb-1">Tick whichever applies — the relevant schedule must be filled</p>
+          <p className="text-sm text-gray-500 mb-3">Tick whichever applies — the relevant schedule must be filled separately.</p>
           <YesNo label="10AA — SEZ unit export profits" checked={form.claims10AA} onChange={v => update({ claims10AA: v })} />
           <YesNo label="80-IA — Infrastructure / telecom / power / SEZ developer" checked={form.claims80IA} onChange={v => update({ claims80IA: v })} />
           <YesNo label="80-IB — Industrial undertakings / hotels / hospitals" checked={form.claims80IB} onChange={v => update({ claims80IB: v })} />
@@ -961,8 +1001,9 @@ export default function ITR5General({ returnId, initialData, onSaved }: Props) {
           <YesNo label="80P — Co-operative society income exemption" checked={form.claims80P} onChange={v => update({ claims80P: v })} />
         </Section>
 
-      </div>{/* end right column */}
+      </div>}{/* end compliance tab */}
 
+      </div>{/* end pt-4 wrapper */}
     </div>
   );
 }
@@ -977,14 +1018,14 @@ function YesNo({ label, checked, onChange, warn = false }: {
   label: string; checked: boolean; onChange: (v: boolean) => void; warn?: boolean;
 }) {
   return (
-    <div className={`flex items-center justify-between py-1 border-b border-gray-100 last:border-0 ${warn && checked ? 'bg-amber-50 -mx-2 px-2' : ''}`}>
-      <span className={`text-xs flex-1 pr-3 ${warn && checked ? 'text-amber-800 font-medium' : 'text-gray-700'}`}>{label}</span>
-      <div className="flex items-center gap-3 flex-shrink-0">
-        <label className={`flex items-center gap-1 cursor-pointer text-xs ${checked ? 'text-blue-700 font-bold' : 'text-gray-400'}`}>
-          <input type="radio" checked={checked} onChange={() => onChange(true)} className="accent-blue-600 w-3 h-3" /> Yes
+    <div className={`flex items-center justify-between py-2.5 border-b border-gray-100 last:border-0 ${warn && checked ? 'bg-amber-50 -mx-4 px-4 rounded' : ''}`}>
+      <span className={`text-sm flex-1 pr-6 leading-snug ${warn && checked ? 'text-amber-900 font-medium' : 'text-gray-700'}`}>{label}</span>
+      <div className="flex items-center gap-4 flex-shrink-0">
+        <label className={`flex items-center gap-1.5 cursor-pointer text-sm font-medium ${checked ? 'text-blue-700' : 'text-gray-400'}`}>
+          <input type="radio" checked={checked} onChange={() => onChange(true)} className="accent-blue-600" /> Yes
         </label>
-        <label className={`flex items-center gap-1 cursor-pointer text-xs ${!checked ? 'text-gray-700 font-bold' : 'text-gray-400'}`}>
-          <input type="radio" checked={!checked} onChange={() => onChange(false)} className="accent-gray-500 w-3 h-3" /> No
+        <label className={`flex items-center gap-1.5 cursor-pointer text-sm font-medium ${!checked ? 'text-gray-700' : 'text-gray-400'}`}>
+          <input type="radio" checked={!checked} onChange={() => onChange(false)} className="accent-gray-500" /> No
         </label>
       </div>
     </div>
@@ -995,12 +1036,12 @@ function Section({ title, action, children }: {
   title: string; action?: React.ReactNode; children: React.ReactNode;
 }) {
   return (
-    <div className="bg-white border border-gray-200 rounded p-3">
-      <div className="flex items-center justify-between mb-2">
-        <h3 className="text-xs font-bold text-gray-600 uppercase tracking-wide">{title}</h3>
+    <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+      <div className="flex items-center justify-between px-5 py-3 bg-gray-50 border-b border-gray-200">
+        <h3 className="text-sm font-semibold text-gray-700">{title}</h3>
         {action}
       </div>
-      <div className="space-y-1">{children}</div>
+      <div className="px-5 py-4">{children}</div>
     </div>
   );
 }
