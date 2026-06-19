@@ -439,6 +439,7 @@ function BusinessCodeSearch({ value, onChange, inputClass }: {
 
 interface Props {
   returnId: number;
+  assessmentYear?: string;   // e.g. '2025-26', '2024-25'
   initialData?: Partial<ITR5GeneralState> | null;
   onSaved?: (data: ITR5GeneralState) => void;
 }
@@ -456,7 +457,7 @@ const GEN_TABS: { id: GenTab; label: string; icon: string }[] = [
 
 // ── Component ──────────────────────────────────────────────────────────────────
 
-export default function ITR5General({ returnId, initialData, onSaved }: Props) {
+export default function ITR5General({ returnId, assessmentYear, initialData, onSaved }: Props) {
   const [form, setForm] = useState<ITR5GeneralState>({ ...EMPTY, ...initialData });
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
@@ -500,6 +501,19 @@ export default function ITR5General({ returnId, initialData, onSaved }: Props) {
   const inp = 'w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white';
   const lbl = 'block text-sm font-medium text-gray-700 mb-1';
   const usesMMR = !form.sharesDeterminable || form.anyMemberExceedsExemption;
+
+  // 139(8A) period dates derived from AY (e.g. '2025-26' → FY ends 31 Mar 2026)
+  const updPeriods = (() => {
+    const ay = assessmentYear ?? form.filingSection === '139(8A)' ? (assessmentYear ?? '2025-26') : '2025-26';
+    const endYear = parseInt((ay ?? '2025-26').split('-')[1] ?? '26') + 2000;
+    const ayEnd = new Date(endYear, 2, 31); // 31 March of end year
+    const p1End = new Date(ayEnd); p1End.setFullYear(ayEnd.getFullYear() + 1);
+    const p2End = new Date(ayEnd); p2End.setFullYear(ayEnd.getFullYear() + 2);
+    const today = new Date();
+    const fmt = (d: Date) => d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+    const currentPeriod = today <= p1End ? 1 : today <= p2End ? 2 : null;
+    return { p1End: fmt(p1End), p2End: fmt(p2End), currentPeriod };
+  })();
 
   // ── render helpers ──
   const F2 = ({ label, req, children }: { label: string; req?: boolean; children: React.ReactNode }) => (
@@ -592,23 +606,25 @@ export default function ITR5General({ returnId, initialData, onSaved }: Props) {
             <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3">
               <p className="text-xs font-bold text-amber-800 mb-1">⚠ Updated Return — Additional Tax u/s 140B</p>
               <p className="text-xs text-amber-700 mb-2">
-                An additional tax on the <strong>incremental tax + interest</strong> must be paid before filing:
+                An additional tax on the <strong>incremental tax + interest</strong> must be paid via challan (Sec 140B) before filing:
               </p>
               <div className="grid grid-cols-2 gap-2 mb-2">
-                <div className="rounded bg-white border border-amber-200 p-2 text-center">
-                  <p className="text-xs text-amber-600 font-semibold">Period 1</p>
+                <div className={`rounded border p-2 text-center ${updPeriods.currentPeriod === 1 ? 'bg-amber-100 border-amber-400' : 'bg-white border-amber-200'}`}>
+                  <p className="text-xs text-amber-600 font-semibold">Period 1 {updPeriods.currentPeriod === 1 && <span className="ml-1 bg-amber-500 text-white rounded px-1 text-[9px]">NOW</span>}</p>
                   <p className="text-lg font-bold text-amber-800">25%</p>
-                  <p className="text-[10px] text-amber-600">Filed within 12 months<br/>from end of AY</p>
+                  <p className="text-[10px] text-amber-600">On or before<br/>{updPeriods.p1End}</p>
                 </div>
-                <div className="rounded bg-white border border-amber-200 p-2 text-center">
-                  <p className="text-xs text-amber-600 font-semibold">Period 2</p>
+                <div className={`rounded border p-2 text-center ${updPeriods.currentPeriod === 2 ? 'bg-amber-100 border-amber-400' : 'bg-white border-amber-200'}`}>
+                  <p className="text-xs text-amber-600 font-semibold">Period 2 {updPeriods.currentPeriod === 2 && <span className="ml-1 bg-amber-500 text-white rounded px-1 text-[9px]">NOW</span>}</p>
                   <p className="text-lg font-bold text-amber-800">50%</p>
-                  <p className="text-[10px] text-amber-600">Filed 12–24 months<br/>from end of AY</p>
+                  <p className="text-[10px] text-amber-600">On or before<br/>{updPeriods.p2End}</p>
                 </div>
               </div>
+              {updPeriods.currentPeriod === null && (
+                <p className="text-[10px] font-semibold text-red-600 mb-1">⛔ Updated return window has expired for this AY.</p>
+              )}
               <p className="text-[10px] text-amber-600">
-                Example: AY 2025-26 → Period 1 ends 31 Mar 2027, Period 2 ends 31 Mar 2028.
-                Pay the challan (Sec 140B) and enter it under Tax Payments before generating JSON.
+                Enter the 140B challan under <strong>Tax Payments</strong> before generating JSON.
               </p>
             </div>
           )}

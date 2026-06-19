@@ -786,6 +786,7 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate, fo
             <div className="p-6">
               <ITR5General
                 returnId={returnMeta.id}
+                assessmentYear={returnMeta.assessmentYear}
                 initialData={(returnData as any)?.itr5General}
                 onSaved={(data) => {
                   setReturnData((prev: any) => ({ ...prev, itr5General: data }));
