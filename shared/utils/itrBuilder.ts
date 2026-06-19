@@ -653,7 +653,7 @@ function buildTDSOnSalaries(tds: ScheduleTDS) {
 
 function buildTDSOnOtherIncome(tds: ScheduleTDS) {
   return {
-    TDSonOthThanSal: tds.TDSOnOtherIncome.map((e: TDSOtherEntry) => ({
+    TDSOthThanSalaryDtls: tds.TDSOnOtherIncome.map((e: TDSOtherEntry) => ({
       EmployerOrDeductorOrCollectDetl: {
         TAN: e.EmployerOrDeductorDetails.TAN,
         EmployerName: e.EmployerOrDeductorDetails.EmployerName,
@@ -670,7 +670,7 @@ function buildTDSOnOtherIncome(tds: ScheduleTDS) {
 
 function buildTDS16C(tds: ScheduleTDS) {
   return {
-    TDS3Details: tds.TDSOnRent16C.map((e: TDS16CEntry) => ({
+    TDS3onOthThanSalDtls: tds.TDSOnRent16C.map((e: TDS16CEntry) => ({
       PANofTenant: e.PANofTenant,
       AadhaarofTenant: e.AadhaarofTenant,
       TDSSection: e.TDSSection,
@@ -680,7 +680,7 @@ function buildTDS16C(tds: ScheduleTDS) {
       TDSDeducted: toInt(e.TDSDeducted),
       TDSClaimed: toInt(e.TDSClaimed),
     })),
-    TotalTDS3Details: toInt(tds.TotalTDSOnRent),
+    TotalTDS3OnOthThanSal: toInt(tds.TotalTDSOnRent),
   };
 }
 
@@ -776,17 +776,19 @@ function buildPersonalInfo(client: BuilderClient, opts?: { includeStatus?: strin
 // VERIFICATION BUILDER
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Valid ITR-5 capacity codes: MP DP PA PO ME LQ RP TR EX RA AS OA
+const VALID_ITR5_CAPACITY = new Set(['MP','DP','PA','PO','ME','LQ','RP','TR','EX','RA','AS','OA']);
 function buildVerification(v: Verification, filingDate: string, pan?: string) {
+  const capacity = VALID_ITR5_CAPACITY.has(v.Capacity ?? '') ? v.Capacity : 'PO';
   return {
     Declaration: {
-      AssesseeVerName: v.AssesseeVerName,
-      FatherName: v.FatherName,
-      PlaceVerSign: v.PlaceVerSign,
-      DateVerSign: v.DateVerSign || filingDate,
-      Capacity: v.Capacity,
+      AssesseeVerName:  v.AssesseeVerName || 'Authorised Signatory',
+      FatherName:       v.FatherName || '-',
+      AssesseeVerPAN:   pan ?? '',
+      Capacity:         capacity,
+      Place:            (v as any).Place || (v as any).PlaceVerSign || 'Delhi',
+      Date:             (v as any).Date || (v as any).DateVerSign || filingDate,
     },
-    ...(pan ? { AssesseeVerPAN: pan } : {}),
-    Verification: 'I',
   };
 }
 
@@ -1928,10 +1930,10 @@ function buildITR5(input: BuildITRInput): object {
   const totalIncome   = Math.max(0, grossTotalIncome - viaDeductions);
 
   const cylaInc = (n: number) => ({
-    IncCYLA: { IncOfCurYrUnderThatHead: n, OthSrcLossNoRaceHorseSetoff: 0, IncOfCurYrAfterSetOff: n },
+    IncCYLA: { IncOfCurYrUnderThatHead: n, HPlossCurYrSetoff: 0, BusLossSetoff: 0, OthSrcLossNoRaceHorseSetoff: 0, IncOfCurYrAfterSetOff: n },
   });
   const bflaRow = (n: number) => ({
-    IncBFLA: { IncOfCurYrAfterCYLABFLA: n, BFlossPrevYrUndSameHeadSetoff: 0, IncAfterBFLA: n },
+    IncBFLA: { IncOfCurYrUndHeadFromCYLA: n, BFlossPrevYrUndSameHeadSetoff: 0, BFUnabsorbedDeprSetoff: 0, BFAllUs35Cl4Setoff: 0, IncOfCurYrAfterSetOffBFLosses: n },
   });
 
   // ── Balance Sheet totals ──────────────────────────────────────────────────
@@ -2010,7 +2012,7 @@ function buildITR5(input: BuildITRInput): object {
         },
         Form_ITR5: {
           FormName:       'ITR-5',
-          Description:    'For persons other than- (i) individual, (ii) HUF, (iii) company and (iv) person filing Form ITR-7',
+          Description:    'For persons other than individual, HUF, company and person filing ITR-7',
           AssessmentYear: effectiveAYYear,
           SchemaVer:      'Ver1.0',
           FormVer:        'Ver1.0',
@@ -2072,11 +2074,13 @@ function buildITR5(input: BuildITRInput): object {
             InvstmntFundRefrdSec115UB: 'N',
             ForeignExchangeFlag:       'N',
             StartUpDPIITFlag:          'N',
+            InterMinisterialCertFlag:  'N',
             ifMSME:                    gen.isMSME ? 'Y' : 'N',
             FiiFpiFlag:                gen.isFIIFPI ? 'Y' : 'N',
             AsseseeRepFlg:             gen.isRepresentativeAssessee ? 'Y' : 'N',
             PartnerInFirmFlg:          gen.isPartnerInFirm ? 'Y' : 'N',
             HeldUnlistedEqShrPrYrFlg:  gen.hasUnlistedEquityShares ? 'Y' : 'N',
+            ItrFilingDueDate:          '2025-10-31',
           },
         },
         PartA_GEN2: {
@@ -2246,6 +2250,7 @@ function buildITR5(input: BuildITRInput): object {
                 },
               },
               TotCurrAssetLoanAdv: totCurrAssetLoanAdv,
+              NetCurrAsset: totCurrAssetLoanAdv - (totCurrLiabilities + totProvisions),
               CurrLiabilitiesProv: {
                 CurrLiabilities: {
                   SundryCreditorDtls: {
@@ -2269,10 +2274,8 @@ function buildITR5(input: BuildITRInput): object {
                 TotCurrLiabilitiesProv: totCurrLiabilities + totProvisions,
               },
             },
-            MiscExpndtr: toI(bs.MiscExpenditure),
-            DeferredTaxAsset: toI(bs.DeferredTaxAsset),
-            DebitBalPLAccount: toI(bs.DebitPLBalance),
-            TotAppFund: totFixedAsset + totInvestments
+            MiscAdjust: toI(bs.MiscExpenditure) + toI(bs.DeferredTaxAsset) + toI(bs.DebitPLBalance),
+            TotFundApply: totFixedAsset + totInvestments
               + totCurrAssetLoanAdv - (totCurrLiabilities + totProvisions)
               + toI(bs.MiscExpenditure) + toI(bs.DeferredTaxAsset) + toI(bs.DebitPLBalance),
           },
@@ -2309,6 +2312,13 @@ function buildITR5(input: BuildITRInput): object {
             },
             TotCreditsToPL: toI(pl.N65id) + toI(pl.N65iid),
           },
+          DebitsToPL: { DebitPlAcnt: 0, TaxProvAppr: 0 },
+          PersumptiveInc44AD:       toI(pl.BizNetProfit),
+          PersumptiveInc44ADA:      toI(pl.ProfNetProfit),
+          TotalPrsumptvIncUs44E:    0,
+          NoBooksOfAccPL:           toI(pl.BizNetProfit) + toI(pl.ProfNetProfit),
+          TurnverFrmSpecActivity:   0,
+          NetIncomeFrmSpecActivity: 0,
         } : {
           CreditsToPL: {
             GrossProfitTrnsfFrmTrdAcc: grossProfitFromTrading,
@@ -2329,46 +2339,16 @@ function buildITR5(input: BuildITRInput): object {
             TotCreditsToPL: totCreditsToPL,
           },
           DebitsToPL: {
-            FreightOutward:     toI(pl.PL16),
-            ConsumpStoresSpares: toI(pl.PL17),
-            PowerAndFuel:       toI(pl.PL18),
-            Rents:              toI(pl.PL19),
-            RepairsBuilding:    toI(pl.PL20),
-            RepairsMachinery:   toI(pl.PL21),
-            TotalEmployeeComp:  toI(pl.PL22xi),
-            TotalInsurance:     toI(pl.PL23i) + toI(pl.PL23ii) + toI(pl.PL23iii) + toI(pl.PL23iv),
-            WorkmenWelfare:     toI(pl.PL24),
-            Entertainment:      toI(pl.PL25),
-            Hospitality:        toI(pl.PL26),
-            Conference:         toI(pl.PL27),
-            SalesPromotion:     toI(pl.PL28),
-            Advertisement:      toI(pl.PL29),
-            TotalCommission:    toI(pl.PL30i) + toI(pl.PL30ii),
-            Royalty:            toI(pl.PL31i) + toI(pl.PL31ii),
-            TotalProfFees:      toI(pl.PL32i) + toI(pl.PL32ii),
-            HotelBoardingLodging: toI(pl.PL33),
-            TravellingExpenses: toI(pl.PL34),
-            ForeignTravelling:  toI(pl.PL35),
-            ConveyanceExpenses: toI(pl.PL36),
-            TelephoneExpenses:  toI(pl.PL37),
-            GuestHouse:         toI(pl.PL38),
-            ClubExpenses:       toI(pl.PL39),
-            FestivalExpenses:   toI(pl.PL40),
-            Scholarship:        toI(pl.PL41),
-            Gift:               toI(pl.PL42),
-            Donation:           toI(pl.PL43),
-            TotalRatesAndTaxes: toI(pl.PL44x),
-            AuditFee:           toI(pl.PL45),
-            PartnersSalary:     toI(pl.PL46),
-            OtherExpenses:      toI(pl.PL47),
-            TotalBadDebts:      toI(pl.PL48iv),
-            ProvisionBadDebts:  toI(pl.PL49),
-            OtherProvisions:    toI(pl.PL50),
-            InterestPaid:       toI(pl.PL52ia) + toI(pl.PL52ib) + toI(pl.PL52iia) + toI(pl.PL52iib),
-            DepreciationPL:     toI(pl.PL53),
-            NetProfitBeforeTax: toI(pl.NetProfitBeforeTaxes),
-            TotDebitsToPL:      totDebitsToPL,
+            DebitPlAcnt: totDebitsExpenses,
+            TaxProvAppr: toI(pl.PL49) + toI(pl.PL50),
           },
+          // Required fields for P&L (set to 0 when regular books are maintained)
+          PersumptiveInc44AD:      0,
+          PersumptiveInc44ADA:     0,
+          TotalPrsumptvIncUs44E:   0,
+          NoBooksOfAccPL:          0,
+          TurnverFrmSpecActivity:  0,
+          NetIncomeFrmSpecActivity: 0,
         },
 
         // ── ScheduleBP (regular books case) ──────────────────────────────
@@ -2429,17 +2409,66 @@ function buildITR5(input: BuildITRInput): object {
           : { PropertyDetails: [], TotalIncomeChargeableUnHP: 0 },
 
         // ── ScheduleOS ────────────────────────────────────────────────────
-        ScheduleOS: {
-          OtherSrcThanOwnRaceHorse: Math.max(0, osIncome),
-          OthSrcItems: Array.isArray(rd.otherSources?.OtherSourceItems)
-            ? rd.otherSources!.OtherSourceItems.map(buildOtherSourceItem)
-            : [],
-          DeductionUs57iia: toI(rd.otherSources?.DeductionUs57iia),
-          IncomeOthSrc:     Math.max(0, osIncome),
-        },
+        ScheduleOS: (() => {
+          const osData        = rd.otherSources ?? ({} as any);
+          const interestGross = toI(osData.IntrstFrmSavingBank) + toI(osData.IntrstFrmTermDeposit)
+            + toI(osData.IntrstFrmIncmTaxRefund) + toI(osData.IntrstFrmOthers)
+            + toI(osData.InterestIncome);       // fallback flat field
+          const dividendGross = toI(osData.DividendIncome);
+          const deductions    = toI(osData.DeductionUs57iia);
+          const grossInc      = Math.max(0, toI(osData.IncomeFromOtherSources));
+          const netInc        = Math.max(0, grossInc - deductions);
+          return {
+            IncOthThanOwnRaceHorse: {
+              GrossIncChrgblTaxAtAppRate: grossInc,
+              DividendGross:             dividendGross,
+              DividendOthThan22e:        dividendGross,
+              Dividend22e:               0,
+              InterestGross:             interestGross,
+              IntrstFrmSavingBank:       toI(osData.IntrstFrmSavingBank),
+              IntrstFrmTermDeposit:      toI(osData.IntrstFrmTermDeposit),
+              IntrstFrmIncmTaxRefund:    toI(osData.IntrstFrmIncmTaxRefund),
+              NatofPassThrghIncome:      0,
+              IntrstFrmOthers:           toI(osData.IntrstFrmOthers),
+              RentFromMachPlantBldgs:    toI(osData.RentFromMachPlantBldgs),
+              Tot562x:                   0,
+              Aggrtvaluewithoutcons562x: 0,
+              Immovpropwithoutcons562x:  0,
+              Immovpropinadeqcons562x:   0,
+              Anyotherpropwithoutcons562x: 0,
+              Anyotherpropinadeqcons562x: 0,
+              AnyOtherIncome:            toI(osData.AnyOtherIncome),
+              IncChargeableSpecialRates: 0,
+              LtryPzzlChrgblUs115BB:     0,
+              IncChrgblUs115BBE:         0,
+              CashCreditsUs68:           0,
+              UnExplndInvstmntsUs69:     0,
+              UnExplndMoneyUs69A:        0,
+              UnDsclsdInvstmntsUs69B:    0,
+              UnExplndExpndtrUs69C:      0,
+              AmtBrwdRepaidOnHundiUs69D: 0,
+              OthersGross:               0,
+              PassThrIncOSChrgblSplRate: 0,
+              Deductions:                deductions,
+              BalanceNoRaceHorse:        netInc,
+            },
+            TotOthSrcNoRaceHorse:       netInc,
+            IncFromOwnHorse:            0,
+            IncChargeableFrmOthSrc:     netInc,
+            IncFrmLottery:              0,
+            IncFrmOnGames:              0,
+            DividendIncUs115BBDA:       0,
+            DividendIncUs115BBDAaiii:   0,
+            DividendIncUs115A1ai:       0,
+            DividendIncUs115AC:         0,
+            DividendIncUs115AD1iDiv:    0,
+            DividendIncUs115AD1IBd:     0,
+            DividendDTAA:               0,
+          };
+        })(),
 
         // ── ScheduleCG ────────────────────────────────────────────────────
-        ScheduleCGFor23: {
+        ScheduleCG: {
           ShortTermCapGainFor23: (() => {
             const stcg = rd.stcg;
             const otherAssets = stcg?.OtherEntries ?? [];
@@ -2507,20 +2536,22 @@ function buildITR5(input: BuildITRInput): object {
               TotalLTCG:                  ltcg112A,
             };
           })(),
-          SumOfCGIncm:        totalCG,
-          IncmFromVDATrnsf:   0,
-          TotScheduleCGFor23: totalCG,
+          SumOfCGIncm:     totalCG,
+          IncmFromVDATrnsf: 0,
+          TotScheduleCG:   totalCG,
         },
 
         // ── ScheduleSI (Special Income rates) ────────────────────────────
-        ScheduleSI: {
-          SIDetails: [
-            ...(stcg111A > 0 ? [{ SecCode: '1A', SplRateInc: stcg111A, SplRateIncTax: taxOnSTCG111A }] : []),
-            ...(ltcg112A > 0 ? [{ SecCode: '112A', SplRateInc: ltcg112A, SplRateIncTax: taxOnLTCG112A }] : []),
-          ],
-          TotSplRateInc:    stcg111A + ltcg112A,
-          TotSplRateIncTax: taxOnSTCG111A + taxOnLTCG112A,
-        },
+        ...(stcg111A > 0 || ltcg112A > 0 ? {
+          ScheduleSI: {
+            SplCodeRateTax: [
+              ...(stcg111A > 0 ? [{ SecCode: '1A', SplRateInc: stcg111A, SplRateIncTax: taxOnSTCG111A }] : []),
+              ...(ltcg112A > 0 ? [{ SecCode: '2A', SplRateInc: ltcg112A, SplRateIncTax: taxOnLTCG112A }] : []),
+            ],
+            TotSplRateInc:    stcg111A + ltcg112A,
+            TotSplRateIncTax: taxOnSTCG111A + taxOnLTCG112A,
+          },
+        } : {}),
 
         // ── ScheduleVIA ───────────────────────────────────────────────────
         ...(rd.deductions ? {
@@ -2529,56 +2560,73 @@ function buildITR5(input: BuildITRInput): object {
 
         // ── ScheduleGST ───────────────────────────────────────────────────
         ScheduleGST: {
-          GSTINDtls: Array.isArray(gen.gstDetails)
-            ? gen.gstDetails.map((g: any) => ({
-                GSTIN:              g.gstin ?? '',
-                GSTTurnover:        toI(g.turnover),
-                NameOfBusiness:     g.businessName ?? '',
-                RegistrationStatus: g.registrationStatus ?? 'REG',
-              }))
-            : [],
-          TotTurnover: toI(gen.gstTurnover),
+          ...(Array.isArray(gen.gstDetails) && gen.gstDetails.length > 0 ? {
+            TurnoverGrsRcptForGSTIN: gen.gstDetails.map((g: any) => ({
+              GSTINNo:              g.gstin ?? '',
+              AmtTurnGrossRcptGSTIN: toI(g.turnover),
+            })),
+          } : {}),
         },
 
         // ── ScheduleCYLA ─────────────────────────────────────────────────
         ScheduleCYLA: {
-          HP: cylaInc(Math.max(0, hpIncome)),
+          HP:                   cylaInc(Math.max(0, hpIncome)),
+          BusProfExclSpecProf:  cylaInc(Math.max(0, bpIncome)),
+          SpeculationIncome:    cylaInc(0),
+          SpecifiedBusIncome:   cylaInc(0),
+          STCG15Per:    cylaInc(0),
           STCG20Per:    cylaInc(stcg111A),
           STCG30Per:    cylaInc(0),
           STCGAppRate:  cylaInc(stcgOther),
           STCGDTAARate: cylaInc(0),
+          LTCG10Per:    cylaInc(0),
           LTCG12_5Per:  cylaInc(ltcg112A),
+          LTCG20Per:    cylaInc(0),
           LTCGDTAARate: cylaInc(0),
-          OthSrcExclRaceHorse: cylaInc(Math.max(0, osIncome)),
-          BusinessIncome: cylaInc(Math.max(0, bpIncome)),
+          OthSrcExclRaceHorseLottery: cylaInc(Math.max(0, osIncome)),
           TotalCurYr: {
-            TotalCurYrInc:  grossTotalIncome,
-            TotalCurYrLoss: 0,
+            TotHPlossCurYr:              0,
+            TotBusLoss:                  0,
+            TotOthSrcLossNoRaceHorse:    0,
           },
-          TotalLossSetOff:  { TotalLossSetOff: 0 },
-          LossRemAftSetOff: { LossRemainingAfterSetOff: 0 },
+          TotalLossSetOff: {
+            TotHPlossCurYrSetoff:            0,
+            TotBusLossSetoff:                0,
+            TotOthSrcLossNoRaceHorseSetoff:  0,
+          },
+          LossRemAftSetOff: {
+            BalHPlossCurYrAftSetoff:            0,
+            BalBusLossAftSetoff:                0,
+            BalOthSrcLossNoRaceHorseAftSetoff:  0,
+          },
         },
 
         // ── ScheduleBFLA ─────────────────────────────────────────────────
         ScheduleBFLA: {
-          HP:           bflaRow(Math.max(0, hpIncome)),
+          HP:                  bflaRow(Math.max(0, hpIncome)),
+          BusProfExclSpecProf: bflaRow(Math.max(0, bpIncome)),
+          SpeculationIncome:   bflaRow(0),
+          SpecifiedBusIncome:  bflaRow(0),
+          STCG15Per:    bflaRow(0),
           STCG20Per:    bflaRow(stcg111A),
           STCG30Per:    bflaRow(0),
           STCGAppRate:  bflaRow(stcgOther),
           STCGDTAARate: bflaRow(0),
+          LTCG10Per:    bflaRow(0),
           LTCG12_5Per:  bflaRow(ltcg112A),
+          LTCG20Per:    bflaRow(0),
           LTCGDTAARate: bflaRow(0),
-          BusinessIncome: bflaRow(Math.max(0, bpIncome)),
+          OthSrcExclRaceHorse: bflaRow(Math.max(0, osIncome)),
           IncomeOfCurrYrAftCYLABFLA: grossTotalIncome,
-          TotalBFLossSetOff: 0,
+          TotalBFLossSetOff: {
+            TotBFLossSetoff:        0,
+            TotUnabsorbedDeprSetoff: 0,
+            TotAllUs35cl4Setoff:    0,
+          },
         },
 
         // ── ScheduleCFL ───────────────────────────────────────────────────
-        ScheduleCFL: {
-          LossCFFromPrev8: { TotalLossCFFromPrev8: 0 },
-          TotalOfBFLosses: { TotalBFLoss: 0 },
-          CurrentYrLoss:   { TotalCurrentYrLoss: 0 },
-        },
+        ScheduleCFL: {},
 
         // ── ScheduleEI (Exempt Income) ────────────────────────────────────
         ScheduleEI: (() => {
@@ -2586,27 +2634,46 @@ function buildITR5(input: BuildITRInput): object {
           const othItems = Array.isArray(gen.exemptIncome) ? gen.exemptIncome : [];
           const othTotal = othItems.reduce((s: number, item: any) => s + toI(item.amount), 0);
           return {
-            ExemptIncAgri:      agriInc,
-            ExemptIncAgriType:  [],
-            ExemptIncAgriTotal: agriInc,
-            ExemptIncOthers:    othItems,
-            TotExemptInc:       agriInc + othTotal,
+            InterestInc:           0,
+            GrossAgriRecpt:        agriInc,
+            ExpIncAgri:            0,
+            UnabAgriLossPrev8:     0,
+            NetAgriIncRelateToRule7: agriInc,
+            NetAgriIncOrOthrIncRule7: agriInc,
+            OthersInc:             {
+              NatureofDescDivName: 'Dividend',
+              OthDividendAmt:      0,
+            },
+            Others:                othTotal,
+            IncChrgblAsPerDTAA:    0,
+            PassThrIncNotChrgblTax: 0,
+            TotalExemptInc:        agriInc + othTotal,
           };
         })(),
 
         // ── PartB-TI ─────────────────────────────────────────────────────
         'PartB-TI': {
-          IncomeFromHP:  Math.max(0, hpIncome),
+          IncomeFromHP: Math.max(0, hpIncome),
+          ProfBusGain: {
+            ProfGainNoSpecBus:    Math.max(0, bpIncome),
+            ProfGainSpecBus:      0,
+            ProfGainSpecifiedBus: 0,
+            IncChrgblTaxSplRate:  0,
+            TotProfBusGain:       Math.max(0, bpIncome),
+          },
           CapGain: {
             ShortTerm: {
-              ShortTerm20Per:       stcg111A,
-              ShortTerm30Per:       0,
-              ShortTermAppRate:     stcgOther,
+              ShortTerm15Per:      0,
+              ShortTerm20Per:      stcg111A,
+              ShortTerm30Per:      0,
+              ShortTermAppRate:    stcgOther,
               ShortTermSplRateDTAA: 0,
-              TotalShortTerm:       totalSTCG,
+              TotalShortTerm:      totalSTCG,
             },
             LongTerm: {
+              LongTerm10Per:       0,
               LongTerm12_5Per:     ltcg112A,
+              LongTerm20Per:       0,
               LongTermSplRateDTAA: 0,
               TotalLongTerm:       ltcg112A,
             },
@@ -2620,82 +2687,96 @@ function buildITR5(input: BuildITRInput): object {
             FromOwnRaceHorse:         0,
             TotIncFromOS:             Math.max(0, osIncome),
           },
-          ProfitsAndGainsFromBP: Math.max(0, bpIncome),
           TotalTI:                  grossTotalIncome,
           CurrentYearLoss:          0,
           BalanceAfterSetoffLosses: grossTotalIncome,
           BroughtFwdLossesSetoff:   0,
           GrossTotalIncome:         grossTotalIncome,
           IncChargeTaxSplRate111A112: stcg111A + ltcg112A,
-          DeductionsUnderScheduleVIA: viaDeductions,
+          DeductionsUndSchVIADtl: {
+            PartBchapterVIA: buildUsrDeductions(rd.deductions ?? ({} as any)),
+            TotalChapVIADeductions: viaDeductions,
+          },
+          DeductionsUnder10Aor10AA: 0,
           TotalIncome:               totalIncome,
           IncChargeableTaxSplRates:  stcg111A + ltcg112A,
           NetAgricultureIncomeOrOtherIncomeForRate: 0,
           AggregateIncome:           totalIncome,
           LossesOfCurrentYearCarriedFwd: 0,
-          DeemedIncomeUs115JC:       deemedIncome115JC,
         },
 
         // ── PartB_TTI ─────────────────────────────────────────────────────
         PartB_TTI: {
-          TaxPayDeemedTotIncUs115JC:  taxDeemed115JC,
-          Surcharge:                  surcharge,
-          HealthEduCess:              cess,
-          TotalTaxPayablDeemedTotInc: 0,
           ComputationOfTaxLiability: {
-            TaxPayableOnTI:               taxPayableOnTI,
-            Rebate87A:                    0,
-            TaxPayableOnRebate:           taxPayableOnTI,
-            Surcharge25ofSI:              surchargeOnCG,
-            SurchargeOnAboveCrore:        surchargeOnNormal,
-            Surcharge25ofSIBeforeMarginal: surchargeOnCG,
-            SurchargeOnAboveCroreBeforeMarginal: surchargeOnNormal,
-            TotalSurcharge:               surcharge,
-            EducationCess:                cess,
-            GrossTaxLiability:            grossTaxLiab,
-            GrossTaxPayable:              grossTaxLiab,
-            GrossTaxPay:                  grossTaxLiab,
-            CreditUS115JD:                0,
-            TaxPayAfterCreditUs115JD:     grossTaxLiab,
-            TaxRelief:                    0,
-            NetTaxLiability:              netTaxLiab,
-            IntrstPay: {
-              IntrstPayUs234A: int234A,
-              IntrstPayUs234B: int234B,
-              IntrstPayUs234C: int234C,
-              IntrstPayUs234F: int234F,
-              TotalIntrstPay:  totalInterest,
+            TaxPayableOnDeemedTI: {
+              TaxDeemedTISec115JC: taxDeemed115JC,
+              Surcharge:           Math.round(taxDeemed115JC * normalSurRate),
+              EducationCess:       Math.round(taxDeemed115JC * 1.04 * 0.04),
+              TotalTax:            amtApplies ? amtLiability : 0,
             },
-            AggregateTaxInterestLiability: netTaxLiab,
+            TaxPayableOnTI: {
+              TaxAtNormalRates:                 taxOnNormal,
+              TaxAtSpecialRates:                taxOnSTCG111A + taxOnLTCG112A,
+              RebateOnAgriInc:                  0,
+              TaxPayableOnTotInc:               taxPayableOnTI,
+              Surcharge25ofSI:                  surchargeOnCG,
+              SurchargeOnTaxPayable:            surchargeOnNormal,
+              Surcharge25ofSIBeforeMarginal:    surchargeOnCG,
+              SurchargeOnTaxPayableBeforeMarginal: surchargeOnNormal,
+              TotalSurcharge:                   surcharge,
+              EducationCess:                    cess,
+              GrossTaxLiability:                grossTaxLiab,
+            },
+            GrossTaxPayable:   grossTaxLiab,
+            CreditUS115JD:     0,
+            TaxPaidUnderCredit: 0,
+            TaxRelief: {
+              Section90:    0,
+              Section91:    0,
+              TotTaxRelief: 0,
+            },
+            NetTaxLiability: netTaxLiab,
+            IntrstPay: {
+              IntrstPayUs234A:  int234A,
+              IntrstPayUs234B:  int234B,
+              IntrstPayUs234C:  int234C,
+              LateFilingFee234F: int234F,
+              TotalIntrstPay:   totalInterest,
+            },
+            AggregateTaxInterestLiability: netTaxLiab + totalInterest,
           },
           TaxPaid: {
             TaxesPaid: {
               AdvanceTax:        advTax,
-              TDS2:              tdsOther,
+              TDS:               tdsOther,
               TCS:               tcs,
               SelfAssessmentTax: satTax,
               TotalTaxesPaid:    totalTaxPaid,
             },
+            BalTaxPayable: Math.max(0, netTaxLiab + totalInterest - totalTaxPaid),
           },
           Refund: {
             RefundDue: refund,
             BankAccountDtls: {
-              PriBankDetails: {
-                IFSCCode:      primaryBank?.ifscCode ?? '',
-                BankName:      primaryBank?.bankName ?? '',
-                BankAccountNo: primaryBank?.accountNumber ?? '',
-                AccountType:   (primaryBank?.accountType as string) ?? 'SB',
-              },
+              BankDtlsFlag: primaryBank ? 'Y' : 'N',
+              ...(primaryBank ? {
+                AddtnlBankDetails: [{
+                  IFSCCode:      primaryBank.ifscCode ?? '',
+                  BankName:      primaryBank.bankName ?? '',
+                  BankAccountNo: primaryBank.accountNumber ?? '',
+                  AccountType:   (primaryBank.accountType as string) ?? 'SB',
+                }],
+              } : {}),
             },
           },
-          AssetOutIndiaFlag: 'N',
+          AssetOutsideIndiaFlg: 'NO',
         },
 
         // ── ScheduleTDS2 (TDS on income other than salary) ───────────────
-        ScheduleTDS2: rd.tds ? buildTDSOnOtherIncome(rd.tds) : { TDSonOthThanSal: [], TotalTDSonOthThanSals: 0 },
+        ScheduleTDS2: rd.tds ? buildTDSOnOtherIncome(rd.tds) : { TotalTDSonOthThanSals: 0 },
 
         // ── ScheduleTDS3 (TDS u/s 194IB rent) ────────────────────────────
-        ScheduleTDS3Dtls: rd.tds ? buildTDS16C(rd.tds) : { TDS3Details: [], TotalTDS3Details: 0 },
+        ScheduleTDS3: rd.tds ? buildTDS16C(rd.tds) : { TotalTDS3OnOthThanSal: 0 },
 
         // ── ScheduleIT (advance tax / self-assessment challans) ───────────
         ScheduleIT: rd.taxPayments ? buildTaxPayments(rd.taxPayments) : { TotalTaxPayments: 0 },
