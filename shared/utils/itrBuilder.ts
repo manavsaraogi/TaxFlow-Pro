@@ -486,14 +486,18 @@ function computeTaxLiability(
   const cess = Math.round(taxPlusSurcharge * 0.04);
   const grossTaxLiability = taxPlusSurcharge + cess;
 
-  // 139(8A) updated return — additional tax u/s 140B
+  // 139(8A) updated return — additional tax u/s 140B (preview; base = gross tax, no TDS data here)
   let additionalTax140B: number | undefined;
   if (itr5?.filingSection === '139(8A)') {
     const updAY = itr5.updatedAY ?? '2024-25';
     const endYear = parseInt(updAY.split('-')[1] ?? '25') + 2000;
-    const p1End = new Date(endYear + 1, 2, 31); // 31 Mar, 12 months after AY end
-    const rate = new Date() <= p1End ? 0.25 : 0.50;
-    additionalTax140B = Math.round(grossTaxLiability * rate);
+    const p1End = new Date(endYear + 1, 2, 31);
+    const p2End = new Date(endYear + 2, 2, 31);
+    const p3End = new Date(endYear + 3, 2, 31);
+    const p4End = new Date(endYear + 4, 2, 31);
+    const now = new Date();
+    const rate = now <= p1End ? 0.25 : now <= p2End ? 0.50 : now <= p3End ? 0.60 : now <= p4End ? 0.70 : 0;
+    if (rate > 0) additionalTax140B = Math.round(grossTaxLiability * rate);
   }
 
   const totalWithPenalty = grossTaxLiability + (additionalTax140B ?? 0);
@@ -1980,6 +1984,27 @@ function buildITR5(input: BuildITRInput): object {
   const netTaxLiab   = Math.max(0, grossTaxLiab + totalInterest - totalTaxPaid);
   const refund       = Math.max(0, totalTaxPaid - grossTaxLiab - totalInterest);
 
+  // 139(8A) PartB-ATI: aggregate liability = balance payable (after TDS), base for 140B
+  const balPayableForATI = Math.max(0, netTaxLiab + totalInterest - totalTaxPaid);
+  let atiAddtnlTax = 0;
+  let atiNetPayable = 0;
+  let atiTaxDue = 0;
+  if (upd) {
+    const updAY = upd.updatedAY ?? itr5AY;
+    const endYear = parseInt(updAY.split('-')[1] ?? '25') + 2000;
+    const p1End = new Date(endYear + 1, 2, 31);
+    const p2End = new Date(endYear + 2, 2, 31);
+    const p3End = new Date(endYear + 3, 2, 31);
+    const p4End = new Date(endYear + 4, 2, 31);
+    const now = new Date(date);
+    const atiRate = now <= p1End ? 0.25 : now <= p2End ? 0.50 : now <= p3End ? 0.60 : now <= p4End ? 0.70 : 0;
+    const aggrLiability = balPayableForATI; // simple case: no prior return credits
+    atiAddtnlTax = atiRate > 0 ? Math.round(Math.max(0, aggrLiability - int234F) * atiRate) : 0;
+    atiNetPayable = aggrLiability + atiAddtnlTax;
+    const taxUS140BPaid = toI(upd.taxUS140B);
+    atiTaxDue = Math.max(0, atiNetPayable - taxUS140BPaid);
+  }
+
   // Bank for refund — pulled from returnData bankAccounts
   const primaryBank = (rd as any).bankAccounts?.[0];
 
@@ -2108,6 +2133,22 @@ function buildITR5(input: BuildITRInput): object {
                 })),
               },
             } : {}),
+          },
+          'PartB-ATI': {
+            UpdatedTotInc:          netTaxLiab,
+            AmtPayable:             balPayableForATI,
+            AmtRefundable:          refund,
+            LastAmtPayable:         0,
+            Refund:                 0,
+            TotRefund:              0,
+            FeeIncUS234F:           int234F,
+            RegAssessementTAX:      0,
+            AggrLiabilityRefund:    0,
+            AggrLiabilityNoRefund:  balPayableForATI,
+            AddtnlIncTax:           atiAddtnlTax,
+            NetPayable:             atiNetPayable,
+            TaxUS140B:              toI(upd.taxUS140B),
+            TaxDue10_11:            atiTaxDue,
           },
         } : {}),
         PartA_GEN1: {

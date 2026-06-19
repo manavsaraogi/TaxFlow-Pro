@@ -65,7 +65,7 @@ interface TaxComputation {
 
   // 140B additional tax (139(8A) updated return)
   additionalTax140B: number;
-  period140B: 1 | 2 | null;
+  period140B: 1 | 2 | 3 | 4 | null;
 
   // Total demand / refund
   totalTaxDue: number;
@@ -316,18 +316,21 @@ function computeTax(inp: TaxInputs): TaxComputation {
   const cess = Math.floor(taxAfterRebate * 0.04);
   const netTax = taxAfterRebate + cess;
 
-  // 139(8A) additional tax u/s 140B — 25% (Period 1) or 50% (Period 2)
+  // 139(8A) additional tax u/s 140B — 25%/50%/60%/70% based on period
   let additionalTax140B = 0;
-  let period140B: 1 | 2 | null = null;
+  let period140B: 1 | 2 | 3 | 4 | null = null;
   if (inp.filingSection === '139(8A)') {
     const updAY = inp.updatedAY || '2024-25';
     const endYear = parseInt(updAY.split('-')[1] ?? '25') + 2000;
     const p1End = new Date(endYear + 1, 2, 31);
     const p2End = new Date(endYear + 2, 2, 31);
+    const p3End = new Date(endYear + 3, 2, 31);
+    const p4End = new Date(endYear + 4, 2, 31);
     const today = new Date();
-    period140B = today <= p1End ? 1 : today <= p2End ? 2 : null;
+    period140B = today <= p1End ? 1 : today <= p2End ? 2 : today <= p3End ? 3 : today <= p4End ? 4 : null;
+    const rateMap = { 1: 0.25, 2: 0.50, 3: 0.60, 4: 0.70 } as const;
     if (period140B) {
-      additionalTax140B = Math.round(netTax * (period140B === 1 ? 0.25 : 0.50));
+      additionalTax140B = Math.round(netTax * rateMap[period140B]);
     }
   }
 
@@ -588,9 +591,9 @@ export default function TaxSummary({ returnId, returnData }: Props) {
             {/* 140B additional tax for 139(8A) updated return */}
             {c.additionalTax140B > 0 && (
               <Row
-                label={`Add: Additional Tax u/s 140B (${c.period140B === 1 ? '25%' : '50%'} — Period ${c.period140B})`}
+                label={`Add: Additional Tax u/s 140B (${c.period140B === 1 ? '25%' : c.period140B === 2 ? '50%' : c.period140B === 3 ? '60%' : '70%'} — Period ${c.period140B})`}
                 value={c.additionalTax140B}
-                sub={c.period140B === 1 ? 'Within 12 months of AY end' : '12–24 months after AY end'}
+                sub={c.period140B === 1 ? 'Within 12 months of AY end' : c.period140B === 2 ? '12–24 months after AY end' : c.period140B === 3 ? '24–36 months after AY end' : '36–48 months after AY end'}
                 separator
               />
             )}

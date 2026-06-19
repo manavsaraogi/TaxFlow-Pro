@@ -849,6 +849,7 @@ export interface ITR5Updated {
   laidOutFlag:        boolean;             // LaidOutIn_139_8A
   periodCode:         ITR5UpdatedPeriod;   // 1=≤12m, 2=12-24m, 3=24-36m, 4=36-48m
   reasons:            ITR5UpdateReason[];  // UpdatingInc reasons
+  taxUS140B?:         number;              // Total tax already paid u/s 140B (challan)
 }
 
 export interface ITR5General {
