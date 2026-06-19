@@ -686,6 +686,8 @@ export interface FinancialParticulars {
 export interface Verification {
   AssesseeVerName: string;
   FatherName?: string;         // Required for individual assessees
+  /** Individual PAN of the authorized signatory (required for ITR-5 firms/trusts) */
+  signatoryPAN?: string;
   PlaceVerSign: string;        // City of signing
   DateVerSign: string;         // YYYY-MM-DD
   Capacity: VerificationCapacity;

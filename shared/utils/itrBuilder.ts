@@ -780,13 +780,15 @@ function buildPersonalInfo(client: BuilderClient, opts?: { includeStatus?: strin
 const VALID_ITR5_CAPACITY = new Set(['MP','DP','PA','PO','ME','LQ','RP','TR','EX','RA','AS','OA']);
 function buildVerification(v: Verification, filingDate: string, pan?: string) {
   const capacity = VALID_ITR5_CAPACITY.has(v.Capacity ?? '') ? v.Capacity : 'PO';
-  // AssesseeVerPAN requires individual PAN pattern (4th char = 'P'); omit for trust/firm PANs
-  const isIndividualPAN = pan && /^[A-Z]{3}P[A-Z][0-9]{4}[A-Z]$/.test(pan);
+  // AssesseeVerPAN must be individual PAN (4th char = 'P').
+  // For trusts/firms, use v.signatoryPAN (the authorized signatory's individual PAN).
+  const sigPAN = v.signatoryPAN || pan;
+  const isIndividualPAN = sigPAN && /^[A-Z]{3}P[A-Z][0-9]{4}[A-Z]$/.test(sigPAN);
   return {
     Declaration: {
       AssesseeVerName:  v.AssesseeVerName || 'Authorised Signatory',
       FatherName:       v.FatherName || '-',
-      ...(isIndividualPAN ? { AssesseeVerPAN: pan } : {}),
+      ...(isIndividualPAN ? { AssesseeVerPAN: sigPAN } : {}),
       Capacity:         capacity,
       Place:            (v as any).Place || (v as any).PlaceVerSign || 'Delhi',
       Date:             (v as any).Date || (v as any).DateVerSign || filingDate,
@@ -2332,7 +2334,7 @@ function buildITR5(input: BuildITRInput): object {
               RoyalityDtls: { NonResOtherCompany: 0, Others: 0, Total: 0 },
               ProfessionalConstDtls: { NonResOtherCompany: 0, Others: 0, Total: 0 },
               HotelBoardLodge: 0, TravelExp: 0, ForeignTravelExp: 0, ConveyanceExp: 0, TelephoneExp: 0, GuestHouseExp: 0, ClubExp: 0, FestivalCelebExp: 0, Scholarship: 0, Gift: 0, Donation: 0,
-              RatesTaxesPays: { UnionExciseDuty: 0, ServiceTax: 0, VATorSaleTax: 0, CentralGoodServiceTax: 0, StateGoodServiceTax: 0, IntegratedGoodServiceTax: 0, UnionTerrGoodServiceTax: 0, OthDutyTaxCess: 0, TotExciseCustomsVAT: 0 },
+              RatesTaxesPays: { ExciseCustomsVAT: { UnionExciseDuty:0,ServiceTax:0,VATorSaleTax:0,CentralGoodServiceTax:0,StateGoodServiceTax:0,IntegratedGoodServiceTax:0,UnionTerrGoodServiceTax:0,OthDutyTaxCess:0,TotExciseCustomsVAT:0 } },
               AuditFee: 0, SalRemuneration: 0, OtherExpenses: 0,
               BadDebtDtls: { BadDebtAmtDtlsTotal: 0, OthersPANNotAvlblDtlTotal: 0, OthersAmtLt1Lakh: 0, BadDebt: 0 },
               ProvForBadDoubtDebt: 0, OthProvisionsExpdr: 0, PBIDTA: 0,
@@ -2341,7 +2343,7 @@ function buildITR5(input: BuildITRInput): object {
             },
             TaxProvAppr: {
               ProvForCurrTax: 0, ProvDefTax: 0, ProfitAfterTax: 0, BalBFPrevYr: 0, AmtAvlAppr: 0,
-              Appropriations: {}, PartnerAccBalTrf: 0,
+              Appropriations: {TrfToReserves: 0}, PartnerAccBalTrf: 0,
             },
           },
           PersumptiveInc44AD:       { GrsTrnOverOrReceipt: 0, TotPersumptiveInc44AD: toI(pl.BizNetProfit) },
@@ -2408,7 +2410,7 @@ function buildITR5(input: BuildITRInput): object {
               ForeignTravelExp: toI(pl.PL26),
               ConveyanceExp: 0, TelephoneExp: toI(pl.PL22xi), GuestHouseExp: 0, ClubExp: 0,
               FestivalCelebExp: toI(pl.PL28), Scholarship: 0, Gift: 0, Donation: toI(pl.PL53),
-              RatesTaxesPays: { UnionExciseDuty: 0, ServiceTax: 0, VATorSaleTax: 0, CentralGoodServiceTax: 0, StateGoodServiceTax: 0, IntegratedGoodServiceTax: 0, UnionTerrGoodServiceTax: 0, OthDutyTaxCess: toI(pl.PL21), TotExciseCustomsVAT: toI(pl.PL21) },
+              RatesTaxesPays: { ExciseCustomsVAT: { UnionExciseDuty:0,ServiceTax:0,VATorSaleTax:0,CentralGoodServiceTax:0,StateGoodServiceTax:0,IntegratedGoodServiceTax:0,UnionTerrGoodServiceTax:0,OthDutyTaxCess:toI(pl.PL21),TotExciseCustomsVAT:toI(pl.PL21) } },
               AuditFee:            toI(pl.PL33),
               SalRemuneration:     0,
               OtherExpenses:       toI(pl.PL37) + toI(pl.PL40) + toI(pl.PL41) + toI(pl.PL42) + toI(pl.PL43) + toI(pl.PL44x) + toI(pl.PL45) + toI(pl.PL46) + toI(pl.PL47) + toI(pl.PL48iv),
@@ -2426,7 +2428,7 @@ function buildITR5(input: BuildITRInput): object {
               ProfitAfterTax:  Math.max(0, toI(pl.NetProfitBeforeTaxes) - toI(pl.PL49)),
               BalBFPrevYr:     0,
               AmtAvlAppr:      Math.max(0, toI(pl.NetProfitBeforeTaxes) - toI(pl.PL49)),
-              Appropriations:  {},
+              Appropriations:  {TrfToReserves: 0},
               PartnerAccBalTrf: toI(pl.PL50),
             },
           },
@@ -2484,10 +2486,10 @@ function buildITR5(input: BuildITRInput): object {
                   OtherThanDividend: 0,
                 },
                 PLUs44sChapXIIGOthrUs115B: 0,
-                ProfitLossInclRefrdSec:    netProfit,
+                ProfitLossInclRefrdSec:    { ProfitLossUs44AD:0,ProfitLossUs44ADA:0,ProfitLossUs44AE:0,ProfitLossUs44B:0,ProfitLossUs44BB:0,ProfitLossUs44BBA:0,ProfitLossUs44BBC:0,ProfitLossUs44DA:0,FirstSchITActOthr115B:0 },
                 TotalProfitFrmActCvrd:     0,
-                ProfitFrmActCvrd:          0,
-                IncCredPL:                 fromOtherHeads,
+                ProfitFrmActCvrd:          { ProfitFrmActCvrdUndrRule7:0,ProfitFrmActCvrdUndrRule7A:0,ProfitFrmActCvrdUndrRule7B1:0,ProfitFrmActCvrdUndrRule7B1A:0,ProfitFrmActCvrdUndrRule8:0 },
+                IncCredPL:                 { FirmShareInc:0,AOPBOISharInc:0,OthExempInc:fromOtherHeads,TotExempInc:fromOtherHeads },
                 BalancePLOthThanSpecBus:   balPL,
                 ExpDebToPLOthHeadDtls: {
                   HouseProperty:  0,
@@ -2501,7 +2503,7 @@ function buildITR5(input: BuildITRInput): object {
                 TotExpDebPL:                     0,
                 AdjustedPLOthThanSpecBus:        balPL,
                 DepreciationDebPLCosAct:         deprnBooks,
-                DepreciationAllowITAct32:        deprnIT,
+                DepreciationAllowITAct32:        { DepreciationAllowUs32_1_ii:deprnIT,DepreciationAllowUs32_1_i:0,TotDeprAllowITAct:deprnIT },
                 AdjustPLAfterDeprOthSpecInc:     adjPLDepr,
                 AmtDebPLDisallowUs36:            0,
                 AmtDebPLDisallowUs37:            disallUs37,
@@ -2529,7 +2531,7 @@ function buildITR5(input: BuildITRInput): object {
                 DecProfIncLossAccICDSAdj:        0,
                 TotDeductionAmts:                totDeductions,
                 PLAftAdjDedBusOthThanSpec:       plAftAdj,
-                DeemedProfitBusUs:               0,
+                DeemedProfitBusUs:               { Section44AD:0,Section44ADA:0,Section44AE:0,Section44B:0,Section44BB:0,Section44BBA:0,Section44BBC:0,Section44DA:0,FirstSchTActOther:0,TotDeemedProfitBusUs:0 },
                 NetPLAftAdjBusOthThanSpec:       netPLAft,
                 NetPLBusOthThanSpec7A7B7C:       taxableBPIncome,
                 ChrgblIncUndrRule7:              0,
@@ -2654,12 +2656,23 @@ function buildITR5(input: BuildITRInput): object {
               } : {}),
               SlumpSaleInStcg: { FMV11UAEii: 0, FMV11UAEiii: 0, FullConsideration: 0, NetWorthOfDivision: 0, CapgainonAssets: 0 },
               NRITransacSec48Dtl: { NRItaxSTTPaid: 0, NRItaxSTTPaidTransferBE: 0, NRItaxSTTPaidTransferAE: 0, NRItaxSTTNotPaid: 0 },
-              NRISecur115AD:      {},
-              SaleOnOtherAssets:  {
-                SaleValue:       otherAssets.reduce((s,e) => s + toI(e.salesValue), 0),
-                CostAcquisition: otherAssets.reduce((s,e) => s + toI(e.purchaseCost), 0),
-                LowDeductions:   otherAssets.reduce((s,e) => s + toI(e.expenditure), 0),
-                CapGain:         stcgOther,
+              NRISecur115AD: {
+                FullValueConsdRecvUnqshr: 0, FairMrktValueUnqshr: 0, FullValueConsdSec50CA: 0, FullValueConsdOthUnqshr: 0,
+                FullConsideration: 0,
+                DeductSec48: { Reduction48iii: 0, AquisitCost: 0, ImproveCost: 0, ExpOnTrans: 0, TotalDedn: 0 },
+                BalanceCG: 0, LossSec94of7Or94of8: 0, CapgainonAssets: 0,
+              },
+              SaleOnOtherAssets: {
+                FullValueConsdRecvUnqshr: 0, FairMrktValueUnqshr: 0, FullValueConsdSec50CA: 0, FullValueConsdOthUnqshr: 0,
+                FullConsideration: otherAssets.reduce((s,e) => s + toI(e.salesValue), 0),
+                DeductSec48: {
+                  Reduction48iii: 0, AquisitCost: otherAssets.reduce((s,e) => s + toI(e.purchaseCost), 0),
+                  ImproveCost: 0, ExpOnTrans: otherAssets.reduce((s,e) => s + toI(e.expenditure), 0),
+                  TotalDedn: otherAssets.reduce((s,e) => s + toI(e.purchaseCost) + toI(e.expenditure), 0),
+                },
+                BalanceCG: stcgOther, LossSec94of7Or94of8: 0, DeemedSTCGDeprAsset: 0,
+                ExemptionOrDednUs54: { ExemptionGrandTotal: 0 },
+                CapgainonAssets: stcgOther,
               },
               TotalAmtDeemedStcg:       0,
               PassThrIncNatureSTCG:     0,
@@ -2670,7 +2683,7 @@ function buildITR5(input: BuildITRInput): object {
           })(),
           LongTermCapGain: {
             SlumpSaleInLtcgDtls:      {},
-            SaleofBondsDebntr:        { FullConsideration: 0, DeductSec48: 0, BalanceCG: 0 },
+            SaleofBondsDebntr:        { FullConsideration: 0, DeductSec48: { Reduction48iii: 0, AquisitCost: 0, ImproveCost: 0, ExpOnTrans: 0, TotalDedn: 0 }, BalanceCG: 0 },
             SaleOfEquityShareUs112A: {
               CapgainonAssets:          ltcg112A,
               CapgainonAssetsTransferBE: 0,
@@ -2694,14 +2707,29 @@ function buildITR5(input: BuildITRInput): object {
           IncChargeableHeadCapGain: totalCG,
           DeducClaimInfo:           { TotDeductClaim: 0 },
           CurrYrLosses: {
-            InLossSetOff: 0, InStcg15Per: 0, InStcg20Per: 0, InStcg30Per: 0,
-            InStcgAppRate: 0, InStcgDTAARate: 0, InLtcg10Per: 0, InLtcg12_5Per: 0,
-            InLtcg20Per: 0, InLtcgDTAARate: 0, TotLossSetOff: 0, LossRemainSetOff: totalCG,
+            InLossSetOff:  { StclSetoff15Per:0,StclSetoff20Per:0,StclSetoff30Per:0,StclSetoffAppRate:0,StclSetoffDTAARate:0,LtclSetOff10Per:0,LtclSetOff12_5Per:0,LtclSetOff20Per:0,LtclSetOffDTAARate:0 },
+            InStcg15Per:   { CurrYearIncome:0,StclSetoff30Per:0,StclSetoffAppRate:0,StclSetoffDTAARate:0,CurrYrCapGain:0 },
+            InStcg20Per:   { CurrYearIncome:0,StclSetoff15Per:0,StclSetoff30Per:0,StclSetoffAppRate:0,StclSetoffDTAARate:0,CurrYrCapGain:0 },
+            InStcg30Per:   { CurrYearIncome:0,StclSetoff15Per:0,StclSetoff20Per:0,StclSetoffAppRate:0,StclSetoffDTAARate:0,CurrYrCapGain:0 },
+            InStcgAppRate: { CurrYearIncome:0,StclSetoff15Per:0,StclSetoff20Per:0,StclSetoff30Per:0,StclSetoffDTAARate:0,CurrYrCapGain:0 },
+            InStcgDTAARate:{ CurrYearIncome:0,StclSetoff15Per:0,StclSetoff20Per:0,StclSetoff30Per:0,StclSetoffAppRate:0,CurrYrCapGain:0 },
+            InLtcg10Per:   { CurrYearIncome:0,StclSetoff15Per:0,StclSetoff20Per:0,StclSetoff30Per:0,StclSetoffAppRate:0,StclSetoffDTAARate:0,LtclSetOff12_5Per:0,LtclSetOff20Per:0,LtclSetOffDTAARate:0,CurrYrCapGain:0 },
+            InLtcg12_5Per: { CurrYearIncome:0,StclSetoff15Per:0,StclSetoff20Per:0,StclSetoff30Per:0,StclSetoffAppRate:0,StclSetoffDTAARate:0,LtclSetOff10Per:0,LtclSetOff20Per:0,LtclSetOffDTAARate:0,CurrYrCapGain:0 },
+            InLtcg20Per:   { CurrYearIncome:0,StclSetoff15Per:0,StclSetoff20Per:0,StclSetoff30Per:0,StclSetoffAppRate:0,StclSetoffDTAARate:0,LtclSetOff10Per:0,LtclSetOff12_5Per:0,LtclSetOffDTAARate:0,CurrYrCapGain:0 },
+            InLtcgDTAARate:{ CurrYearIncome:0,StclSetoff15Per:0,StclSetoff20Per:0,StclSetoff30Per:0,StclSetoffAppRate:0,StclSetoffDTAARate:0,LtclSetOff10Per:0,LtclSetOff12_5Per:0,LtclSetOff20Per:0,CurrYrCapGain:0 },
+            TotLossSetOff:    { StclSetoff15Per:0,StclSetoff20Per:0,StclSetoff30Per:0,StclSetoffAppRate:0,StclSetoffDTAARate:0,LtclSetOff10Per:0,LtclSetOff12_5Per:0,LtclSetOff20Per:0,LtclSetOffDTAARate:0 },
+            LossRemainSetOff: { StclSetoff15Per:0,StclSetoff20Per:0,StclSetoff30Per:0,StclSetoffAppRate:0,StclSetoffDTAARate:0,LtclSetOff10Per:0,LtclSetOff12_5Per:0,LtclSetOff20Per:0,LtclSetOffDTAARate:0 },
           },
           AccruOrRecOfCG: {
-            ShortTermUnder15Per: 0, ShortTermUnder20Per: 0, ShortTermUnder30Per: 0,
-            ShortTermUnderAppRate: 0, ShortTermUnderDTAARate: 0,
-            LongTermUnder10Per: 0, LongTermUnder12_5Per: 0, LongTermUnder20Per: 0, LongTermUnderDTAARate: 0,
+            ShortTermUnder15Per:  { DateRange:{Upto15Of6:0,Upto15Of9:0,Up16Of9To15Of12:0,Up16Of12To15Of3:0,Up16Of3To31Of3:0} },
+            ShortTermUnder20Per:  { DateRange:{Upto15Of6:0,Upto15Of9:0,Up16Of9To15Of12:0,Up16Of12To15Of3:0,Up16Of3To31Of3:0} },
+            ShortTermUnder30Per:  { DateRange:{Upto15Of6:0,Upto15Of9:0,Up16Of9To15Of12:0,Up16Of12To15Of3:0,Up16Of3To31Of3:0} },
+            ShortTermUnderAppRate:{ DateRange:{Upto15Of6:0,Upto15Of9:0,Up16Of9To15Of12:0,Up16Of12To15Of3:0,Up16Of3To31Of3:0} },
+            ShortTermUnderDTAARate:{ DateRange:{Upto15Of6:0,Upto15Of9:0,Up16Of9To15Of12:0,Up16Of12To15Of3:0,Up16Of3To31Of3:0} },
+            LongTermUnder10Per:   { DateRange:{Upto15Of6:0,Upto15Of9:0,Up16Of9To15Of12:0,Up16Of12To15Of3:0,Up16Of3To31Of3:0} },
+            LongTermUnder12_5Per: { DateRange:{Upto15Of6:0,Upto15Of9:0,Up16Of9To15Of12:0,Up16Of12To15Of3:0,Up16Of3To31Of3:0} },
+            LongTermUnder20Per:   { DateRange:{Upto15Of6:0,Upto15Of9:0,Up16Of9To15Of12:0,Up16Of12To15Of3:0,Up16Of3To31Of3:0} },
+            LongTermUnderDTAARate:{ DateRange:{Upto15Of6:0,Upto15Of9:0,Up16Of9To15Of12:0,Up16Of12To15Of3:0,Up16Of3To31Of3:0} },
           },
         },
 
