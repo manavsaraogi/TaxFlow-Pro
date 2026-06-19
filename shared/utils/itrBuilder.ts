@@ -1975,7 +1975,9 @@ function buildITR5(input: BuildITRInput): object {
   const manualInt234F = toI(gen.interest234F);
 
   // Auto-compute 234B, 234A, 234F when not manually overridden
-  const dueDate = gen.isAuditRequired ? itr5Cfg.dueDateAudit : itr5Cfg.dueDateIndividual;
+  // For 139(8A), due date is based on the AY being updated, not the current return AY
+  const effectiveCfg = upd ? getAYConfig(upd.updatedAY ?? itr5AY) : itr5Cfg;
+  const dueDate = gen.isAuditRequired ? effectiveCfg.dueDateAudit : effectiveCfg.dueDateIndividual;
   const { int234A: auto234A, int234B: auto234B, int234F: auto234F } = (() => {
     const filingStr = date;
     const isLate = filingStr > dueDate;

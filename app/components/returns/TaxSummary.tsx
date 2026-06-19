@@ -459,8 +459,12 @@ function buildDefaultInputs(rd: any): TaxInputs {
     assessmentYear: typeof rd?.assessmentYear === 'string' ? rd.assessmentYear : (rd?.assessmentYear?.ayLabel ?? 'AY 2026-27'),
     filingDate: new Date().toISOString().slice(0, 10),
     dueDate: (() => {
-      const rawAY = typeof rd?.assessmentYear === 'string' ? rd.assessmentYear : (rd?.assessmentYear?.ayLabel ?? 'AY 2026-27');
-      const ayYr = parseInt(rawAY.replace('AY ', '').split('-')[0] ?? '2026');
+      const filingSection = itr5General?.filingSection ?? '';
+      // For 139(8A), due date is based on the AY being updated, not the current return AY
+      const effectiveAY = filingSection === '139(8A)'
+        ? `AY ${itr5General?.updated?.updatedAY ?? '2025-26'}`
+        : (typeof rd?.assessmentYear === 'string' ? rd.assessmentYear : (rd?.assessmentYear?.ayLabel ?? 'AY 2026-27'));
+      const ayYr = parseInt(effectiveAY.replace('AY ', '').split('-')[0] ?? '2025');
       const audit = formType === 'ITR-5' ? (itr5General?.isAuditRequired ?? false) : false;
       return `${ayYr}-${audit ? '10-31' : '07-31'}`;
     })(),
