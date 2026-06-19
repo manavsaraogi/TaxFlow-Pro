@@ -441,8 +441,9 @@ export async function GET(_req: NextRequest, { params }: Params) {
     inner?.Form_ITR1?.AssessmentYear ??
     inner?.Form_ITR2?.AssessmentYear ??
     inner?.Form_ITR4?.AssessmentYear;
+  // AssessmentYear in JSON is the start year ("2024" for AY 2024-25); reconstruct AY label as "2024-25"
   const effectiveAYLabel: string = jsonAYYear
-    ? `${Number(jsonAYYear) - 1}-${String(jsonAYYear).slice(2)}`
+    ? `${jsonAYYear}-${String(Number(jsonAYYear) + 1).slice(2)}`
     : ret.assessmentYear.ayLabel;
   const filename = `ITR-${formType.replace('ITR-', '')}-${pan}-AY${effectiveAYLabel}.json`;
 

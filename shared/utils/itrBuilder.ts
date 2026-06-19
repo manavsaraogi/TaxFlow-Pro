@@ -103,13 +103,8 @@ function today(): string {
 }
 
 function ayToYear(ay: string): string {
-  // "2025-26" → "2026" (end year, used in Form_ITR fields)
-  const parts = ay.split('-');
-  if (parts.length === 2) {
-    const start = parseInt(parts[0], 10);
-    return String(start + 1);
-  }
-  return parts[0];
+  // "2024-25" → "2024" (start year, per CBDT JSON schema AssessmentYear pattern)
+  return ay.split('-')[0] ?? ay;
 }
 
 function capAt(value: number, cap: number): number {
