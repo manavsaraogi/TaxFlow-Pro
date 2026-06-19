@@ -2615,7 +2615,9 @@ function buildITR5(input: BuildITRInput): object {
                   OtherThanDividend: 0,
                 },
                 PLUs44sChapXIIGOthrUs115B: 0,
-                ProfitLossInclRefrdSec:    { ProfitLossUs44AD:0,ProfitLossUs44ADA:0,ProfitLossUs44AE:0,ProfitLossUs44B:0,ProfitLossUs44BB:0,ProfitLossUs44BBA:0,ProfitLossUs44BBC:0,ProfitLossUs44DA:0,FirstSchITActOthr115B:0 },
+                ProfitLossInclRefrdSec:    effectiveAY === '2024-25'
+                  ? { ProfitLossUs44AD:0,ProfitLossUs44ADA:0,ProfitLossUs44AE:0,ProfitLossUs44B:0,ProfitLossUs44BB:0,ProfitLossUs44BBA:0,ProfitLossUs44DA:0,FirstSchITActOthr115B:0 }
+                  : { ProfitLossUs44AD:0,ProfitLossUs44ADA:0,ProfitLossUs44AE:0,ProfitLossUs44B:0,ProfitLossUs44BB:0,ProfitLossUs44BBA:0,ProfitLossUs44BBC:0,ProfitLossUs44DA:0,FirstSchITActOthr115B:0 },
                 TotalProfitFrmActCvrd:     0,
                 ProfitFrmActCvrd:          { ProfitFrmActCvrdUndrRule7:0,ProfitFrmActCvrdUndrRule7A:0,ProfitFrmActCvrdUndrRule7B1:0,ProfitFrmActCvrdUndrRule7B1A:0,ProfitFrmActCvrdUndrRule8:0 },
                 IncCredPL:                 { FirmShareInc:0,AOPBOISharInc:0,OthExempInc:fromOtherHeads,TotExempInc:fromOtherHeads },
@@ -2660,7 +2662,9 @@ function buildITR5(input: BuildITRInput): object {
                 DecProfIncLossAccICDSAdj:        0,
                 TotDeductionAmts:                totDeductions,
                 PLAftAdjDedBusOthThanSpec:       plAftAdj,
-                DeemedProfitBusUs:               { Section44AD:0,Section44ADA:0,Section44AE:0,Section44B:0,Section44BB:0,Section44BBA:0,Section44BBC:0,Section44DA:0,FirstSchTActOther:0,TotDeemedProfitBusUs:0 },
+                DeemedProfitBusUs:               effectiveAY === '2024-25'
+                  ? { Section44AD:0,Section44ADA:0,Section44AE:0,Section44B:0,Section44BB:0,Section44BBA:0,Section44DA:0,FirstSchTActOther:0,TotDeemedProfitBusUs:0 }
+                  : { Section44AD:0,Section44ADA:0,Section44AE:0,Section44B:0,Section44BB:0,Section44BBA:0,Section44BBC:0,Section44DA:0,FirstSchTActOther:0,TotDeemedProfitBusUs:0 },
                 NetPLAftAdjBusOthThanSpec:       netPLAft,
                 NetPLBusOthThanSpec7A7B7C:       taxableBPIncome,
                 ChrgblIncUndrRule7:              0,
@@ -2784,7 +2788,9 @@ function buildITR5(input: BuildITRInput): object {
                 }],
               } : {}),
               SlumpSaleInStcg: { FMV11UAEii: 0, FMV11UAEiii: 0, FullConsideration: 0, NetWorthOfDivision: 0, CapgainonAssets: 0 },
-              NRITransacSec48Dtl: { NRItaxSTTPaid: 0, NRItaxSTTPaidTransferBE: 0, NRItaxSTTPaidTransferAE: 0, NRItaxSTTNotPaid: 0 },
+              NRITransacSec48Dtl: effectiveAY === '2024-25'
+                ? { NRItaxSTTPaid: 0, NRItaxSTTNotPaid: 0 }
+                : { NRItaxSTTPaid: 0, NRItaxSTTPaidTransferBE: 0, NRItaxSTTPaidTransferAE: 0, NRItaxSTTNotPaid: 0 },
               NRISecur115AD: {
                 FullValueConsdRecvUnqshr: 0, FairMrktValueUnqshr: 0, FullValueConsdSec50CA: 0, FullValueConsdOthUnqshr: 0,
                 FullConsideration: 0,
@@ -2811,19 +2817,32 @@ function buildITR5(input: BuildITRInput): object {
             };
           })(),
           LongTermCapGain: {
-            SlumpSaleInLtcgDtls:      {},
+            ...(effectiveAY === '2024-25' ? {
+              SlumpSaleInLtcg: { FMV11UAEii: 0, FMV11UAEiii: 0, FullConsideration: 0, NetWorthOfDivision: 0, SlumpBalance: 0, DeductionUnderSec54: 0, CapgainonAssets: 0 },
+            } : {
+              SlumpSaleInLtcgDtls: {},
+            }),
             SaleofBondsDebntr:        { FullConsideration: 0, DeductSec48: { Reduction48iii: 0, AquisitCost: 0, ImproveCost: 0, ExpOnTrans: 0, TotalDedn: 0 }, BalanceCG: 0 },
             SaleOfEquityShareUs112A: {
-              CapgainonAssets:          ltcg112A,
-              CapgainonAssetsTransferBE: 0,
-              CapgainonAssetsTransferAE: 0,
+              CapgainonAssets: ltcg112A,
+              ...(effectiveAY !== '2024-25' ? { CapgainonAssetsTransferBE: 0, CapgainonAssetsTransferAE: 0 } : {}),
             },
             NRISaleOfEquityShareUs112A: {
-              CapgainonAssets:          0,
-              CapgainonAssetsTransferBE: 0,
-              CapgainonAssetsTransferAE: 0,
+              CapgainonAssets: 0,
+              ...(effectiveAY !== '2024-25' ? { CapgainonAssetsTransferBE: 0, CapgainonAssetsTransferAE: 0 } : {}),
             },
-            SaleofAssetNADtls:        {},
+            ...(effectiveAY === '2024-25' ? {
+              SaleofAssetNA: {
+                FullValueConsdRecvUnqshr: 0, FairMrktValueUnqshr: 0, FullValueConsdSec50CA: 0, FullValueConsdOthUnqshr: 0,
+                FullConsideration: 0,
+                DeductSec48: { Reduction48iii: 0, AquisitCost: 0, ImproveCost: 0, ExpOnTrans: 0, TotalDedn: 0 },
+                BalanceCG: 0,
+                ExemptionOrDednUs54: { ExemptionGrandTotal: 0 },
+                CapgainonAssets: 0,
+              },
+            } : {
+              SaleofAssetNADtls: {},
+            }),
             TotalAmtDeemedLtcg:       0,
             PassThrIncNatureLTCG:     0,
             PassThrIncNatureLTCGUs112A: 0,
