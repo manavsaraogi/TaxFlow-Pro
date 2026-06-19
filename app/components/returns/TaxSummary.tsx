@@ -456,7 +456,13 @@ function buildDefaultInputs(rd: any): TaxInputs {
     advanceTax,
     selfAssessmentTax,
     regime: (rd?.regime ?? (typeof rd?.assessmentYear === 'object' ? rd?.assessmentYear?.regime : undefined) ?? 'NEW') as TaxRegime,
-    assessmentYear: typeof rd?.assessmentYear === 'string' ? rd.assessmentYear : (rd?.assessmentYear?.ayLabel ?? 'AY 2026-27'),
+    assessmentYear: (() => {
+      const filingSection = itr5General?.filingSection ?? '';
+      if (filingSection === '139(8A)' && itr5General?.updated?.updatedAY) {
+        return `AY ${itr5General.updated.updatedAY}`;
+      }
+      return typeof rd?.assessmentYear === 'string' ? rd.assessmentYear : (rd?.assessmentYear?.ayLabel ?? 'AY 2026-27');
+    })(),
     filingDate: new Date().toISOString().slice(0, 10),
     dueDate: (() => {
       const filingSection = itr5General?.filingSection ?? '';
