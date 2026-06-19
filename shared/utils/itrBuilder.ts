@@ -776,7 +776,7 @@ function buildPersonalInfo(client: BuilderClient, opts?: { includeStatus?: strin
 // VERIFICATION BUILDER
 // ─────────────────────────────────────────────────────────────────────────────
 
-function buildVerification(v: Verification, filingDate: string) {
+function buildVerification(v: Verification, filingDate: string, pan?: string) {
   return {
     Declaration: {
       AssesseeVerName: v.AssesseeVerName,
@@ -785,6 +785,7 @@ function buildVerification(v: Verification, filingDate: string) {
       DateVerSign: v.DateVerSign || filingDate,
       Capacity: v.Capacity,
     },
+    ...(pan ? { AssesseeVerPAN: pan } : {}),
     Verification: 'I',
   };
 }
@@ -2052,7 +2053,7 @@ function buildITR5(input: BuildITRInput): object {
               LocalityOrArea:       client.city ?? '',
               CityOrTownOrDistrict: client.city ?? '',
               StateCode:            client.state ?? '07',
-              CountryCode:          'IN',
+              CountryCode:          '91',
               CountryCodeMobile:    91,
               MobileNo:             Number((client.mobileNumber ?? '9999999999').replace(/\D/g, '')) || 9999999999,
               EmailAddress:         client.email ?? '',
@@ -2066,12 +2067,16 @@ function buildITR5(input: BuildITRInput): object {
             ReturnFileSec: {
               IncomeTaxSec: incomeTaxSec,
             },
-            ResidentialStatus:     (client.residentialStatus ?? 'RES') === 'RNR' ? 'NOR' : (client.residentialStatus ?? 'RES'),
-            BusinessTrustFlag:     'N',
+            ResidentialStatus:         (client.residentialStatus ?? 'RES') === 'RNR' ? 'NOR' : (client.residentialStatus ?? 'RES'),
+            BusinessTrustFlag:         'N',
             InvstmntFundRefrdSec115UB: 'N',
-            ForeignExchangeFlag:   'N',
-            StartUpDPIITFlag:      'N',
-            ifMSME:                'N',
+            ForeignExchangeFlag:       'N',
+            StartUpDPIITFlag:          'N',
+            ifMSME:                    gen.isMSME ? 'Y' : 'N',
+            FiiFpiFlag:                gen.isFIIFPI ? 'Y' : 'N',
+            AsseseeRepFlg:             gen.isRepresentativeAssessee ? 'Y' : 'N',
+            PartnerInFirmFlg:          gen.isPartnerInFirm ? 'Y' : 'N',
+            HeldUnlistedEqShrPrYrFlg:  gen.hasUnlistedEquityShares ? 'Y' : 'N',
           },
         },
         PartA_GEN2: {
@@ -2380,7 +2385,7 @@ function buildITR5(input: BuildITRInput): object {
           const fromOtherHeads  = toI(bp5.amtFromOtherHeadsToBP);
           const taxableBPIncome = netProfit + additions + fromOtherHeads - crossHeads - bpDeds;
           return {
-            ScheduleBP: {
+            CorpScheduleBP: {
               NetProfitOfBusOrProf: netProfit,
               AdditionsToNetProfit: additions,
               AmtDebToCPAofBusorProf: {
@@ -2696,7 +2701,7 @@ function buildITR5(input: BuildITRInput): object {
         ScheduleIT: rd.taxPayments ? buildTaxPayments(rd.taxPayments) : { TotalTaxPayments: 0 },
 
         // ── Verification ─────────────────────────────────────────────────
-        Verification: rd.verification ? buildVerification(rd.verification, date) : undefined,
+        Verification: rd.verification ? buildVerification(rd.verification, date, client.pan) : undefined,
       },
     },
   };

@@ -447,11 +447,11 @@ interface Props {
 
 type GenTab = 'basic' | 'books' | 'members' | 'compliance';
 
-const GEN_TABS: { id: GenTab; label: string }[] = [
-  { id: 'basic',      label: 'Basic Info' },
-  { id: 'books',      label: 'Books & Audit' },
-  { id: 'members',    label: 'Members / Partners' },
-  { id: 'compliance', label: 'Compliance Questions' },
+const GEN_TABS: { id: GenTab; label: string; icon: string }[] = [
+  { id: 'basic',      label: 'Basic Info',            icon: '🏢' },
+  { id: 'books',      label: 'Books & Audit',         icon: '📒' },
+  { id: 'members',    label: 'Members / Partners',    icon: '👥' },
+  { id: 'compliance', label: 'Compliance Questions',  icon: '✅' },
 ];
 
 // ── Component ──────────────────────────────────────────────────────────────────
@@ -512,16 +512,21 @@ export default function ITR5General({ returnId, initialData, onSaved }: Props) {
   return (
     <div>
       {/* ── Sub-tab header ── */}
-      <div className="flex items-center justify-between border-b border-gray-200">
-        <div className="flex">
+      <div className="flex items-center justify-between bg-gray-50 border-b border-gray-200 px-2 pt-2">
+        <div className="flex gap-1">
           {GEN_TABS.map(t => (
             <button key={t.id} onClick={() => setActiveTab(t.id)}
-              className={`px-5 py-2.5 text-sm font-medium border-b-2 transition-colors ${activeTab === t.id ? 'border-blue-600 text-blue-700 bg-blue-50' : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}>
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-t-lg text-sm font-medium transition-all border border-b-0 ${
+                activeTab === t.id
+                  ? 'bg-white border-gray-200 text-blue-700 shadow-sm -mb-px pb-[9px]'
+                  : 'bg-transparent border-transparent text-gray-500 hover:text-gray-700 hover:bg-white/60'
+              }`}>
+              <span className="text-base leading-none">{t.icon}</span>
               {t.label}
             </button>
           ))}
         </div>
-        <span className="text-xs text-gray-400 pr-4">{saving ? 'Saving…' : savedAt ? `Saved ${savedAt.toLocaleTimeString()}` : ''}</span>
+        <span className="text-xs text-gray-400 pr-4 pb-2">{saving ? 'Saving…' : savedAt ? `Saved ${savedAt.toLocaleTimeString()}` : ''}</span>
       </div>
 
       <div className="pt-4">

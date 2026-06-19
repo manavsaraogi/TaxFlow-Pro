@@ -316,6 +316,7 @@ function buildDefaultInputs(rd: any): TaxInputs {
 
 export default function TaxSummary({ returnId, returnData }: Props) {
   const [inputs, setInputs] = useState<TaxInputs>(() => buildDefaultInputs(returnData));
+  const [clientPan, setClientPan] = useState<string>('');
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
   const [downloadingPDF, setDownloadingPDF] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -327,6 +328,7 @@ export default function TaxSummary({ returnId, returnData }: Props) {
       if (res.ok) {
         const { data } = await res.json();
         setInputs(buildDefaultInputs(data));
+        if (data?.client?.pan) setClientPan(data.client.pan);
       } else {
         setInputs(buildDefaultInputs(returnData));
       }
@@ -353,6 +355,20 @@ export default function TaxSummary({ returnId, returnData }: Props) {
 
   const c = computeTax(inputs);
   const isRefund = c.balancePayable < 0;
+
+  const handleGenerateChallan = useCallback(() => {
+    const pan = clientPan || '';
+    const amount = Math.ceil(c.balancePayable);
+    // e-Pay Tax portal with pre-filled parameters
+    const params = new URLSearchParams({
+      PAN: pan,
+      AY: '202526',
+      MajorHead: '0021',  // Income Tax
+      MinorHead: '300',   // Self-Assessment Tax
+      Amount: String(amount),
+    });
+    window.open(`https://epay.incometax.gov.in/ePay/challan/view/startPayment?${params.toString()}`, '_blank', 'noopener,noreferrer');
+  }, [clientPan, c.balancePayable]);
 
   return (
     <div className="animate-in" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -507,6 +523,31 @@ export default function TaxSummary({ returnId, returnData }: Props) {
       {Math.abs(c.balancePayable) > 10_000 && (
         <div style={{ background: 'rgba(212,160,23,0.08)', border: '1px solid rgba(212,160,23,0.3)', borderRadius: 8, padding: '14px 18px', fontSize: 13, color: 'var(--text-muted)' }}>
           <strong style={{ color: 'var(--brand-text)' }}>💡 Tip:</strong> Compare tax under both regimes using the Regime Comparison tool in Return Settings to ensure the client is on the optimal regime.
+        </div>
+      )}
+
+      {/* ── Generate Tax Challan ────────────────────────────────────────── */}
+      {c.balancePayable > 0 && (
+        <div style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 10, padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 14, color: '#dc2626', marginBottom: 3 }}>
+              ₹{c.balancePayable.toLocaleString('en-IN')} payable
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+              Self-Assessment Tax (Minor Head 300) · Major Head 0021 · AY 2025-26
+            </div>
+          </div>
+          <button
+            onClick={handleGenerateChallan}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 7, padding: '10px 18px',
+              background: '#dc2626', color: '#fff', border: 'none', borderRadius: 8,
+              fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap',
+              boxShadow: '0 1px 4px rgba(220,38,38,0.3)',
+            }}
+          >
+            🏦 Generate Tax Challan
+          </button>
         </div>
       )}
     </div>
