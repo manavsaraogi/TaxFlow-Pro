@@ -843,13 +843,12 @@ function buildVerification(v: Verification, filingDate: string, pan?: string) {
   const capacity = VALID_ITR5_CAPACITY.has(v.Capacity ?? '') ? v.Capacity : 'PO';
   // AssesseeVerPAN must be individual PAN (4th char = 'P').
   // For trusts/firms, use v.signatoryPAN (the authorized signatory's individual PAN).
-  const sigPAN = v.signatoryPAN || pan;
-  const isIndividualPAN = sigPAN && /^[A-Z]{3}P[A-Z][0-9]{4}[A-Z]$/.test(sigPAN);
+  const sigPAN = v.signatoryPAN || pan || '';
   return {
     Declaration: {
       AssesseeVerName:  v.AssesseeVerName || 'Authorised Signatory',
       FatherName:       v.FatherName || '-',
-      ...(isIndividualPAN ? { AssesseeVerPAN: sigPAN } : {}),
+      AssesseeVerPAN:   sigPAN,
       Capacity:         capacity,
       Place:            (v as any).Place || (v as any).PlaceVerSign || 'Delhi',
       Date:             (v as any).Date || (v as any).DateVerSign || filingDate,
@@ -2225,7 +2224,7 @@ function buildITR5(input: BuildITRInput): object {
             AsseseeRepFlg:             gen.isRepresentativeAssessee ? 'Y' : 'N',
             PartnerInFirmFlg:          gen.isPartnerInFirm ? 'Y' : 'N',
             HeldUnlistedEqShrPrYrFlg:  gen.hasUnlistedEquityShares ? 'Y' : 'N',
-            ItrFilingDueDate:          itr5AY === '2024-25' ? '2024-10-31' : '2025-10-31',
+            ItrFilingDueDate:          effectiveCfg.dueDateAudit,
           },
         },
         PartA_GEN2: {
@@ -2758,7 +2757,7 @@ function buildITR5(input: BuildITRInput): object {
             IncFrmLottery:              { DateRange: { Upto15Of6: 0, Up16Of6To15Of9: 0, Up16Of9To15Of12: 0, Up16Of12To15Of3: 0, Up16Of3To31Of3: 0 } },
             IncFrmOnGames:              { DateRange: { Upto15Of6: 0, Up16Of6To15Of9: 0, Up16Of9To15Of12: 0, Up16Of12To15Of3: 0, Up16Of3To31Of3: 0 } },
             DividendIncUs115BBDA:       { DateRange: { Upto15Of6: 0, Up16Of6To15Of9: 0, Up16Of9To15Of12: 0, Up16Of12To15Of3: 0, Up16Of3To31Of3: 0 } },
-            ...(itr5AY !== '2024-25' ? { DividendIncUs115BBDAaiii: { DateRange: { Upto15Of6: 0, Up16Of6To15Of9: 0, Up16Of9To15Of12: 0, Up16Of12To15Of3: 0, Up16Of3To31Of3: 0 } } } : {}),
+            ...(effectiveAY !== '2024-25' ? { DividendIncUs115BBDAaiii: { DateRange: { Upto15Of6: 0, Up16Of6To15Of9: 0, Up16Of9To15Of12: 0, Up16Of12To15Of3: 0, Up16Of3To31Of3: 0 } } } : {}),
             DividendIncUs115A1ai:       { DateRange: { Upto15Of6: 0, Up16Of6To15Of9: 0, Up16Of9To15Of12: 0, Up16Of12To15Of3: 0, Up16Of3To31Of3: 0 } },
             DividendIncUs115AC:         { DateRange: { Upto15Of6: 0, Up16Of6To15Of9: 0, Up16Of9To15Of12: 0, Up16Of12To15Of3: 0, Up16Of3To31Of3: 0 } },
             DividendIncUs115AD1iDiv:    { DateRange: { Upto15Of6: 0, Up16Of6To15Of9: 0, Up16Of9To15Of12: 0, Up16Of12To15Of3: 0, Up16Of3To31Of3: 0 } },
@@ -2901,13 +2900,13 @@ function buildITR5(input: BuildITRInput): object {
           BusProfExclSpecProf:  cylaInc(Math.max(0, bpIncome)),
           SpeculationIncome:    cylaInc(0),
           SpecifiedBusIncome:   cylaInc(0),
-          STCG15Per:    cylaInc(itr5AY === '2024-25' ? stcg111A : 0),
-          ...(itr5AY !== '2024-25' ? { STCG20Per: cylaInc(stcg111A) } : {}),
+          STCG15Per:    cylaInc(effectiveAY === '2024-25' ? stcg111A : 0),
+          ...(effectiveAY !== '2024-25' ? { STCG20Per: cylaInc(stcg111A) } : {}),
           STCG30Per:    cylaInc(0),
           STCGAppRate:  cylaInc(stcgOther),
           STCGDTAARate: cylaInc(0),
-          LTCG10Per:    cylaInc(itr5AY === '2024-25' ? ltcg112A : 0),
-          ...(itr5AY !== '2024-25' ? { LTCG12_5Per: cylaInc(ltcg112A) } : {}),
+          LTCG10Per:    cylaInc(effectiveAY === '2024-25' ? ltcg112A : 0),
+          ...(effectiveAY !== '2024-25' ? { LTCG12_5Per: cylaInc(ltcg112A) } : {}),
           LTCG20Per:    cylaInc(0),
           LTCGDTAARate: cylaInc(0),
           OthSrcExclRaceHorseLottery: cylaInc(Math.max(0, osIncome)),
@@ -2934,13 +2933,13 @@ function buildITR5(input: BuildITRInput): object {
           BusProfExclSpecProf: bflaRow(Math.max(0, bpIncome)),
           SpeculationIncome:   bflaRow(0),
           SpecifiedBusIncome:  bflaRow(0),
-          STCG15Per:    bflaRow(itr5AY === '2024-25' ? stcg111A : 0),
-          ...(itr5AY !== '2024-25' ? { STCG20Per: bflaRow(stcg111A) } : {}),
+          STCG15Per:    bflaRow(effectiveAY === '2024-25' ? stcg111A : 0),
+          ...(effectiveAY !== '2024-25' ? { STCG20Per: bflaRow(stcg111A) } : {}),
           STCG30Per:    bflaRow(0),
           STCGAppRate:  bflaRow(stcgOther),
           STCGDTAARate: bflaRow(0),
-          LTCG10Per:    bflaRow(itr5AY === '2024-25' ? ltcg112A : 0),
-          ...(itr5AY !== '2024-25' ? { LTCG12_5Per: bflaRow(ltcg112A) } : {}),
+          LTCG10Per:    bflaRow(effectiveAY === '2024-25' ? ltcg112A : 0),
+          ...(effectiveAY !== '2024-25' ? { LTCG12_5Per: bflaRow(ltcg112A) } : {}),
           LTCG20Per:    bflaRow(0),
           LTCGDTAARate: bflaRow(0),
           OthSrcExclRaceHorse: bflaRowOS(Math.max(0, osIncome)),

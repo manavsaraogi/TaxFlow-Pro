@@ -52,6 +52,7 @@ interface ReturnMeta {
   filingSection: string;
   filedAt?: string;
   acknowledgementNumber?: string;
+  updatedAY?: string;  // for 139(8A) — the AY being updated
 }
 
 type TabId =
@@ -226,6 +227,10 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate, fo
           filingSection: data.filingType === 'REVISED' ? '17' : '11',
           filedAt: data.filedAt,
           acknowledgementNumber: data.acknowledgementNumber,
+          updatedAY: (() => {
+            const gen = data.itr5General ?? (data.itr5GeneralJson ? JSON.parse(data.itr5GeneralJson) : null);
+            return gen?.filingSection === '139(8A)' ? gen?.updated?.updatedAY : undefined;
+          })(),
         };
         setReturnMeta(meta);
         // Parse ITR-5 JSON blobs from DB strings → objects
@@ -494,7 +499,7 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate, fo
           {/* AY */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', borderRight: '1px solid rgba(255,255,255,0.1)', paddingRight: '16px', marginRight: '16px' }}>
             <span style={{ fontSize: '10px', color: '#7A8FA8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>AY</span>
-            <span style={{ fontSize: '13px', fontWeight: 600, color: '#fff' }}>{returnMeta.assessmentYear}</span>
+            <span style={{ fontSize: '13px', fontWeight: 600, color: '#fff' }}>{returnMeta.updatedAY ?? returnMeta.assessmentYear}</span>
           </div>
 
           {/* Status + Regime */}
