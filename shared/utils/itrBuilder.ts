@@ -2119,14 +2119,11 @@ function buildITR5(input: BuildITRInput): object {
             PartnerOrMemberInfo: gen.members.map((m: any) => ({
               PartnerOrMemberName: m.name ?? '',
               AddressDetailWithZipCode: {
-                FlatDoorBlockNo:       m.flatNo ?? '',
-                NameOfPremises:        m.buildingName ?? '',
-                RoadOrStreet:          m.streetName ?? '',
-                LocalityOrArea:        m.localityOrArea ?? '',
-                CityOrTownOrDistrict:  m.cityOrTownOrDistrict ?? '',
-                StateCode:             m.stateCode ?? '27',
-                PinCode:               m.pinCode ?? '',
+                AddrDetail:            [m.flatNo, m.buildingName, m.streetName, m.localityOrArea].filter(Boolean).join(', ') || m.address || '-',
+                CityOrTownOrDistrict:  m.cityOrTownOrDistrict || m.city || 'Delhi',
+                StateCode:             m.stateCode ?? '07',
                 CountryCode:           m.countryCode ?? '91',
+                ...(m.pinCode ? { PinCode: Number(m.pinCode) } : {}),
               },
               SharePercentage:  Number(m.sharePercentage) || 0,
               Status:           m.status ?? 'TRUSTEE',
