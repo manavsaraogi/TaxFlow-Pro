@@ -435,7 +435,16 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
   const pan = c.pan.toUpperCase();
   const formType = ret.formType;
-  const filename = `ITR-${formType.replace('ITR-', '')}-${pan}-AY${ret.assessmentYear.ayLabel}.json`;
+  // Use the effectiveAY from the JSON (handles 139(8A) where JSON AY differs from return's DB AY)
+  const jsonAYYear: string | undefined =
+    inner?.Form_ITR5?.AssessmentYear ??
+    inner?.Form_ITR1?.AssessmentYear ??
+    inner?.Form_ITR2?.AssessmentYear ??
+    inner?.Form_ITR4?.AssessmentYear;
+  const effectiveAYLabel: string = jsonAYYear
+    ? `${Number(jsonAYYear) - 1}-${String(jsonAYYear).slice(2)}`
+    : ret.assessmentYear.ayLabel;
+  const filename = `ITR-${formType.replace('ITR-', '')}-${pan}-AY${effectiveAYLabel}.json`;
 
   return NextResponse.json(itrJson, {
     headers: {
