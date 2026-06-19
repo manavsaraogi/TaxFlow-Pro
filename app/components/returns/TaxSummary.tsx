@@ -34,6 +34,8 @@ interface TaxInputs {
   formType: string;
   entityType: string;                // 'FIRM' | 'LLP' | 'AOP' | 'BOI' | 'COOP' | 'LA' | 'AJP'
   usesMMR: boolean;                  // AOP/BOI taxed at Maximum Marginal Rate
+  filingSection: string;             // '139(1)' | '139(8A)' etc.
+  updatedAY: string;                 // e.g. '2024-25' — for 139(8A) period calc
 }
 
 interface TaxComputation {
@@ -60,6 +62,10 @@ interface TaxComputation {
   interest234B: number;
   interest234C: number;
   totalInterest: number;
+
+  // 140B additional tax (139(8A) updated return)
+  additionalTax140B: number;
+  period140B: 1 | 2 | null;
 
   // Total demand / refund
   totalTaxDue: number;
@@ -239,13 +245,28 @@ function computeTax(inp: TaxInputs): TaxComputation {
   const cess = Math.floor(taxAfterRebate * 0.04);
   const netTax = taxAfterRebate + cess;
 
+  // 139(8A) additional tax u/s 140B — 25% (Period 1) or 50% (Period 2)
+  let additionalTax140B = 0;
+  let period140B: 1 | 2 | null = null;
+  if (inp.filingSection === '139(8A)') {
+    const updAY = inp.updatedAY || '2024-25';
+    const endYear = parseInt(updAY.split('-')[1] ?? '25') + 2000;
+    const p1End = new Date(endYear + 1, 2, 31);
+    const p2End = new Date(endYear + 2, 2, 31);
+    const today = new Date();
+    period140B = today <= p1End ? 1 : today <= p2End ? 2 : null;
+    if (period140B) {
+      additionalTax140B = Math.round(netTax * (period140B === 1 ? 0.25 : 0.50));
+    }
+  }
+
   // Simplified interest estimates
   const interest234A = 0;  // computed at portal based on filing date
   const interest234B = 0;  // requires advance tax schedule integration
   const interest234C = 0;
   const totalInterest = interest234A + interest234B + interest234C;
 
-  const totalTaxDue = netTax + totalInterest;
+  const totalTaxDue = netTax + additionalTax140B + totalInterest;
   const totalPrePaid = inp.tdsTCS + inp.advanceTax + inp.selfAssessmentTax;
   const balancePayable = totalTaxDue - totalPrePaid; // negative = refund
 
@@ -253,6 +274,7 @@ function computeTax(inp: TaxInputs): TaxComputation {
     grossTotalIncome, totalDeductions, taxableIncome, lotteryIncome,
     normalTaxableIncome, taxOnNormalIncome, taxOnLottery, grossTax,
     surcharge, taxAfterSurcharge, rebate87A, taxAfterRebate, cess, netTax,
+    additionalTax140B, period140B,
     interest234A, interest234B, interest234C, totalInterest,
     totalTaxDue, totalPrePaid, balancePayable,
   };
@@ -272,11 +294,13 @@ function buildDefaultInputs(rd: any): TaxInputs {
 
   // ITR-5: compute business income from BP schedule
   const formType: string = rd?.formType ?? '';
+  const itr5General = formType === 'ITR-5'
+    ? (rd?.itr5General ?? (rd?.itr5GeneralJson ? JSON.parse(rd.itr5GeneralJson) : null))
+    : null;
   let businessIncome = 0;
   let entityType = 'AOP';
   let usesMMR = false;
   if (formType === 'ITR-5') {
-    const itr5General = rd?.itr5General ?? (rd?.itr5GeneralJson ? JSON.parse(rd.itr5GeneralJson) : null);
     const itr5PL = rd?.itr5PL ?? (rd?.itr5PLJson ? JSON.parse(rd.itr5PLJson) : null);
     const itr5BP = rd?.itr5BP ?? (rd?.itr5BPJson ? JSON.parse(rd.itr5BPJson) : null);
     entityType = itr5General?.entityType ?? 'AOP';
@@ -309,6 +333,8 @@ function buildDefaultInputs(rd: any): TaxInputs {
     formType,
     entityType,
     usesMMR,
+    filingSection: itr5General?.filingSection ?? '',
+    updatedAY: itr5General?.updated?.updatedAY ?? '2024-25',
   };
 }
 
@@ -407,7 +433,7 @@ export default function TaxSummary({ returnId, returnData }: Props) {
           { label: 'Gross Total Income', value: c.grossTotalIncome, color: 'var(--text-primary)' },
           { label: 'Total Deductions', value: c.totalDeductions, color: '#4ade80' },
           { label: 'Taxable Income', value: c.taxableIncome, color: 'var(--brand-text)' },
-          { label: 'Net Tax Payable', value: c.netTax, color: c.netTax > 0 ? '#f87171' : '#4ade80' },
+          { label: c.additionalTax140B > 0 ? 'Net Tax + 140B' : 'Net Tax Payable', value: c.totalTaxDue, color: c.totalTaxDue > 0 ? '#f87171' : '#4ade80' },
         ].map((s) => (
           <div key={s.label} className="stat-card" style={{ padding: '16px 18px' }}>
             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>
@@ -488,8 +514,18 @@ export default function TaxSummary({ returnId, returnData }: Props) {
             <Row label="Interest u/s 234C (deferment of instalments)" value={c.interest234C} />
             <Row label="Total Interest" value={c.totalInterest} bold />
 
+            {/* 140B additional tax for 139(8A) updated return */}
+            {c.additionalTax140B > 0 && (
+              <Row
+                label={`Add: Additional Tax u/s 140B (${c.period140B === 1 ? '25%' : '50%'} — Period ${c.period140B})`}
+                value={c.additionalTax140B}
+                sub={c.period140B === 1 ? 'Within 12 months of AY end' : '12–24 months after AY end'}
+                separator
+              />
+            )}
+
             {/* Total demand */}
-            <Row label="Total Tax + Interest" value={c.totalTaxDue} bold highlight separator />
+            <Row label="Total Tax + Interest + 140B" value={c.totalTaxDue} bold highlight separator />
 
             {/* Pre-paid taxes */}
             <Row label="Less: TDS / TCS Credit" value={inputs.tdsTCS} deduction separator />

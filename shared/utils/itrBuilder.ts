@@ -429,7 +429,7 @@ function computeTaxLiability(
   summary: IncomeSummary,
   regime: 'OLD' | 'NEW',
   ay: string,
-  itr5?: { entityType?: string; usesMMR?: boolean },
+  itr5?: { entityType?: string; usesMMR?: boolean; filingSection?: string; updatedAY?: string },
 ): ITRTaxComputation {
   const cfg = getAYConfig(ay);
   const totalIncome = summary.TotalIncome;
@@ -454,6 +454,18 @@ function computeTaxLiability(
   const cess = Math.round(taxPlusSurcharge * 0.04);
   const grossTaxLiability = taxPlusSurcharge + cess;
 
+  // 139(8A) updated return — additional tax u/s 140B
+  let additionalTax140B: number | undefined;
+  if (itr5?.filingSection === '139(8A)') {
+    const updAY = itr5.updatedAY ?? '2024-25';
+    const endYear = parseInt(updAY.split('-')[1] ?? '25') + 2000;
+    const p1End = new Date(endYear + 1, 2, 31); // 31 Mar, 12 months after AY end
+    const rate = new Date() <= p1End ? 0.25 : 0.50;
+    additionalTax140B = Math.round(grossTaxLiability * rate);
+  }
+
+  const totalWithPenalty = grossTaxLiability + (additionalTax140B ?? 0);
+
   return {
     TotalTaxableIncome: totalIncome,
     NetTaxPayable: slabTax,
@@ -462,10 +474,11 @@ function computeTaxLiability(
     Surcharge: surcharge,
     HealthEducationCess: cess,
     GrossTaxLiability: grossTaxLiability,
-    TotalTaxPayable: grossTaxLiability,
+    TotalTaxPayable: totalWithPenalty,
     TotalTaxesPaid: 0,
-    BalTaxPayable: grossTaxLiability,
+    BalTaxPayable: totalWithPenalty,
     AggregateTaxInterestLiability: grossTaxLiability,
+    ...(additionalTax140B !== undefined ? { AdditionalTax140B: additionalTax140B } : {}),
   };
 }
 

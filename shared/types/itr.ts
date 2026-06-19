@@ -593,6 +593,7 @@ export interface ITRTaxComputation {
   IntrstPay234C?: number;
   IntrstPay234F?: number;      // Late filing fee
   AggregateTaxInterestLiability: number;
+  AdditionalTax140B?: number;   // 139(8A) updated return — 25% or 50% of aggregate
   Refund?: number;
 }
 

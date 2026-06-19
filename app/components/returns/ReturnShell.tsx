@@ -182,6 +182,8 @@ function getITR5Opts(rd: any) {
   return {
     entityType: gen.entityType as string | undefined,
     usesMMR: !gen.sharesDeterminable || gen.anyMemberExceedsExemption,
+    filingSection: gen.filingSection as string | undefined,
+    updatedAY: gen.updated?.updatedAY as string | undefined,
   };
 }
 
@@ -974,19 +976,12 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate, fo
               negative={taxComp.BalTaxPayable < 0}
             />
           )}
-          {(() => {
-            const filingSection = (returnData as any)?.itr5General?.filingSection;
-            if (filingSection !== '139(8A)' || !taxComp) return null;
-            const updatedAY: string = (returnData as any)?.itr5General?.updated?.updatedAY ?? returnMeta?.assessmentYear ?? '2025-26';
-            const endYear = parseInt(updatedAY.split('-')[1] ?? '26') + 2000;
-            const p1End = new Date(endYear + 1, 2, 31);
-            const period = new Date() <= p1End ? 1 : 2;
-            const addlTax = Math.round(taxComp.AggregateTaxInterestLiability * (period === 1 ? 0.25 : 0.50));
-            return <>
+          {taxComp?.AdditionalTax140B !== undefined && (
+            <>
               <SummaryDivider />
-              <SummaryCell label={`140B Addl Tax (${period === 1 ? '25%' : '50%'})`} value={addlTax} highlight />
-            </>;
-          })()}
+              <SummaryCell label={`140B Addl Tax (${taxComp.AdditionalTax140B === Math.round(taxComp.AggregateTaxInterestLiability * 0.25) ? '25%' : '50%'})`} value={taxComp.AdditionalTax140B} highlight />
+            </>
+          )}
         </div>
       )}
     </div>
