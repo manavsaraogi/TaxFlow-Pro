@@ -502,9 +502,9 @@ export default function ITR5General({ returnId, assessmentYear, initialData, onS
   const lbl = 'block text-sm font-medium text-gray-700 mb-1';
   const usesMMR = !form.sharesDeterminable || form.anyMemberExceedsExemption;
 
-  // 139(8A) period dates derived from AY (e.g. '2025-26' → FY ends 31 Mar 2026)
+  // 139(8A) period dates derived from the AY being updated (not the filing AY)
   const updPeriods = (() => {
-    const ay = assessmentYear ?? '2025-26';
+    const ay = (form.isUpdatedReturn ? form.updated.updatedAY : null) ?? assessmentYear ?? '2025-26';
     const endYear = parseInt(ay.split('-')[1] ?? '26') + 2000;
     const p1End = new Date(endYear + 1, 2, 31); // 31 Mar, 12 months after AY end
     const p2End = new Date(endYear + 2, 2, 31); // 31 Mar, 24 months after AY end
@@ -584,7 +584,10 @@ export default function ITR5General({ returnId, assessmentYear, initialData, onS
             </div>
             <div>
               <label className={lbl}><Req />Filed Under Section</label>
-              <select className={inp} value={form.filingSection} onChange={e => update({ filingSection: e.target.value as FilingSection })}>
+              <select className={inp} value={form.filingSection} onChange={e => {
+                const fs = e.target.value as FilingSection;
+                update({ filingSection: fs, ...(fs === '139(8A)' ? { isUpdatedReturn: true } : fs !== form.filingSection ? { isUpdatedReturn: false } : {}) });
+              }}>
                 <option value="139(1)">139(1) — Original return (on or before due date)</option>
                 <option value="139(4)">139(4) — Belated return</option>
                 <option value="139(5)">139(5) — Revised return</option>
@@ -886,7 +889,7 @@ export default function ITR5General({ returnId, assessmentYear, initialData, onS
                   <label key={ay} className={`flex items-center gap-1.5 px-3 py-1.5 rounded border cursor-pointer text-xs font-medium ${form.updated.updatedAY === ay ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-600'}`}>
                     <input type="radio" name="updatedAY" value={ay} checked={form.updated.updatedAY === ay}
                       onChange={() => { const sy=parseInt(ay.split('-')[0]); const ay2=new Date(sy+1,2,31); const m=(new Date().getFullYear()-ay2.getFullYear())*12+new Date().getMonth()-ay2.getMonth(); const p:UpdatedPeriod=m<=12?'1':m<=24?'2':m<=36?'3':'4'; updateUpd({ updatedAY: ay, periodCode: p }); }}
-                      className="accent-blue-600" /> FY {ay}
+                      className="accent-blue-600" /> {(() => { const [y1,y2]=ay.split('-'); return `FY ${parseInt(y1)-1}-${y1.slice(2)} (AY ${ay})`; })()}
                   </label>
                 ))}
               </div>
