@@ -780,11 +780,13 @@ function buildPersonalInfo(client: BuilderClient, opts?: { includeStatus?: strin
 const VALID_ITR5_CAPACITY = new Set(['MP','DP','PA','PO','ME','LQ','RP','TR','EX','RA','AS','OA']);
 function buildVerification(v: Verification, filingDate: string, pan?: string) {
   const capacity = VALID_ITR5_CAPACITY.has(v.Capacity ?? '') ? v.Capacity : 'PO';
+  // AssesseeVerPAN requires individual PAN pattern (4th char = 'P'); omit for trust/firm PANs
+  const isIndividualPAN = pan && /^[A-Z]{3}P[A-Z][0-9]{4}[A-Z]$/.test(pan);
   return {
     Declaration: {
       AssesseeVerName:  v.AssesseeVerName || 'Authorised Signatory',
       FatherName:       v.FatherName || '-',
-      AssesseeVerPAN:   pan ?? '',
+      ...(isIndividualPAN ? { AssesseeVerPAN: pan } : {}),
       Capacity:         capacity,
       Place:            (v as any).Place || (v as any).PlaceVerSign || 'Delhi',
       Date:             (v as any).Date || (v as any).DateVerSign || filingDate,
@@ -1930,10 +1932,13 @@ function buildITR5(input: BuildITRInput): object {
   const totalIncome   = Math.max(0, grossTotalIncome - viaDeductions);
 
   const cylaInc = (n: number) => ({
-    IncCYLA: { IncOfCurYrUnderThatHead: n, HPlossCurYrSetoff: 0, BusLossSetoff: 0, OthSrcLossNoRaceHorseSetoff: 0, IncOfCurYrAfterSetOff: n },
+    IncCYLA: { IncOfCurYrUnderThatHead: n, IncOfCurYrAfterSetOff: n },
   });
   const bflaRow = (n: number) => ({
     IncBFLA: { IncOfCurYrUndHeadFromCYLA: n, BFlossPrevYrUndSameHeadSetoff: 0, BFUnabsorbedDeprSetoff: 0, BFAllUs35Cl4Setoff: 0, IncOfCurYrAfterSetOffBFLosses: n },
+  });
+  const bflaRowOS = (n: number) => ({
+    IncBFLA: { IncOfCurYrUndHeadFromCYLA: n, BFUnabsorbedDeprSetoff: 0, BFAllUs35Cl4Setoff: 0, IncOfCurYrAfterSetOffBFLosses: n },
   });
 
   // ── Balance Sheet totals ──────────────────────────────────────────────────
@@ -2271,10 +2276,15 @@ function buildITR5(input: BuildITRInput): object {
                   OthProvision:            toI(bs.ProvisionsOther),
                   TotProvisions:           totProvisions,
                 },
-                TotCurrLiabilitiesProv: totCurrLiabilities + totProvisions,
+                TotCurrLiabilitiesProvision: totCurrLiabilities + totProvisions,
               },
             },
-            MiscAdjust: toI(bs.MiscExpenditure) + toI(bs.DeferredTaxAsset) + toI(bs.DebitPLBalance),
+            MiscAdjust: {
+              MiscExpndr:        toI(bs.MiscExpenditure),
+              DefTaxAsset:       toI(bs.DeferredTaxAsset),
+              AccumultedLosses:  toI(bs.DebitPLBalance),
+              TotMiscAdjust:     toI(bs.MiscExpenditure) + toI(bs.DeferredTaxAsset) + toI(bs.DebitPLBalance),
+            },
             TotFundApply: totFixedAsset + totInvestments
               + totCurrAssetLoanAdv - (totCurrLiabilities + totProvisions)
               + toI(bs.MiscExpenditure) + toI(bs.DeferredTaxAsset) + toI(bs.DebitPLBalance),
@@ -2312,11 +2322,46 @@ function buildITR5(input: BuildITRInput): object {
             },
             TotCreditsToPL: toI(pl.N65id) + toI(pl.N65iid),
           },
-          DebitsToPL: { DebitPlAcnt: 0, TaxProvAppr: 0 },
-          PersumptiveInc44AD:       toI(pl.BizNetProfit),
-          PersumptiveInc44ADA:      toI(pl.ProfNetProfit),
+          DebitsToPL: {
+            DebitPlAcnt: {
+              Freight: 0, ConsumptionOfStores: 0, PowerFuel: 0, RentExpdr: 0, RepairsBldg: 0, RepairMach: 0,
+              EmployeeComp: { SalsWages: 0, Bonus: 0, MedExpReimb: 0, LeaveEncash: 0, LeaveTravelBenft: 0, ContToSuperAnnFund: 0, ContToPF: 0, ContToGratFund: 0, ContToOthFund: 0, OthEmpBenftExpdr: 0, TotEmployeeComp: 0 },
+              Insurances: { MedInsur: 0, LifeInsur: 0, KeyManInsur: 0, OthInsur: 0, TotInsurances: 0 },
+              StaffWelfareExp: 0, Entertainment: 0, Hospitality: 0, Conference: 0, SalePromoExp: 0, Advertisement: 0,
+              CommissionExpdrDtls: { NonResOtherCompany: 0, Others: 0, Total: 0 },
+              RoyalityDtls: { NonResOtherCompany: 0, Others: 0, Total: 0 },
+              ProfessionalConstDtls: { NonResOtherCompany: 0, Others: 0, Total: 0 },
+              HotelBoardLodge: 0, TravelExp: 0, ForeignTravelExp: 0, ConveyanceExp: 0, TelephoneExp: 0, GuestHouseExp: 0, ClubExp: 0, FestivalCelebExp: 0, Scholarship: 0, Gift: 0, Donation: 0,
+              RatesTaxesPays: { UnionExciseDuty: 0, ServiceTax: 0, VATorSaleTax: 0, CentralGoodServiceTax: 0, StateGoodServiceTax: 0, IntegratedGoodServiceTax: 0, UnionTerrGoodServiceTax: 0, OthDutyTaxCess: 0, TotExciseCustomsVAT: 0 },
+              AuditFee: 0, SalRemuneration: 0, OtherExpenses: 0,
+              BadDebtDtls: { BadDebtAmtDtlsTotal: 0, OthersPANNotAvlblDtlTotal: 0, OthersAmtLt1Lakh: 0, BadDebt: 0 },
+              ProvForBadDoubtDebt: 0, OthProvisionsExpdr: 0, PBIDTA: 0,
+              InterestExpdrtDtls: { NonResOtherCompany: 0, Others: 0, ResPartners: 0, ResOthers: 0, InterestExpdr: 0 },
+              DepreciationAmort: 0, PBT: 0,
+            },
+            TaxProvAppr: {
+              ProvForCurrTax: 0, ProvDefTax: 0, ProfitAfterTax: 0, BalBFPrevYr: 0, AmtAvlAppr: 0,
+              Appropriations: {}, PartnerAccBalTrf: 0,
+            },
+          },
+          PersumptiveInc44AD:       { GrsTrnOverOrReceipt: 0, TotPersumptiveInc44AD: toI(pl.BizNetProfit) },
+          PersumptiveInc44ADA:      { GrsReceipt: 0 },
           TotalPrsumptvIncUs44E:    0,
-          NoBooksOfAccPL:           toI(pl.BizNetProfit) + toI(pl.ProfNetProfit),
+          NoBooksOfAccPL: {
+            GrossReceipt:              toI(pl.BizGrossReceiptsElectronic) + toI(pl.BizGrossReceiptsOther),
+            GrsRcptAccPayeeOrBankMode: toI(pl.BizGrossReceiptsElectronic),
+            GrsRcptOtherMode:          toI(pl.BizGrossReceiptsOther),
+            GrossProfit:               toI(pl.BizGrossProfit),
+            Expenses:                  toI(pl.BizExpenses),
+            NetProfit:                 toI(pl.BizNetProfit),
+            GrossReceiptPrf:           0,
+            GrsRcptAccPayeeOrBankModePrf: 0,
+            GrsRcptOtherModePrf:       0,
+            GrossProfitPrf:            toI(pl.ProfNetProfit),
+            ExpensesPrf:               0,
+            NetProfitPrf:              toI(pl.ProfNetProfit),
+            TotBusinessProfession:     toI(pl.BizNetProfit) + toI(pl.ProfNetProfit),
+          },
           TurnverFrmSpecActivity:   0,
           NetIncomeFrmSpecActivity: 0,
         } : {
@@ -2339,14 +2384,62 @@ function buildITR5(input: BuildITRInput): object {
             TotCreditsToPL: totCreditsToPL,
           },
           DebitsToPL: {
-            DebitPlAcnt: totDebitsExpenses,
-            TaxProvAppr: toI(pl.PL49) + toI(pl.PL50),
+            DebitPlAcnt: {
+              Freight:             0,
+              ConsumptionOfStores: 0,
+              PowerFuel:           toI(pl.PL23i) + toI(pl.PL23ii) + toI(pl.PL23iii) + toI(pl.PL23iv),
+              RentExpdr:           toI(pl.PL17),
+              RepairsBldg:         toI(pl.PL18),
+              RepairMach:          toI(pl.PL19),
+              EmployeeComp: {
+                SalsWages:         toI(pl.PL16) + toI(pl.PL52ia) + toI(pl.PL52ib) + toI(pl.PL52iia) + toI(pl.PL52iib),
+                Bonus: 0, MedExpReimb: 0, LeaveEncash: 0, LeaveTravelBenft: 0,
+                ContToSuperAnnFund: 0, ContToPF: 0, ContToGratFund: 0, ContToOthFund: 0, OthEmpBenftExpdr: 0,
+                TotEmployeeComp:   toI(pl.PL16) + toI(pl.PL52ia) + toI(pl.PL52ib) + toI(pl.PL52iia) + toI(pl.PL52iib),
+              },
+              Insurances: { MedInsur: 0, LifeInsur: 0, KeyManInsur: 0, OthInsur: toI(pl.PL20), TotInsurances: toI(pl.PL20) },
+              StaffWelfareExp: 0, Entertainment: 0, Hospitality: toI(pl.PL27),
+              Conference: 0, SalePromoExp: 0, Advertisement: toI(pl.PL29),
+              CommissionExpdrDtls: { NonResOtherCompany: 0, Others: toI(pl.PL30i) + toI(pl.PL30ii), Total: toI(pl.PL30i) + toI(pl.PL30ii) },
+              RoyalityDtls:        { NonResOtherCompany: 0, Others: toI(pl.PL32i) + toI(pl.PL32ii), Total: toI(pl.PL32i) + toI(pl.PL32ii) },
+              ProfessionalConstDtls: { NonResOtherCompany: 0, Others: toI(pl.PL31i) + toI(pl.PL31ii), Total: toI(pl.PL31i) + toI(pl.PL31ii) },
+              HotelBoardLodge: 0,
+              TravelExp:       toI(pl.PL24) + toI(pl.PL25),
+              ForeignTravelExp: toI(pl.PL26),
+              ConveyanceExp: 0, TelephoneExp: toI(pl.PL22xi), GuestHouseExp: 0, ClubExp: 0,
+              FestivalCelebExp: toI(pl.PL28), Scholarship: 0, Gift: 0, Donation: toI(pl.PL53),
+              RatesTaxesPays: { UnionExciseDuty: 0, ServiceTax: 0, VATorSaleTax: 0, CentralGoodServiceTax: 0, StateGoodServiceTax: 0, IntegratedGoodServiceTax: 0, UnionTerrGoodServiceTax: 0, OthDutyTaxCess: toI(pl.PL21), TotExciseCustomsVAT: toI(pl.PL21) },
+              AuditFee:            toI(pl.PL33),
+              SalRemuneration:     0,
+              OtherExpenses:       toI(pl.PL37) + toI(pl.PL40) + toI(pl.PL41) + toI(pl.PL42) + toI(pl.PL43) + toI(pl.PL44x) + toI(pl.PL45) + toI(pl.PL46) + toI(pl.PL47) + toI(pl.PL48iv),
+              BadDebtDtls:         { BadDebtAmtDtlsTotal: 0, OthersPANNotAvlblDtlTotal: 0, OthersAmtLt1Lakh: toI(pl.PL34), BadDebt: toI(pl.PL34) },
+              ProvForBadDoubtDebt: toI(pl.PL35),
+              OthProvisionsExpdr:  toI(pl.PL36),
+              PBIDTA:              Math.max(0, toI(pl.NetProfitBeforeTaxes) + toI(pl.PL38) + toI(pl.PL39)),
+              InterestExpdrtDtls:  { NonResOtherCompany: 0, Others: 0, ResPartners: 0, ResOthers: toI(pl.PL38), InterestExpdr: toI(pl.PL38) },
+              DepreciationAmort:   toI(pl.PL39),
+              PBT:                 toI(pl.NetProfitBeforeTaxes),
+            },
+            TaxProvAppr: {
+              ProvForCurrTax:  toI(pl.PL49),
+              ProvDefTax:      0,
+              ProfitAfterTax:  Math.max(0, toI(pl.NetProfitBeforeTaxes) - toI(pl.PL49)),
+              BalBFPrevYr:     0,
+              AmtAvlAppr:      Math.max(0, toI(pl.NetProfitBeforeTaxes) - toI(pl.PL49)),
+              Appropriations:  {},
+              PartnerAccBalTrf: toI(pl.PL50),
+            },
           },
-          // Required fields for P&L (set to 0 when regular books are maintained)
-          PersumptiveInc44AD:      0,
-          PersumptiveInc44ADA:     0,
+          PersumptiveInc44AD:      { GrsTrnOverOrReceipt: 0, TotPersumptiveInc44AD: 0 },
+          PersumptiveInc44ADA:     { GrsReceipt: 0 },
           TotalPrsumptvIncUs44E:   0,
-          NoBooksOfAccPL:          0,
+          NoBooksOfAccPL: {
+            GrossReceipt: 0, GrsRcptAccPayeeOrBankMode: 0, GrsRcptOtherMode: 0,
+            GrossProfit: 0, Expenses: 0, NetProfit: 0,
+            GrossReceiptPrf: 0, GrsRcptAccPayeeOrBankModePrf: 0, GrsRcptOtherModePrf: 0,
+            GrossProfitPrf: 0, ExpensesPrf: 0, NetProfitPrf: 0,
+            TotBusinessProfession: 0,
+          },
           TurnverFrmSpecActivity:  0,
           NetIncomeFrmSpecActivity: 0,
         },
@@ -2354,48 +2447,118 @@ function buildITR5(input: BuildITRInput): object {
         // ── ScheduleBP (regular books case) ──────────────────────────────
         ...(!noAccountCase ? (() => {
           const netProfit       = toI(pl.NetProfitBeforeTaxes);
-          const additions       = toI(bp5.personalExpenses) + toI(bp5.inadmissibleU40aIa) + toI(bp5.inadmissibleU40A3)
-                                + toI(bp5.provisionIncomeTax) + toI(bp5.salaryToPartnersExcess)
-                                + toI(bp5.interestToPartnersExcess) + toI(bp5.otherAdditions);
           const crossHeads      = toI(bp5.dividendCreditedToPL) + toI(bp5.interestCreditedToPL)
                                 + toI(bp5.rentalIncomeCreditedToPL) + toI(bp5.capitalGainCreditedToPL)
                                 + toI(bp5.otherCrossHeadDeductions);
           const bpDeds          = toI(bp5.depreciationITAct) + toI(bp5.deductionU35) + toI(bp5.deductionU10AA)
                                 + toI(bp5.deductionU80IC) + toI(bp5.otherBPDeductions);
           const fromOtherHeads  = toI(bp5.amtFromOtherHeadsToBP);
-          const taxableBPIncome = netProfit + additions + fromOtherHeads - crossHeads - bpDeds;
+          const salDisallow     = toI(bp5.salaryToPartnersExcess);
+          const intDisallow     = toI(bp5.interestToPartnersExcess);
+          const othDisallow     = toI(bp5.personalExpenses) + toI(bp5.provisionIncomeTax);
+          const disallUs37      = toI(bp5.otherAdditions);
+          const disallUs40      = toI(bp5.inadmissibleU40aIa);
+          const disallUs40A     = toI(bp5.inadmissibleU40A3);
+          const deprnBooks      = toI(pl.PL39);
+          const deprnIT         = toI(bp5.depreciationITAct);
+          const balPL           = netProfit - crossHeads;
+          const adjPLDepr       = balPL + deprnBooks - deprnIT;
+          const totAdditions    = adjPLDepr + disallUs37 + disallUs40 + disallUs40A + salDisallow + intDisallow + othDisallow;
+          const totDeductions   = toI(bp5.deductionU35) + toI(bp5.deductionU10AA) + toI(bp5.deductionU80IC) + toI(bp5.otherBPDeductions);
+          const plAftAdj        = totAdditions - totDeductions;
+          const netPLAft        = plAftAdj + fromOtherHeads;
+          const taxableBPIncome = Math.max(0, netPLAft);
           return {
             CorpScheduleBP: {
-              NetProfitOfBusOrProf: netProfit,
-              AdditionsToNetProfit: additions,
-              AmtDebToCPAofBusorProf: {
-                PersonalExpenses:           toI(bp5.personalExpenses),
-                InadmissU40aIA:             toI(bp5.inadmissibleU40aIa),
-                InadmissU40A3:              toI(bp5.inadmissibleU40A3),
-                ProvisionIncomeTax:         toI(bp5.provisionIncomeTax),
-                ExcessSalaryPartners40b:    toI(bp5.salaryToPartnersExcess),
-                ExcessInterestPartners40b:  toI(bp5.interestToPartnersExcess),
-                OtherInadmissExpenses:      toI(bp5.otherAdditions),
-                TotAmtDebToCPAofBusorProf:  additions,
+              BusinessIncOthThanSpec: {
+                ProfBfrTaxPL:           netProfit,
+                NetPLFromSpecBus:       0,
+                NetProfLossSpecifiedBus: 0,
+                IncRecCredPLOthHeadDtls: {
+                  HouseProperty:    toI(bp5.rentalIncomeCreditedToPL),
+                  CapitalGains:     toI(bp5.capitalGainCreditedToPL),
+                  OtherSources:     toI(bp5.interestCreditedToPL) + toI(bp5.otherCrossHeadDeductions),
+                  UnderSec115BBF:   0,
+                  UnderSec115BBG:   0,
+                  Dividend:         toI(bp5.dividendCreditedToPL),
+                  OtherThanDividend: 0,
+                },
+                PLUs44sChapXIIGOthrUs115B: 0,
+                ProfitLossInclRefrdSec:    netProfit,
+                TotalProfitFrmActCvrd:     0,
+                ProfitFrmActCvrd:          0,
+                IncCredPL:                 fromOtherHeads,
+                BalancePLOthThanSpecBus:   balPL,
+                ExpDebToPLOthHeadDtls: {
+                  HouseProperty:  0,
+                  CapitalGains:   0,
+                  OtherSources:   0,
+                  UnderSec115BBF: 0,
+                  UnderSec115BBG: 0,
+                },
+                ExpDebToPLExemptInc:             0,
+                ExpDebToPLExemptIncDisAllwUs14A: 0,
+                TotExpDebPL:                     0,
+                AdjustedPLOthThanSpecBus:        balPL,
+                DepreciationDebPLCosAct:         deprnBooks,
+                DepreciationAllowITAct32:        deprnIT,
+                AdjustPLAfterDeprOthSpecInc:     adjPLDepr,
+                AmtDebPLDisallowUs36:            0,
+                AmtDebPLDisallowUs37:            disallUs37,
+                AmtDebPLDisallowUs40:            disallUs40,
+                AmtDebPLDisallowUs40A:           disallUs40A,
+                AmtDebPLDisallowUs43B:           0,
+                InterestDisAllowUs23SMEAct:      0,
+                DeemIncUs41:                     0,
+                DeemIncUs3380HHD80IA:            0,
+                DeemIncUs43CA:                   0,
+                OthItemDisallowUs28To44DB:       0,
+                AnyOthIncNotInclInExpDisallowPL: 0,
+                SalaryExpDisallowPL:             salDisallow,
+                BonusExpDisallowPL:              0,
+                CommissionExpDisallowPL:         0,
+                InterestExpDisallowPL:           intDisallow,
+                OthersExpDisallowPL:             othDisallow,
+                IncProfDecLossAccICDSAdj:        0,
+                TotAfterAddToPLDeprOthSpecInc:   totAdditions,
+                DeductUs32_1_iii:                0,
+                DebPLUs35ExcessAmt:              toI(bp5.deductionU35),
+                AmtDisallUs40NowAllow:           0,
+                AmtDisallUs43BNowAllow:          0,
+                AnyOthAmtAllDeduct:              toI(bp5.deductionU10AA) + toI(bp5.deductionU80IC) + toI(bp5.otherBPDeductions),
+                DecProfIncLossAccICDSAdj:        0,
+                TotDeductionAmts:                totDeductions,
+                PLAftAdjDedBusOthThanSpec:       plAftAdj,
+                DeemedProfitBusUs:               0,
+                NetPLAftAdjBusOthThanSpec:       netPLAft,
+                NetPLBusOthThanSpec7A7B7C:       taxableBPIncome,
+                ChrgblIncUndrRule7:              0,
+                DeemedChrgblIncUndrRule7A:       0,
+                DeemedChrgblIncUndrRule7B1:      0,
+                DeemedChrgblIncUndrRule7B1A:     0,
+                DeemedChrgblIncUndrRule8:        0,
+                IncomeOtherThanRule:             taxableBPIncome,
+                BalIncDeemedFrmAgri:             0,
               },
-              AmtCrToP_L_NotTaxblBP: {
-                DividendCreditedToPL:     toI(bp5.dividendCreditedToPL),
-                InterestCreditedToPL:     toI(bp5.interestCreditedToPL),
-                RentalIncomeCreditedToPL: toI(bp5.rentalIncomeCreditedToPL),
-                CapGainCreditedToPL:      toI(bp5.capitalGainCreditedToPL),
-                OtherCrossHeadAmts:       toI(bp5.otherCrossHeadDeductions),
-                TotAmtCrToP_L_NotTaxblBP: crossHeads,
+              SpecBusinessInc: {
+                NetPLFrmSpecBus:        0,
+                AdditionUs28to44DB:     0,
+                DeductUs28to44DB:       0,
+                AdjustedPLFrmSpecuBus:  0,
               },
-              DeductFrmNetProfit: {
-                DepreciationITAct:  toI(bp5.depreciationITAct),
-                DeductionU35:       toI(bp5.deductionU35),
-                DeductionU10AA:     toI(bp5.deductionU10AA),
-                DeductionU80IC:     toI(bp5.deductionU80IC),
-                OtherDeductions:    toI(bp5.otherBPDeductions),
-                TotDeductFrmNetProfit: bpDeds,
+              IncSpecifiedBusiness: {
+                NetPLFrmSpecifiedBus:          0,
+                AddSec28to44DB:                0,
+                DedSec28to44DBOTDedSec35AD:    0,
+                ProfitLossSpecifiedBusiness:   0,
+                ProfitLossSpecifiedBusFinal:   0,
               },
-              IncChargblFromOtherHeads: fromOtherHeads,
-              IncChargblUnderBP: Math.max(0, taxableBPIncome),
+              IncChrgUnHdProftGain: taxableBPIncome,
+              BusSetoffCurrYr: {
+                LossSetOffOnBusLoss:     0,
+                TotLossSetOffOnBus:      0,
+                LossRemainSetOffOnBus:   taxableBPIncome,
+              },
             },
           };
         })() : {}),
@@ -2449,49 +2612,50 @@ function buildITR5(input: BuildITRInput): object {
               AmtBrwdRepaidOnHundiUs69D: 0,
               OthersGross:               0,
               PassThrIncOSChrgblSplRate: 0,
-              Deductions:                deductions,
+              Deductions:                { Depreciation: 0, TotDeductions: deductions },
               BalanceNoRaceHorse:        netInc,
             },
             TotOthSrcNoRaceHorse:       netInc,
-            IncFromOwnHorse:            0,
+            IncFromOwnHorse:            { Receipts: 0, DeductSec57: 0, BalanceOwnRaceHorse: 0 },
             IncChargeableFrmOthSrc:     netInc,
-            IncFrmLottery:              0,
-            IncFrmOnGames:              0,
-            DividendIncUs115BBDA:       0,
-            ...(itr5AY !== '2024-25' ? { DividendIncUs115BBDAaiii: 0 } : {}),
-            DividendIncUs115A1ai:       0,
-            DividendIncUs115AC:         0,
-            DividendIncUs115AD1iDiv:    0,
-            DividendIncUs115AD1IBd:     0,
-            DividendDTAA:               0,
+            IncFrmLottery:              { DateRange: { Upto15Of6: 0, Up16Of6To15Of9: 0, Up16Of9To15Of12: 0, Up16Of12To15Of3: 0, Up16Of3To31Of3: 0 } },
+            IncFrmOnGames:              { DateRange: { Upto15Of6: 0, Up16Of6To15Of9: 0, Up16Of9To15Of12: 0, Up16Of12To15Of3: 0, Up16Of3To31Of3: 0 } },
+            DividendIncUs115BBDA:       { DateRange: { Upto15Of6: 0, Up16Of6To15Of9: 0, Up16Of9To15Of12: 0, Up16Of12To15Of3: 0, Up16Of3To31Of3: 0 } },
+            ...(itr5AY !== '2024-25' ? { DividendIncUs115BBDAaiii: { DateRange: { Upto15Of6: 0, Up16Of6To15Of9: 0, Up16Of9To15Of12: 0, Up16Of12To15Of3: 0, Up16Of3To31Of3: 0 } } } : {}),
+            DividendIncUs115A1ai:       { DateRange: { Upto15Of6: 0, Up16Of6To15Of9: 0, Up16Of9To15Of12: 0, Up16Of12To15Of3: 0, Up16Of3To31Of3: 0 } },
+            DividendIncUs115AC:         { DateRange: { Upto15Of6: 0, Up16Of6To15Of9: 0, Up16Of9To15Of12: 0, Up16Of12To15Of3: 0, Up16Of3To31Of3: 0 } },
+            DividendIncUs115AD1iDiv:    { DateRange: { Upto15Of6: 0, Up16Of6To15Of9: 0, Up16Of9To15Of12: 0, Up16Of12To15Of3: 0, Up16Of3To31Of3: 0 } },
+            DividendIncUs115AD1IBd:     { DateRange: { Upto15Of6: 0, Up16Of6To15Of9: 0, Up16Of9To15Of12: 0, Up16Of12To15Of3: 0, Up16Of3To31Of3: 0 } },
+            DividendDTAA:               { DateRange: { Upto15Of6: 0, Up16Of6To15Of9: 0, Up16Of9To15Of12: 0, Up16Of12To15Of3: 0, Up16Of3To31Of3: 0 } },
           };
         })(),
 
         // ── ScheduleCG ────────────────────────────────────────────────────
         ScheduleCG: {
-          ShortTermCapGainFor23: (() => {
+          ShortTermCapGain: (() => {
             const stcg = rd.stcg;
             const otherAssets = stcg?.OtherEntries ?? [];
             return {
-              EquityMFDTDtls111A: stcg?.Entries111A?.length
-                ? {
-                    ShareUnitSaleDetails111A: stcg.Entries111A.map(e => ({
-                      ISIN:            e.isin ?? '',
-                      ShareUnitName:   e.shareOrUnitName ?? '',
-                      SaleValue:       toI(e.salesValue),
-                      CostAcquisition: toI(e.purchaseCost),
-                      Expenditure:     toI(e.expenditure),
-                      GainLoss:        toI(e.gainLoss),
-                    })),
-                    TotalSaleValue:   stcg.Entries111A.reduce((s,e) => s + toI(e.salesValue), 0),
-                    TotalCostOfAcq:   stcg.Entries111A.reduce((s,e) => s + toI(e.purchaseCost), 0),
-                    TotalExpenditure: stcg.Entries111A.reduce((s,e) => s + toI(e.expenditure), 0),
-                    TotalSTCG111A:    stcg111A,
-                  }
-                : undefined,
-              NRITransacSec48Dtl:   { NRITransactionSec48: 0 },
-              NRISecur115AD:        { NRISecuritiesIncome: 0, NRISecuritiesTax: 0 },
-              SaleOnOtherAssets:    {
+              ...(stcg?.Entries111A?.length ? {
+                EquityMFonSTT: [{
+                  MFSectionCode: '1A' as const,
+                  EquityMFonSTTDtls: {
+                    FullConsideration: stcg.Entries111A.reduce((s,e) => s + toI(e.salesValue), 0),
+                    DeductSec48:       stcg.Entries111A.reduce((s,e) => s + toI(e.purchaseCost) + toI(e.expenditure), 0),
+                    BalanceCG:         stcg111A,
+                    LossSec94of7Or94of8: 0,
+                    CapgainonAssets:   stcg111A,
+                  },
+                  EquityMFonSTTDtls_BE: {
+                    FullConsideration: 0, DeductSec48: 0, BalanceCG: 0, LossSec94of7Or94of8: 0, CapgainonAssets: 0,
+                  },
+                  TotalCapGainonassets: stcg111A,
+                }],
+              } : {}),
+              SlumpSaleInStcg: { FMV11UAEii: 0, FMV11UAEiii: 0, FullConsideration: 0, NetWorthOfDivision: 0, CapgainonAssets: 0 },
+              NRITransacSec48Dtl: { NRItaxSTTPaid: 0, NRItaxSTTPaidTransferBE: 0, NRItaxSTTPaidTransferAE: 0, NRItaxSTTNotPaid: 0 },
+              NRISecur115AD:      {},
+              SaleOnOtherAssets:  {
                 SaleValue:       otherAssets.reduce((s,e) => s + toI(e.salesValue), 0),
                 CostAcquisition: otherAssets.reduce((s,e) => s + toI(e.purchaseCost), 0),
                 LowDeductions:   otherAssets.reduce((s,e) => s + toI(e.expenditure), 0),
@@ -2504,41 +2668,41 @@ function buildITR5(input: BuildITRInput): object {
               TotalSTCG:                totalSTCG,
             };
           })(),
-          LongTermCapGain23: (() => {
-            const entries = rd.ltcg112A?.Entries ?? [];
-            return {
-              SaleOfEquityShareUs112A: entries.length
-                ? {
-                    SaleOfEquityDtls: entries.map(e => ({
-                      ISIN:              e.ISIN ?? '',
-                      ShareUnitName:     e.ShareOrUnitName ?? '',
-                      SaleValue:         toI(e.SalesValue),
-                      PurchaseCost:      toI(e.PurchaseCost),
-                      FMVasOn31Jan2018:  toI(e.FMVasOn31Jan2018),
-                      Expenditure:       toI(e.Expenditure),
-                      GainLoss:          toI(e.GainLoss),
-                    })),
-                    TotalSaleValue:   entries.reduce((s,e) => s + toI(e.SalesValue), 0),
-                    TotalCostOfAcq:   entries.reduce((s,e) => s + toI(e.PurchaseCost), 0),
-                    TotalExpenditure: 0,
-                    TotalLTCG112A:    ltcg112A,
-                  }
-                : undefined,
-              NRIProvisoSec48:            { NRITransactionSec48: 0 },
-              NRIOnSec112and115:          { NRISecuritiesIncome: 0, NRISecuritiesTax: 0 },
-              NRISaleOfEquityShareUs112A: { NRIEquityIncome: 0, NRIEquityTax: 0 },
-              NRISaleofForeignAsset:      { NRIForeignAssetIncome: 0, NRIForeignAssetTax: 0 },
-              SaleofAssetNADtls:          { SaleValue: 0, CostAcquisition: 0, LowDeductions: 0, CapGain: 0 },
-              TotalAmtDeemedLtcg:         0,
-              PassThrIncNatureLTCG:       0,
-              TotalAmtNotTaxUsDTAALtcg:   0,
-              TotalAmtTaxUsDTAALtcg:      0,
-              TotalLTCG:                  ltcg112A,
-            };
-          })(),
-          SumOfCGIncm:     totalCG,
-          IncmFromVDATrnsf: 0,
-          TotScheduleCG:   totalCG,
+          LongTermCapGain: {
+            SlumpSaleInLtcgDtls:      {},
+            SaleofBondsDebntr:        { FullConsideration: 0, DeductSec48: 0, BalanceCG: 0 },
+            SaleOfEquityShareUs112A: {
+              CapgainonAssets:          ltcg112A,
+              CapgainonAssetsTransferBE: 0,
+              CapgainonAssetsTransferAE: 0,
+            },
+            NRISaleOfEquityShareUs112A: {
+              CapgainonAssets:          0,
+              CapgainonAssetsTransferBE: 0,
+              CapgainonAssetsTransferAE: 0,
+            },
+            SaleofAssetNADtls:        {},
+            TotalAmtDeemedLtcg:       0,
+            PassThrIncNatureLTCG:     0,
+            PassThrIncNatureLTCGUs112A: 0,
+            TotalAmtNotTaxUsDTAALtcg: 0,
+            TotalAmtTaxUsDTAALtcg:    0,
+            TotalLTCG:                ltcg112A,
+          },
+          SumOfCGIncm:              totalCG,
+          IncmFromVDATrnsf:         0,
+          IncChargeableHeadCapGain: totalCG,
+          DeducClaimInfo:           { TotDeductClaim: 0 },
+          CurrYrLosses: {
+            InLossSetOff: 0, InStcg15Per: 0, InStcg20Per: 0, InStcg30Per: 0,
+            InStcgAppRate: 0, InStcgDTAARate: 0, InLtcg10Per: 0, InLtcg12_5Per: 0,
+            InLtcg20Per: 0, InLtcgDTAARate: 0, TotLossSetOff: 0, LossRemainSetOff: totalCG,
+          },
+          AccruOrRecOfCG: {
+            ShortTermUnder15Per: 0, ShortTermUnder20Per: 0, ShortTermUnder30Per: 0,
+            ShortTermUnderAppRate: 0, ShortTermUnderDTAARate: 0,
+            LongTermUnder10Per: 0, LongTermUnder12_5Per: 0, LongTermUnder20Per: 0, LongTermUnderDTAARate: 0,
+          },
         },
 
         // ── ScheduleSI (Special Income rates) ────────────────────────────
@@ -2616,7 +2780,7 @@ function buildITR5(input: BuildITRInput): object {
           ...(itr5AY !== '2024-25' ? { LTCG12_5Per: bflaRow(ltcg112A) } : {}),
           LTCG20Per:    bflaRow(0),
           LTCGDTAARate: bflaRow(0),
-          OthSrcExclRaceHorse: bflaRow(Math.max(0, osIncome)),
+          OthSrcExclRaceHorse: bflaRowOS(Math.max(0, osIncome)),
           IncomeOfCurrYrAftCYLABFLA: grossTotalIncome,
           TotalBFLossSetOff: {
             TotBFLossSetoff:        0,
