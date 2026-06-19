@@ -284,7 +284,7 @@ function buildDefaultInputs(rd: any): TaxInputs {
     const netProfitFromPL = itr5PL?.NetProfitBeforeTaxes ?? 0;
     if (itr5BP) {
       const computed = computeBP5(itr5BP, netProfitFromPL);
-      businessIncome = computed.Item48 ?? 0;
+      businessIncome = (computed.Item36 ?? 0) + (computed.Item42 ?? 0) + (computed.Item48 ?? 0);
     } else {
       businessIncome = netProfitFromPL;
     }

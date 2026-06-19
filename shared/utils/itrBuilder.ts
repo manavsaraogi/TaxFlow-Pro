@@ -326,20 +326,20 @@ function computeIncomeSummary(rd: ReturnData): IncomeSummary {
   const hpRaw = toInt(rd.houseProperty?.TotalIncomeFromHP);
   const hp = hpRaw < 0 ? Math.max(hpRaw, -DEDUCTION_CAPS.HPLossSetOff) : hpRaw;
 
-  const os = toInt(rd.otherSources?.IncomeFromOtherSources);
+  // OS income — read from component format OR DB/API format (osSchedule)
+  const os = toInt(rd.otherSources?.IncomeFromOtherSources)
+    || toInt((rd as any).osSchedule?.incomeFromOtherSources);
   const presumptive = toInt(rd.presumptiveIncome?.TotalPresumptiveIncome);
   const ltcg112A = toInt(rd.ltcg112A?.TaxableLTCG112A);
   const stcg111A = toInt(rd.stcg?.TotalSTCG111A);
   const stcgOther = toInt(rd.stcg?.TotalSTCGOther);
 
-  // ITR-5: business income from Schedule BP Item48, fallback to P&L NetProfitBeforeTaxes
+  // ITR-5: business income = Section A (Item36) + Section B (Item42) + Section C (Item48)
   const itr5BP = (rd as any).itr5BP;
   const itr5PL = (rd as any).itr5PL;
   let itr5BusinessIncome = 0;
   if (itr5BP || itr5PL) {
     if (itr5BP) {
-      // Inline BP Item48 calc: Item46 - Item47
-      // Item46 = Item43 + Item44 - Item45, Item47 = bp.Item47
       const bp = itr5BP;
       const netPL = toInt(itr5PL?.NetProfitBeforeTaxes);
       const Item1  = netPL;
@@ -357,12 +357,15 @@ function computeIncomeSummary(rd: ReturnData): IncomeSummary {
       const Item35Total = toInt(bp.Item35i_44AD)+toInt(bp.Item35ii_44ADA)+toInt(bp.Item35iii_44AE)
         +toInt(bp.Item35iv_44B)+toInt(bp.Item35v_44BB)+toInt(bp.Item35vi_44BBA)
         +toInt(bp.Item35vii_44BBB)+toInt(bp.Item35viii_44D)+toInt(bp.Item35ix_44DB);
+      // Section A: regular business income
       const Item36 = Item34 + Item35Total;
-      const Item42 = Item36 + toInt(bp.Item37) + toInt(bp.Item38) + toInt(bp.Item39)
-        + toInt(bp.Item40) + toInt(bp.Item41);
+      // Section B: speculative income
+      const Item42 = toInt(bp.Item39) + toInt(bp.Item40) - toInt(bp.Item41);
+      // Section C: specified business (35AD)
       const Item46 = toInt(bp.Item43) + toInt(bp.Item44) - toInt(bp.Item45);
-      const Item47 = toInt(bp.Item47);
-      itr5BusinessIncome = Item46 - Item47;
+      const Item47 = toInt(bp.Item47a) + toInt(bp.Item47b);
+      const Item48 = Item46 - Item47;
+      itr5BusinessIncome = Item36 + Item42 + Item48;
     } else {
       itr5BusinessIncome = toInt(itr5PL?.NetProfitBeforeTaxes);
     }
@@ -422,13 +425,22 @@ function computeRebate87A(income: number, tax: number, regime: 'OLD' | 'NEW', cf
   return 0;
 }
 
-function computeTaxLiability(summary: IncomeSummary, regime: 'OLD' | 'NEW', ay: string): ITRTaxComputation {
+function computeTaxLiability(
+  summary: IncomeSummary,
+  regime: 'OLD' | 'NEW',
+  ay: string,
+  itr5?: { entityType?: string; usesMMR?: boolean },
+): ITRTaxComputation {
   const cfg = getAYConfig(ay);
   const totalIncome = summary.TotalIncome;
   const ltcg112A = summary.LTCG112A ?? 0;
   const stcg111A = summary.STCG111A ?? 0;
 
-  const slabTax = computeSlabTax(totalIncome, regime, cfg);
+  const isFirmOrLLP = itr5 && (itr5.entityType === 'FIRM' || itr5.entityType === 'LLP');
+  const isMMR = itr5 && itr5.usesMMR;
+  const slabTax = (isFirmOrLLP || isMMR)
+    ? Math.floor(totalIncome * 0.30)
+    : computeSlabTax(totalIncome, regime, cfg);
 
   const taxableLTCG = Math.max(0, ltcg112A - cfg.ltcg112AExempt);
   const ltcgTax = Math.round(taxableLTCG * cfg.ltcg112ARate);
