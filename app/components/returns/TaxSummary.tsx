@@ -61,6 +61,7 @@ interface TaxComputation {
   interest234A: number;
   interest234B: number;
   interest234C: number;
+  interest234F: number;
   totalInterest: number;
 
   // 140B additional tax (139(8A) updated return)
@@ -95,6 +96,53 @@ async function downloadComputationPDF(returnId: string) {
 }
 
 // â"€â"€â"€ Tax Slabs â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
+
+// ─── Interest Auto-computation ────────────────────────────────────────────────
+
+function countMonths(from: string, to: string): number {
+  if (to <= from) return 0;
+  const d1 = new Date(from);
+  const d2 = new Date(to);
+  const m = (d2.getFullYear() - d1.getFullYear()) * 12 + (d2.getMonth() - d1.getMonth());
+  return d2.getDate() > d1.getDate() ? m + 1 : Math.max(m, 1);
+}
+
+// grossTax = net tax (after rebate+cess, before TDS/advance tax)
+function computeAutoInterest(
+  grossTax: number,
+  advanceTax: number,
+  tdsTCS: number,
+  totalIncome: number,
+  filingDate: string,
+  dueDate: string,
+  assessmentYear: string,
+) {
+  const ayYear = parseInt(assessmentYear.replace('AY ', '').split('-')[0] ?? '2025');
+  const apr1OfAY = `${ayYear}-04-01`;
+
+  const isLate = filingDate > dueDate;
+  const int234F = isLate ? (totalIncome > 500_000 ? 5_000 : 1_000) : 0;
+
+  // 234B: advance tax shortfall (advTax + TDS < 90% of gross tax)
+  const assessedTax = Math.max(0, grossTax - tdsTCS);
+  const advShortfall = Math.max(0, assessedTax - advanceTax);
+  const int234B = advShortfall > assessedTax * 0.10
+    ? Math.round(advShortfall * 0.01 * countMonths(apr1OfAY, filingDate))
+    : 0;
+
+  // 234A: late filing, on unpaid tax as of due date
+  let int234A = 0;
+  if (isLate) {
+    const base = Math.max(0, grossTax - tdsTCS - advanceTax);
+    if (base > 0) {
+      const afterDue = new Date(dueDate);
+      afterDue.setDate(afterDue.getDate() + 1);
+      int234A = Math.round(base * 0.01 * countMonths(afterDue.toISOString().slice(0, 10), filingDate));
+    }
+  }
+
+  return { int234A, int234B, int234F };
+}
 
 // Old regime slabs for individuals/HUF (AY 2025-26 and 2026-27 — same)
 function computeOldRegimeTax(income: number): number {
@@ -334,11 +382,18 @@ function computeTax(inp: TaxInputs): TaxComputation {
     }
   }
 
-  // Simplified interest estimates
-  const interest234A = 0;  // computed at portal based on filing date
-  const interest234B = 0;  // requires advance tax schedule integration
-  const interest234C = 0;
-  const totalInterest = interest234A + interest234B + interest234C;
+  // Auto-compute 234A/234B/234F; 234C requires per-installment data so stays 0
+  const { int234A: interest234A, int234B: interest234B, int234F: interest234F } = computeAutoInterest(
+    netTax,
+    inp.advanceTax,
+    inp.tdsTCS,
+    taxableIncome,
+    inp.filingDate,
+    inp.dueDate,
+    inp.assessmentYear,
+  );
+  const interest234C = 0; // requires installment-level advance tax data
+  const totalInterest = interest234A + interest234B + interest234C + interest234F;
 
   const totalTaxDue = netTax + additionalTax140B + totalInterest;
   const totalPrePaid = inp.tdsTCS + inp.advanceTax + inp.selfAssessmentTax;
@@ -349,7 +404,7 @@ function computeTax(inp: TaxInputs): TaxComputation {
     normalTaxableIncome, taxOnNormalIncome, taxOnLottery, grossTax,
     surcharge, taxAfterSurcharge, rebate87A, taxAfterRebate, cess, netTax,
     additionalTax140B, period140B,
-    interest234A, interest234B, interest234C, totalInterest,
+    interest234A, interest234B, interest234C, interest234F, totalInterest,
     totalTaxDue, totalPrePaid, balancePayable,
   };
 }
@@ -403,7 +458,12 @@ function buildDefaultInputs(rd: any): TaxInputs {
     regime: (rd?.regime ?? (typeof rd?.assessmentYear === 'object' ? rd?.assessmentYear?.regime : undefined) ?? 'NEW') as TaxRegime,
     assessmentYear: typeof rd?.assessmentYear === 'string' ? rd.assessmentYear : (rd?.assessmentYear?.ayLabel ?? 'AY 2026-27'),
     filingDate: new Date().toISOString().slice(0, 10),
-    dueDate: '2026-07-31',
+    dueDate: (() => {
+      const rawAY = typeof rd?.assessmentYear === 'string' ? rd.assessmentYear : (rd?.assessmentYear?.ayLabel ?? 'AY 2026-27');
+      const ayYr = parseInt(rawAY.replace('AY ', '').split('-')[0] ?? '2026');
+      const audit = formType === 'ITR-5' ? (itr5General?.isAuditRequired ?? false) : false;
+      return `${ayYr}-${audit ? '10-31' : '07-31'}`;
+    })(),
     formType,
     entityType,
     usesMMR,
@@ -582,11 +642,14 @@ export default function TaxSummary({ returnId, returnData }: Props) {
 
             {/* Interest */}
             <Row label="Interest u/s 234A (late filing)" value={c.interest234A}
-              sub="Computed at portal based on actual filing date" separator />
+              sub={`1% × ${Math.max(0, Math.round((new Date(inputs.filingDate).getTime() - new Date(inputs.dueDate).getTime()) / (30 * 24 * 3600 * 1000)))} months on unpaid tax from due date`} separator />
             <Row label="Interest u/s 234B (advance tax shortfall)" value={c.interest234B}
-              sub="If < 90% of tax paid as advance tax" />
-            <Row label="Interest u/s 234C (deferment of instalments)" value={c.interest234C} />
-            <Row label="Total Interest" value={c.totalInterest} bold />
+              sub="1%/month on shortfall from April 1 of AY to filing date" />
+            <Row label="Interest u/s 234C (deferment of instalments)" value={c.interest234C}
+              sub="Requires installment-level advance tax data — enter manually if applicable" />
+            <Row label="Fee u/s 234F (late filing)" value={c.interest234F}
+              sub={`₹${c.taxableIncome > 500_000 ? '5,000' : '1,000'} if filed after ${inputs.dueDate}`} />
+            <Row label="Total Interest & Fee" value={c.totalInterest} bold />
 
             {/* 140B additional tax for 139(8A) updated return */}
             {c.additionalTax140B > 0 && (
@@ -622,11 +685,9 @@ export default function TaxSummary({ returnId, returnData }: Props) {
           </tbody>
         </table>
 
-        {c.interest234A === 0 && (
-          <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 14, marginBottom: 0 }}>
-            * Interest u/s 234A/B/C is indicative. Final amounts are computed by the Income Tax Portal at the time of filing based on the actual filing date and advance tax payment dates.
-          </p>
-        )}
+        <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 14, marginBottom: 0 }}>
+          * 234A/234B/234F are auto-computed using today as proxy filing date. 234C requires installment-level advance tax entries — enter manually in the General Info tab. Final amounts are confirmed by the Income Tax Portal at submission.
+        </p>
       </div>
 
       {/* â"€â"€ Regime comparison nudge â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€ */}

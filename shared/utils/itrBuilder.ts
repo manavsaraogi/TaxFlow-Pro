@@ -1968,11 +1968,47 @@ function buildITR5(input: BuildITRInput): object {
   const deemedIncome115JC  = amtApplies ? grossTotalIncome : 0;
   const taxDeemed115JC     = amtApplies ? amtLiability : 0;
 
-  // Interest u/s 234A/234B/234C/234F (user-entered; default 0)
-  const int234A = toI(gen.interest234A);
-  const int234B = toI(gen.interest234B);
-  const int234C = toI(gen.interest234C);
-  const int234F = toI(gen.interest234F);
+  // Interest u/s 234A/234B/234C/234F — use manual override if provided, else auto-compute
+  const manualInt234A = toI(gen.interest234A);
+  const manualInt234B = toI(gen.interest234B);
+  const manualInt234C = toI(gen.interest234C);
+  const manualInt234F = toI(gen.interest234F);
+
+  // Auto-compute 234B, 234A, 234F when not manually overridden
+  const dueDate = gen.isAuditRequired ? itr5Cfg.dueDateAudit : itr5Cfg.dueDateIndividual;
+  const { int234A: auto234A, int234B: auto234B, int234F: auto234F } = (() => {
+    const filingStr = date;
+    const isLate = filingStr > dueDate;
+    const fee234F = isLate ? (grossTotalIncome > 500_000 ? 5_000 : 1_000) : 0;
+    const assessedTax = Math.max(0, grossTaxLiab - (toI(rd.tds?.TotalTDSOnOtherIncome) + toI(rd.tds?.TotalTCS)));
+    const advTaxHere = toI(rd.taxPayments?.TotalAdvanceTax);
+    const advShortfall = Math.max(0, assessedTax - advTaxHere);
+    const ayYear = parseInt(effectiveAY.split('-')[0] ?? '2025');
+    const apr1OfAY = `${ayYear}-04-01`;
+    const countM = (from: string, to: string) => {
+      if (to <= from) return 0;
+      const d1 = new Date(from), d2 = new Date(to);
+      const m = (d2.getFullYear() - d1.getFullYear()) * 12 + (d2.getMonth() - d1.getMonth());
+      return d2.getDate() > d1.getDate() ? m + 1 : Math.max(m, 1);
+    };
+    const int234B = advShortfall > assessedTax * 0.10
+      ? Math.round(advShortfall * 0.01 * countM(apr1OfAY, filingStr)) : 0;
+    let int234A = 0;
+    if (isLate) {
+      const base = Math.max(0, grossTaxLiab - (toI(rd.tds?.TotalTDSOnOtherIncome) + toI(rd.tds?.TotalTCS)) - advTaxHere);
+      if (base > 0) {
+        const afterDue = new Date(dueDate);
+        afterDue.setDate(afterDue.getDate() + 1);
+        int234A = Math.round(base * 0.01 * countM(afterDue.toISOString().slice(0, 10), filingStr));
+      }
+    }
+    return { int234A, int234B, int234F: fee234F };
+  })();
+
+  const int234A = manualInt234A || auto234A;
+  const int234B = manualInt234B || auto234B;
+  const int234C = manualInt234C;
+  const int234F = manualInt234F || auto234F;
   const totalInterest = int234A + int234B + int234C + int234F;
 
   // Taxes paid
