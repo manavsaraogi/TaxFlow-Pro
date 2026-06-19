@@ -588,6 +588,30 @@ export default function ITR5General({ returnId, initialData, onSaved }: Props) {
               <div><label className={lbl}><Req />Date of Original Filing</label><input type="date" className={inp} value={form.origFilingDate2} onChange={e => update({ origFilingDate2: e.target.value })} /></div>
             </div>
           )}
+          {form.filingSection === '139(8A)' && (
+            <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3">
+              <p className="text-xs font-bold text-amber-800 mb-1">⚠ Updated Return — Additional Tax u/s 140B</p>
+              <p className="text-xs text-amber-700 mb-2">
+                An additional tax on the <strong>incremental tax + interest</strong> must be paid before filing:
+              </p>
+              <div className="grid grid-cols-2 gap-2 mb-2">
+                <div className="rounded bg-white border border-amber-200 p-2 text-center">
+                  <p className="text-xs text-amber-600 font-semibold">Period 1</p>
+                  <p className="text-lg font-bold text-amber-800">25%</p>
+                  <p className="text-[10px] text-amber-600">Filed within 12 months<br/>from end of AY</p>
+                </div>
+                <div className="rounded bg-white border border-amber-200 p-2 text-center">
+                  <p className="text-xs text-amber-600 font-semibold">Period 2</p>
+                  <p className="text-lg font-bold text-amber-800">50%</p>
+                  <p className="text-[10px] text-amber-600">Filed 12–24 months<br/>from end of AY</p>
+                </div>
+              </div>
+              <p className="text-[10px] text-amber-600">
+                Example: AY 2025-26 → Period 1 ends 31 Mar 2027, Period 2 ends 31 Mar 2028.
+                Pay the challan (Sec 140B) and enter it under Tax Payments before generating JSON.
+              </p>
+            </div>
+          )}
 
           <YesNo label="Return filed in response to a notice" checked={form.isReturnInResponseToNotice} onChange={v => update({ isReturnInResponseToNotice: v })} />
           {form.isReturnInResponseToNotice && (
@@ -892,7 +916,10 @@ export default function ITR5General({ returnId, initialData, onSaved }: Props) {
         </Section>
 
         {/* Members / Partners / Trustees */}
-        <Section title="Trustees / Members / Partners" action={<button onClick={addMember} className="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700">+ Add</button>}>
+        <Section
+          title={<span>Trustees / Members / Partners <Req /> <span className="text-[10px] font-normal text-gray-400">(at least 1 required)</span></span>}
+          action={<button onClick={addMember} className="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700">+ Add</button>}
+        >
           <div className="mb-2 grid grid-cols-2 gap-1">
             <YesNo label="Change in partners/members during the year" checked={form.changeInPartnersDuringYear} onChange={v => update({ changeInPartnersDuringYear: v, partnerChanges: [] })} />
             <YesNo label="Any member is a foreign company" checked={form.hasForeignCompanyMember} onChange={v => update({ hasForeignCompanyMember: v, foreignCompanySharePct: 0 })} warn />
@@ -942,7 +969,7 @@ export default function ITR5General({ returnId, initialData, onSaved }: Props) {
                     <div><label className={lbl}>Building</label><input className={inp} value={m.buildingName} onChange={e => updateMember(i, { buildingName: e.target.value })} /></div>
                     <div><label className={lbl}>Street</label><input className={inp} value={m.streetName} onChange={e => updateMember(i, { streetName: e.target.value })} /></div>
                     <div><label className={lbl}>Locality</label><input className={inp} value={m.localityOrArea} onChange={e => updateMember(i, { localityOrArea: e.target.value })} /></div>
-                    <div><label className={lbl}>City</label><input className={inp} value={m.cityOrTownOrDistrict} onChange={e => updateMember(i, { cityOrTownOrDistrict: e.target.value })} /></div>
+                    <div><label className={lbl}><Req />City</label><input className={inp} value={m.cityOrTownOrDistrict} onChange={e => updateMember(i, { cityOrTownOrDistrict: e.target.value })} placeholder="Required for JSON generation" /></div>
                     <div><label className={lbl}>State</label><select className={inp} value={m.stateCode} onChange={e => updateMember(i, { stateCode: e.target.value })}>{STATE_CODES.map(([c, n]) => <option key={c} value={c}>{n}</option>)}</select></div>
                     <div><label className={lbl}>PIN</label><input className={inp} value={m.pinCode} maxLength={6} onChange={e => updateMember(i, { pinCode: e.target.value.replace(/\D/g,'') })} /></div>
                   </div>
@@ -1038,7 +1065,7 @@ function YesNo({ label, checked, onChange, warn = false }: {
 }
 
 function Section({ title, action, children }: {
-  title: string; action?: React.ReactNode; children: React.ReactNode;
+  title: React.ReactNode; action?: React.ReactNode; children: React.ReactNode;
 }) {
   return (
     <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
