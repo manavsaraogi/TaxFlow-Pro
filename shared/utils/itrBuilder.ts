@@ -1995,14 +1995,14 @@ function buildITR5(input: BuildITRInput): object {
     };
     // 234B only applies when net tax liability ≥ ₹10,000 (s.208)
     const int234B = grossTaxLiab >= 10_000 && advShortfall > assessedTax * 0.10
-      ? Math.round(advShortfall * 0.01 * countM(apr1OfAY, filingStr)) : 0;
+      ? Math.ceil(advShortfall * 0.01 * countM(apr1OfAY, filingStr)) : 0;
     let int234A = 0;
     if (isLate) {
       const base = Math.max(0, grossTaxLiab - (toI(rd.tds?.TotalTDSOnOtherIncome) + toI(rd.tds?.TotalTCS)) - advTaxHere);
       if (base > 0) {
         const afterDue = new Date(dueDate);
         afterDue.setDate(afterDue.getDate() + 1);
-        int234A = Math.round(base * 0.01 * countM(afterDue.toISOString().slice(0, 10), filingStr));
+        int234A = Math.ceil(base * 0.01 * countM(afterDue.toISOString().slice(0, 10), filingStr));
       }
     }
     return { int234A, int234B, int234F: fee234F };

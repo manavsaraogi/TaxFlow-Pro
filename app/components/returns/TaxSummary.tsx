@@ -127,7 +127,7 @@ function computeAutoInterest(
   const assessedTax = Math.max(0, grossTax - tdsTCS);
   const advShortfall = Math.max(0, assessedTax - advanceTax);
   const int234B = grossTax >= 10_000 && advShortfall > assessedTax * 0.10
-    ? Math.round(advShortfall * 0.01 * countMonths(apr1OfAY, filingDate))
+    ? Math.ceil(advShortfall * 0.01 * countMonths(apr1OfAY, filingDate))
     : 0;
 
   // 234A: late filing, on unpaid tax as of due date
@@ -137,7 +137,7 @@ function computeAutoInterest(
     if (base > 0) {
       const afterDue = new Date(dueDate);
       afterDue.setDate(afterDue.getDate() + 1);
-      int234A = Math.round(base * 0.01 * countMonths(afterDue.toISOString().slice(0, 10), filingDate));
+      int234A = Math.ceil(base * 0.01 * countMonths(afterDue.toISOString().slice(0, 10), filingDate));
     }
   }
 
