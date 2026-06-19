@@ -219,18 +219,19 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate, fo
         setReturnMeta(meta);
         // Parse ITR-5 JSON blobs from DB strings → objects
         const parseJson = (v: unknown) => { try { return v ? JSON.parse(v as string) : null; } catch { return null; } };
-        setReturnData({
+        const parsedData = {
           ...data,
           itr5General:      data.itr5GeneralJson      ? parseJson(data.itr5GeneralJson)      : undefined,
           itr5BalanceSheet: data.itr5BalanceSheetJson  ? parseJson(data.itr5BalanceSheetJson)  : undefined,
           itr5PL:           data.itr5PLJson            ? parseJson(data.itr5PLJson)            : undefined,
           itr5BP:           data.itr5BPJson            ? parseJson(data.itr5BPJson)            : undefined,
-        });
+        };
+        setReturnData(parsedData);
         // Set default tab based on form type
         if (data.formType === 'ITR-5') setActiveTab('itr5_general');
-        const initialSummary = computeIncomeSummary(data);
+        const initialSummary = computeIncomeSummary(parsedData);
         setSummary(initialSummary);
-        setTaxComp(computeTaxLiability(initialSummary, meta.regime, data.assessmentYear ?? '2026-27'));
+        setTaxComp(computeTaxLiability(initialSummary, meta.regime, data.assessmentYear?.ayLabel ?? data.assessmentYear ?? '2026-27'));
         // Auto-detect form type on load
         const detected = detectFormTypeFromReturnData(data);
         if (detected.formType !== meta.formType) setDetectedForm(detected);
@@ -732,7 +733,11 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate, fo
               netProfitFromPL={(returnData as any)?.itr5PL?.NetProfitBeforeTaxes ?? 0}
               initialData={(returnData as any)?.itr5BP}
               onSaved={(data) => {
-                setReturnData((prev: any) => ({ ...prev, itr5BP: data }));
+                const rd = { ...(returnData ?? {} as any), itr5BP: data };
+                setReturnData(rd);
+                const s = computeIncomeSummary(rd);
+                setSummary(s);
+                setTaxComp(computeTaxLiability(s, returnMeta?.regime ?? 'NEW', returnMeta?.assessmentYear ?? '2026-27'));
                 setDirty(false);
               }}
             />
@@ -789,7 +794,11 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate, fo
                 assessmentYear={returnMeta.assessmentYear}
                 initialData={(returnData as any)?.itr5General}
                 onSaved={(data) => {
-                  setReturnData((prev: any) => ({ ...prev, itr5General: data }));
+                  const rd = { ...(returnData ?? {} as any), itr5General: data };
+                  setReturnData(rd);
+                  const s = computeIncomeSummary(rd);
+                  setSummary(s);
+                  setTaxComp(computeTaxLiability(s, returnMeta?.regime ?? 'NEW', returnMeta?.assessmentYear ?? '2026-27'));
                   setDirty(false);
                 }}
               />
@@ -802,7 +811,11 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate, fo
                 returnId={returnMeta.id}
                 initialData={(returnData as any)?.itr5BalanceSheet}
                 onSaved={(data) => {
-                  setReturnData((prev: any) => ({ ...prev, itr5BalanceSheet: data }));
+                  const rd = { ...(returnData ?? {} as any), itr5BalanceSheet: data };
+                  setReturnData(rd);
+                  const s = computeIncomeSummary(rd);
+                  setSummary(s);
+                  setTaxComp(computeTaxLiability(s, returnMeta?.regime ?? 'NEW', returnMeta?.assessmentYear ?? '2026-27'));
                   setDirty(false);
                 }}
               />
@@ -816,7 +829,11 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate, fo
                 maintainsRegularBooks={(returnData as any)?.itr5General?.maintainsRegularBooks ?? false}
                 initialData={(returnData as any)?.itr5PL}
                 onSaved={(data) => {
-                  setReturnData((prev: any) => ({ ...prev, itr5PL: data }));
+                  const rd = { ...(returnData ?? {} as any), itr5PL: data };
+                  setReturnData(rd);
+                  const s = computeIncomeSummary(rd);
+                  setSummary(s);
+                  setTaxComp(computeTaxLiability(s, returnMeta?.regime ?? 'NEW', returnMeta?.assessmentYear ?? '2026-27'));
                   setDirty(false);
                 }}
               />
