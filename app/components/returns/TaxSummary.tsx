@@ -531,16 +531,17 @@ export default function TaxSummary({ returnId, returnData }: Props) {
   const handleGenerateChallan = useCallback(() => {
     const pan = clientPan || '';
     const amount = Math.ceil(c.balancePayable);
-    // e-Pay Tax portal with pre-filled parameters
+    // Convert 'AY 2025-26' → '202526' for portal
+    const ayCode = inputs.assessmentYear.replace('AY ', '').replace('-', '');
     const params = new URLSearchParams({
       PAN: pan,
-      AY: '202526',
+      AY: ayCode,
       MajorHead: '0021',  // Income Tax
       MinorHead: '300',   // Self-Assessment Tax
       Amount: String(amount),
     });
     window.open(`https://epay.incometax.gov.in/ePay/challan/view/startPayment?${params.toString()}`, '_blank', 'noopener,noreferrer');
-  }, [clientPan, c.balancePayable]);
+  }, [clientPan, c.balancePayable, inputs.assessmentYear]);
 
   return (
     <div className="animate-in" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -717,7 +718,7 @@ export default function TaxSummary({ returnId, returnData }: Props) {
               ₹{c.balancePayable.toLocaleString('en-IN')} payable
             </div>
             <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-              Self-Assessment Tax (Minor Head 300) · Major Head 0021 · AY 2025-26
+              Self-Assessment Tax (Minor Head 300) · Major Head 0021 · {inputs.assessmentYear}
             </div>
           </div>
           <button
