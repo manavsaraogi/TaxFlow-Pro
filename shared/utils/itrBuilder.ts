@@ -1878,6 +1878,13 @@ function buildITR5(input: BuildITRInput): object {
   // Portal expects the END year of the AY (e.g. "2026" for AY 2025-26)
   const effectiveAYYear = ayToYear(effectiveAY);
 
+  // CBDT offline utility registered SWProviderIDs (extracted from official XLSM VBA)
+  const cbdtSwId: Record<string, string> = {
+    '2024-25': 'SW90002425',
+    '2025-26': 'SW90002526',
+  };
+  const itr5SwId = cbdtSwId[effectiveAY] ?? sw.SWCreatedBy;
+
   const toI = (v: unknown) => Math.round(Number(v) || 0);
   const bp5 = (rd as any).itr5BP ?? {};
 
@@ -2127,8 +2134,8 @@ function buildITR5(input: BuildITRInput): object {
       ITR5: {
         CreationInfo: {
           SWVersionNo:      sw.SWVersionNo,
-          SWCreatedBy:      sw.SWCreatedBy,
-          JSONCreatedBy:    sw.JSONCreatedBy,
+          SWCreatedBy:      itr5SwId,
+          JSONCreatedBy:    itr5SwId,
           JSONCreationDate: date,
           IntermediaryCity: sw.IntermediaryCity ?? 'Delhi',
           Digest:           '-',
