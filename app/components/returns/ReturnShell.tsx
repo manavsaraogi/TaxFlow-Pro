@@ -948,6 +948,26 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate, fo
               negative={taxComp.BalTaxPayable < 0}
             />
           )}
+          {(() => {
+            const isUpdated = (returnData as any)?.itr5General?.filingSection === '139(8A)';
+            if (!isUpdated || !taxComp) return null;
+            const ay = returnMeta?.assessmentYear ?? '2025-26';
+            const endYear = parseInt(ay.split('-')[1] ?? '26') + 2000;
+            const p1End = new Date(endYear + 1, 2, 31);
+            const today = new Date();
+            const period = today <= p1End ? 1 : 2;
+            const pct = period === 1 ? 0.25 : 0.50;
+            const base = taxComp.AggregateTaxInterestLiability;
+            const addlTax = Math.round(base * pct);
+            return <>
+              <SummaryDivider />
+              <SummaryCell
+                label={`140B Addl Tax (${period === 1 ? '25%' : '50%'})`}
+                value={addlTax}
+                highlight
+              />
+            </>;
+          })()}
         </div>
       )}
     </div>
