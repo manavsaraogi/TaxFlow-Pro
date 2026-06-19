@@ -3070,7 +3070,7 @@ function buildITR5(input: BuildITRInput): object {
               LateFilingFee234F: int234F,
               TotalIntrstPay:   totalInterest,
             },
-            AggregateTaxInterestLiability: netTaxLiab + totalInterest,
+            AggregateTaxInterestLiability: netTaxLiab + totalTaxPaid,
           },
           TaxPaid: {
             TaxesPaid: {
@@ -3080,7 +3080,7 @@ function buildITR5(input: BuildITRInput): object {
               SelfAssessmentTax: satTax,
               TotalTaxesPaid:    totalTaxPaid,
             },
-            BalTaxPayable: Math.max(0, netTaxLiab + totalInterest - totalTaxPaid),
+            BalTaxPayable: netTaxLiab,
           },
           Refund: {
             RefundDue: refund,
