@@ -1993,7 +1993,8 @@ function buildITR5(input: BuildITRInput): object {
       const m = (d2.getFullYear() - d1.getFullYear()) * 12 + (d2.getMonth() - d1.getMonth());
       return d2.getDate() > d1.getDate() ? m + 1 : Math.max(m, 1);
     };
-    const int234B = advShortfall > assessedTax * 0.10
+    // 234B only applies when net tax liability ≥ ₹10,000 (s.208)
+    const int234B = grossTaxLiab >= 10_000 && advShortfall > assessedTax * 0.10
       ? Math.round(advShortfall * 0.01 * countM(apr1OfAY, filingStr)) : 0;
     let int234A = 0;
     if (isLate) {

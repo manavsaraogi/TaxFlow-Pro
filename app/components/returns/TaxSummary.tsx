@@ -123,10 +123,10 @@ function computeAutoInterest(
   const isLate = filingDate > dueDate;
   const int234F = isLate ? (totalIncome > 500_000 ? 5_000 : 1_000) : 0;
 
-  // 234B: advance tax shortfall (advTax + TDS < 90% of gross tax)
+  // 234B: only if net tax liability ≥ ₹10,000 (s.208)
   const assessedTax = Math.max(0, grossTax - tdsTCS);
   const advShortfall = Math.max(0, assessedTax - advanceTax);
-  const int234B = advShortfall > assessedTax * 0.10
+  const int234B = grossTax >= 10_000 && advShortfall > assessedTax * 0.10
     ? Math.round(advShortfall * 0.01 * countMonths(apr1OfAY, filingDate))
     : 0;
 
