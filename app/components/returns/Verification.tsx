@@ -80,9 +80,27 @@ export default function Verification({
         const res = await fetch(`/api/returns/${returnId}`);
         const { data: ret } = await res.json();
         if (ret?.verification) {
-          const v = ret.verification as VerificationType;
+          const raw = ret.verification as Record<string, unknown>;
+          // Prisma returns camelCase; map to component's PascalCase shape
+          const v: VerificationType = {
+            AssesseeVerName: (raw.assesseeVerName as string) ?? (raw.AssesseeVerName as string) ?? '',
+            FatherName:      (raw.fatherName      as string) ?? (raw.FatherName      as string) ?? '',
+            PlaceVerSign:    (raw.placeVerSign     as string) ?? (raw.PlaceVerSign     as string) ?? '',
+            DateVerSign:     raw.dateVerSign
+              ? new Date(raw.dateVerSign as string).toISOString().split('T')[0]
+              : (raw.DateVerSign as string) ?? new Date().toISOString().split('T')[0],
+            Capacity:        (raw.capacity         as string) ?? (raw.Capacity         as string) ?? 'S',
+            EverifyFlag:     (raw.everifyFlag      as string) ?? (raw.EverifyFlag      as string) ?? 'Y',
+            AadhaarOTPFlag:  (raw.aadhaarOTPFlag   as string) ?? (raw.AadhaarOTPFlag   as string) ?? 'N',
+            BankAccountFlag: (raw.bankAccountFlag  as string) ?? (raw.BankAccountFlag  as string) ?? 'N',
+            DematAccountFlag:(raw.dematAccountFlag as string) ?? (raw.DematAccountFlag as string) ?? 'N',
+            ...(raw.signatoryPAN  && { signatoryPAN:      raw.signatoryPAN  as string }),
+            ...(raw.trpName       && { TRPName:           raw.trpName       as string }),
+            ...(raw.trpIdentification && { TRPIdentification: raw.trpIdentification as string }),
+            ...(raw.trpAddress    && { TRPAddress:        raw.trpAddress    as string }),
+          } as VerificationType;
           setData(v);
-          setShowTRP(!!v.TRPName);
+          setShowTRP(!!(v.TRPName));
         } else {
           setData((prev) => ({ ...prev, AssesseeVerName: clientName }));
         }
