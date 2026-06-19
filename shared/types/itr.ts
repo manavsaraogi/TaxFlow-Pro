@@ -141,8 +141,8 @@ export type FilingSection =
   | '18'  // 139(9)
   | '20'; // 119(2)(b) — After condonation of delay
 
-/** Verification capacity */
-export type VerificationCapacity = 'S' | 'R'; // Self | Representative
+/** Verification capacity (S/R for individuals; ITR-5 uses PO/MP/DP/PA/ME/TR/LQ/RP/EX/RA/AS/OA) */
+export type VerificationCapacity = 'S' | 'R' | 'PO' | 'MP' | 'DP' | 'PA' | 'ME' | 'TR' | 'LQ' | 'RP' | 'EX' | 'RA' | 'AS' | 'OA';
 
 /** Disability type for 80DD / 80U */
 export type DisabilityType = '1' | '2'; // 1 = Normal disability, 2 = Severe disability

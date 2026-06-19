@@ -58,7 +58,7 @@ export default function Verification({
     FatherName: '',
     PlaceVerSign: '',
     DateVerSign: new Date().toISOString().split('T')[0],
-    Capacity: 'S',
+    Capacity: formType === 'ITR-5' ? 'PO' : 'S',
     EverifyFlag: 'Y',
     AadhaarOTPFlag: 'N',
     BankAccountFlag: 'N',
@@ -227,10 +227,45 @@ export default function Verification({
                 onChange={(e) => update({ Capacity: e.target.value as VerificationCapacity })}
                 disabled={readOnly}
               >
-                <option value="S">Self</option>
-                <option value="R">Representative Assessee</option>
+                {formType === 'ITR-5' ? (
+                  <>
+                    <option value="PO">Principal Officer</option>
+                    <option value="MP">Managing Partner</option>
+                    <option value="DP">Designated Partner</option>
+                    <option value="PA">Partner</option>
+                    <option value="ME">Member</option>
+                    <option value="TR">Trustee</option>
+                    <option value="LQ">Liquidator</option>
+                    <option value="RP">Representative</option>
+                    <option value="EX">Executor</option>
+                    <option value="RA">Representative Assessee</option>
+                    <option value="AS">Administrator</option>
+                    <option value="OA">Other Authority</option>
+                  </>
+                ) : (
+                  <>
+                    <option value="S">Self</option>
+                    <option value="R">Representative Assessee</option>
+                  </>
+                )}
               </select>
             </div>
+            {formType === 'ITR-5' && (
+              <div className="form-group">
+                <label className="form-label">Signatory PAN *</label>
+                <input
+                  className="form-input pan-field"
+                  value={(data as any).signatoryPAN ?? ''}
+                  onChange={(e) => update({ signatoryPAN: e.target.value.toUpperCase() } as any)}
+                  disabled={readOnly}
+                  placeholder="Individual PAN of authorised signatory"
+                  maxLength={10}
+                />
+                <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px', display: 'block' }}>
+                  PAN of the person signing (trustee / partner / principal officer)
+                </span>
+              </div>
+            )}
           </div>
         </div>
       </div>
