@@ -355,6 +355,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
     verification = {
       AssesseeVerName: v.assesseeVerName,
       FatherName: v.fatherName ?? undefined,
+      signatoryPAN: (v as any).signatoryPAN ?? undefined,
       PlaceVerSign: v.placeVerSign,
       DateVerSign: v.dateVerSign.toISOString().split('T')[0],
       Capacity: v.capacity as any,

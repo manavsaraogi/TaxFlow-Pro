@@ -600,6 +600,7 @@ model ReturnVerification {
 
   assesseeVerName  String
   fatherName       String?
+  signatoryPAN     String?
   placeVerSign     String
   dateVerSign      DateTime
   capacity         String   @default("S")

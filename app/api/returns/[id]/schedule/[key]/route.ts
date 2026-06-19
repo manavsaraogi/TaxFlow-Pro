@@ -144,6 +144,7 @@ export async function PUT(request: NextRequest, { params }: Params) {
       const vData = {
         assesseeVerName: body.AssesseeVerName ?? '',
         fatherName: body.FatherName ?? null,
+        signatoryPAN: body.signatoryPAN ?? null,
         placeVerSign: body.PlaceVerSign ?? '',
         dateVerSign: body.DateVerSign ? new Date(body.DateVerSign) : new Date(),
         capacity: body.Capacity ?? 'S',

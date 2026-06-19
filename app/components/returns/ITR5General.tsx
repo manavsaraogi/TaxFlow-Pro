@@ -504,11 +504,10 @@ export default function ITR5General({ returnId, assessmentYear, initialData, onS
 
   // 139(8A) period dates derived from AY (e.g. '2025-26' → FY ends 31 Mar 2026)
   const updPeriods = (() => {
-    const ay = assessmentYear ?? form.filingSection === '139(8A)' ? (assessmentYear ?? '2025-26') : '2025-26';
-    const endYear = parseInt((ay ?? '2025-26').split('-')[1] ?? '26') + 2000;
-    const ayEnd = new Date(endYear, 2, 31); // 31 March of end year
-    const p1End = new Date(ayEnd); p1End.setFullYear(ayEnd.getFullYear() + 1);
-    const p2End = new Date(ayEnd); p2End.setFullYear(ayEnd.getFullYear() + 2);
+    const ay = assessmentYear ?? '2025-26';
+    const endYear = parseInt(ay.split('-')[1] ?? '26') + 2000;
+    const p1End = new Date(endYear + 1, 2, 31); // 31 Mar, 12 months after AY end
+    const p2End = new Date(endYear + 2, 2, 31); // 31 Mar, 24 months after AY end
     const today = new Date();
     const fmt = (d: Date) => d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
     const currentPeriod = today <= p1End ? 1 : today <= p2End ? 2 : null;
@@ -603,28 +602,35 @@ export default function ITR5General({ returnId, assessmentYear, initialData, onS
             </div>
           )}
           {form.filingSection === '139(8A)' && (
-            <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3">
-              <p className="text-xs font-bold text-amber-800 mb-1">⚠ Updated Return — Additional Tax u/s 140B</p>
-              <p className="text-xs text-amber-700 mb-2">
-                An additional tax on the <strong>incremental tax + interest</strong> must be paid via challan (Sec 140B) before filing:
+            <div style={{ marginTop: '12px', borderRadius: '8px', border: '1px solid #f59e0b', background: '#fffbeb', padding: '12px' }}>
+              <p style={{ fontSize: '12px', fontWeight: 700, color: '#92400e', marginBottom: '4px' }}>⚠ Updated Return — Additional Tax u/s 140B</p>
+              <p style={{ fontSize: '12px', color: '#b45309', marginBottom: '10px' }}>
+                Pay additional tax on <strong>incremental tax + interest</strong> via Sec 140B challan before filing:
               </p>
-              <div className="grid grid-cols-2 gap-2 mb-2">
-                <div className={`rounded border p-2 text-center ${updPeriods.currentPeriod === 1 ? 'bg-amber-100 border-amber-400' : 'bg-white border-amber-200'}`}>
-                  <p className="text-xs text-amber-600 font-semibold">Period 1 {updPeriods.currentPeriod === 1 && <span className="ml-1 bg-amber-500 text-white rounded px-1 text-[9px]">NOW</span>}</p>
-                  <p className="text-lg font-bold text-amber-800">25%</p>
-                  <p className="text-[10px] text-amber-600">On or before<br/>{updPeriods.p1End}</p>
-                </div>
-                <div className={`rounded border p-2 text-center ${updPeriods.currentPeriod === 2 ? 'bg-amber-100 border-amber-400' : 'bg-white border-amber-200'}`}>
-                  <p className="text-xs text-amber-600 font-semibold">Period 2 {updPeriods.currentPeriod === 2 && <span className="ml-1 bg-amber-500 text-white rounded px-1 text-[9px]">NOW</span>}</p>
-                  <p className="text-lg font-bold text-amber-800">50%</p>
-                  <p className="text-[10px] text-amber-600">On or before<br/>{updPeriods.p2End}</p>
-                </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '10px' }}>
+                {[
+                  { period: 1, pct: '25%', label: 'Within 12 months of AY end', deadline: updPeriods.p1End },
+                  { period: 2, pct: '50%', label: '12–24 months of AY end', deadline: updPeriods.p2End },
+                ].map(({ period, pct, label, deadline }) => {
+                  const active = updPeriods.currentPeriod === period;
+                  return (
+                    <div key={period} style={{ borderRadius: '6px', border: `1px solid ${active ? '#f59e0b' : '#fde68a'}`, background: active ? '#fef3c7' : '#fff', padding: '10px', textAlign: 'center' }}>
+                      <div style={{ fontSize: '11px', fontWeight: 600, color: '#92400e', marginBottom: '4px' }}>
+                        Period {period}
+                        {active && <span style={{ marginLeft: '6px', background: '#f59e0b', color: '#fff', borderRadius: '4px', padding: '1px 5px', fontSize: '9px', fontWeight: 700 }}>NOW</span>}
+                      </div>
+                      <div style={{ fontSize: '22px', fontWeight: 700, color: '#92400e', lineHeight: 1 }}>{pct}</div>
+                      <div style={{ fontSize: '10px', color: '#b45309', marginTop: '4px' }}>{label}</div>
+                      <div style={{ fontSize: '10px', color: '#78350f', fontWeight: 600, marginTop: '2px' }}>by {deadline}</div>
+                    </div>
+                  );
+                })}
               </div>
               {updPeriods.currentPeriod === null && (
-                <p className="text-[10px] font-semibold text-red-600 mb-1">⛔ Updated return window has expired for this AY.</p>
+                <p style={{ fontSize: '11px', fontWeight: 700, color: '#dc2626', marginBottom: '6px' }}>⛔ Updated return window has expired for this AY.</p>
               )}
-              <p className="text-[10px] text-amber-600">
-                Enter the 140B challan under <strong>Tax Payments</strong> before generating JSON.
+              <p style={{ fontSize: '10px', color: '#b45309' }}>
+                Enter the 140B challan under <strong>Tax Payments</strong> before generating the JSON.
               </p>
             </div>
           )}
