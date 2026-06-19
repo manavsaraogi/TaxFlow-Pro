@@ -2841,29 +2841,49 @@ function buildITR5(input: BuildITRInput): object {
           IncChargeableHeadCapGain: totalCG,
           DeducClaimInfo:           { TotDeductClaim: 0 },
           CurrYrLosses: {
-            InLossSetOff:  { StclSetoff15Per:0,StclSetoff20Per:0,StclSetoff30Per:0,StclSetoffAppRate:0,StclSetoffDTAARate:0,LtclSetOff10Per:0,LtclSetOff12_5Per:0,LtclSetOff20Per:0,LtclSetOffDTAARate:0 },
+            // AY 2024-25: 15% STCG / 10% LTCG (pre-Budget 2024 rates)
+            // AY 2025-26+: 20% STCG / 12.5% LTCG introduced — extra fields required
+            InLossSetOff: effectiveAY === '2024-25'
+              ? { StclSetoff15Per:0,StclSetoff30Per:0,StclSetoffAppRate:0,StclSetoffDTAARate:0,LtclSetOff10Per:0,LtclSetOff20Per:0,LtclSetOffDTAARate:0 }
+              : { StclSetoff15Per:0,StclSetoff20Per:0,StclSetoff30Per:0,StclSetoffAppRate:0,StclSetoffDTAARate:0,LtclSetOff10Per:0,LtclSetOff12_5Per:0,LtclSetOff20Per:0,LtclSetOffDTAARate:0 },
             InStcg15Per:   { CurrYearIncome:0,StclSetoff30Per:0,StclSetoffAppRate:0,StclSetoffDTAARate:0,CurrYrCapGain:0 },
-            InStcg20Per:   { CurrYearIncome:0,StclSetoff15Per:0,StclSetoff30Per:0,StclSetoffAppRate:0,StclSetoffDTAARate:0,CurrYrCapGain:0 },
-            InStcg30Per:   { CurrYearIncome:0,StclSetoff15Per:0,StclSetoff20Per:0,StclSetoffAppRate:0,StclSetoffDTAARate:0,CurrYrCapGain:0 },
-            InStcgAppRate: { CurrYearIncome:0,StclSetoff15Per:0,StclSetoff20Per:0,StclSetoff30Per:0,StclSetoffDTAARate:0,CurrYrCapGain:0 },
-            InStcgDTAARate:{ CurrYearIncome:0,StclSetoff15Per:0,StclSetoff20Per:0,StclSetoff30Per:0,StclSetoffAppRate:0,CurrYrCapGain:0 },
-            InLtcg10Per:   { CurrYearIncome:0,StclSetoff15Per:0,StclSetoff20Per:0,StclSetoff30Per:0,StclSetoffAppRate:0,StclSetoffDTAARate:0,LtclSetOff12_5Per:0,LtclSetOff20Per:0,LtclSetOffDTAARate:0,CurrYrCapGain:0 },
-            InLtcg12_5Per: { CurrYearIncome:0,StclSetoff15Per:0,StclSetoff20Per:0,StclSetoff30Per:0,StclSetoffAppRate:0,StclSetoffDTAARate:0,LtclSetOff10Per:0,LtclSetOff20Per:0,LtclSetOffDTAARate:0,CurrYrCapGain:0 },
-            InLtcg20Per:   { CurrYearIncome:0,StclSetoff15Per:0,StclSetoff20Per:0,StclSetoff30Per:0,StclSetoffAppRate:0,StclSetoffDTAARate:0,LtclSetOff10Per:0,LtclSetOff12_5Per:0,LtclSetOffDTAARate:0,CurrYrCapGain:0 },
-            InLtcgDTAARate:{ CurrYearIncome:0,StclSetoff15Per:0,StclSetoff20Per:0,StclSetoff30Per:0,StclSetoffAppRate:0,StclSetoffDTAARate:0,LtclSetOff10Per:0,LtclSetOff12_5Per:0,LtclSetOff20Per:0,CurrYrCapGain:0 },
-            TotLossSetOff:    { StclSetoff15Per:0,StclSetoff20Per:0,StclSetoff30Per:0,StclSetoffAppRate:0,StclSetoffDTAARate:0,LtclSetOff10Per:0,LtclSetOff12_5Per:0,LtclSetOff20Per:0,LtclSetOffDTAARate:0 },
-            LossRemainSetOff: { StclSetoff15Per:0,StclSetoff20Per:0,StclSetoff30Per:0,StclSetoffAppRate:0,StclSetoffDTAARate:0,LtclSetOff10Per:0,LtclSetOff12_5Per:0,LtclSetOff20Per:0,LtclSetOffDTAARate:0 },
+            ...(effectiveAY !== '2024-25' ? { InStcg20Per: { CurrYearIncome:0,StclSetoff15Per:0,StclSetoff30Per:0,StclSetoffAppRate:0,StclSetoffDTAARate:0,CurrYrCapGain:0 } } : {}),
+            InStcg30Per: effectiveAY === '2024-25'
+              ? { CurrYearIncome:0,StclSetoff15Per:0,StclSetoffAppRate:0,StclSetoffDTAARate:0,CurrYrCapGain:0 }
+              : { CurrYearIncome:0,StclSetoff15Per:0,StclSetoff20Per:0,StclSetoffAppRate:0,StclSetoffDTAARate:0,CurrYrCapGain:0 },
+            InStcgAppRate: effectiveAY === '2024-25'
+              ? { CurrYearIncome:0,StclSetoff15Per:0,StclSetoff30Per:0,StclSetoffDTAARate:0,CurrYrCapGain:0 }
+              : { CurrYearIncome:0,StclSetoff15Per:0,StclSetoff20Per:0,StclSetoff30Per:0,StclSetoffDTAARate:0,CurrYrCapGain:0 },
+            InStcgDTAARate: effectiveAY === '2024-25'
+              ? { CurrYearIncome:0,StclSetoff15Per:0,StclSetoff30Per:0,StclSetoffAppRate:0,CurrYrCapGain:0 }
+              : { CurrYearIncome:0,StclSetoff15Per:0,StclSetoff20Per:0,StclSetoff30Per:0,StclSetoffAppRate:0,CurrYrCapGain:0 },
+            InLtcg10Per: effectiveAY === '2024-25'
+              ? { CurrYearIncome:0,StclSetoff15Per:0,StclSetoff30Per:0,StclSetoffAppRate:0,StclSetoffDTAARate:0,LtclSetOff20Per:0,LtclSetOffDTAARate:0,CurrYrCapGain:0 }
+              : { CurrYearIncome:0,StclSetoff15Per:0,StclSetoff20Per:0,StclSetoff30Per:0,StclSetoffAppRate:0,StclSetoffDTAARate:0,LtclSetOff12_5Per:0,LtclSetOff20Per:0,LtclSetOffDTAARate:0,CurrYrCapGain:0 },
+            ...(effectiveAY !== '2024-25' ? { InLtcg12_5Per: { CurrYearIncome:0,StclSetoff15Per:0,StclSetoff20Per:0,StclSetoff30Per:0,StclSetoffAppRate:0,StclSetoffDTAARate:0,LtclSetOff10Per:0,LtclSetOff20Per:0,LtclSetOffDTAARate:0,CurrYrCapGain:0 } } : {}),
+            InLtcg20Per: effectiveAY === '2024-25'
+              ? { CurrYearIncome:0,StclSetoff15Per:0,StclSetoff30Per:0,StclSetoffAppRate:0,StclSetoffDTAARate:0,LtclSetOff10Per:0,LtclSetOffDTAARate:0,CurrYrCapGain:0 }
+              : { CurrYearIncome:0,StclSetoff15Per:0,StclSetoff20Per:0,StclSetoff30Per:0,StclSetoffAppRate:0,StclSetoffDTAARate:0,LtclSetOff10Per:0,LtclSetOff12_5Per:0,LtclSetOffDTAARate:0,CurrYrCapGain:0 },
+            InLtcgDTAARate: effectiveAY === '2024-25'
+              ? { CurrYearIncome:0,StclSetoff15Per:0,StclSetoff30Per:0,StclSetoffAppRate:0,StclSetoffDTAARate:0,LtclSetOff10Per:0,LtclSetOff20Per:0,CurrYrCapGain:0 }
+              : { CurrYearIncome:0,StclSetoff15Per:0,StclSetoff20Per:0,StclSetoff30Per:0,StclSetoffAppRate:0,StclSetoffDTAARate:0,LtclSetOff10Per:0,LtclSetOff12_5Per:0,LtclSetOff20Per:0,CurrYrCapGain:0 },
+            TotLossSetOff: effectiveAY === '2024-25'
+              ? { StclSetoff15Per:0,StclSetoff30Per:0,StclSetoffAppRate:0,StclSetoffDTAARate:0,LtclSetOff10Per:0,LtclSetOff20Per:0,LtclSetOffDTAARate:0 }
+              : { StclSetoff15Per:0,StclSetoff20Per:0,StclSetoff30Per:0,StclSetoffAppRate:0,StclSetoffDTAARate:0,LtclSetOff10Per:0,LtclSetOff12_5Per:0,LtclSetOff20Per:0,LtclSetOffDTAARate:0 },
+            LossRemainSetOff: effectiveAY === '2024-25'
+              ? { StclSetoff15Per:0,StclSetoff30Per:0,StclSetoffAppRate:0,StclSetoffDTAARate:0,LtclSetOff10Per:0,LtclSetOff20Per:0,LtclSetOffDTAARate:0 }
+              : { StclSetoff15Per:0,StclSetoff20Per:0,StclSetoff30Per:0,StclSetoffAppRate:0,StclSetoffDTAARate:0,LtclSetOff10Per:0,LtclSetOff12_5Per:0,LtclSetOff20Per:0,LtclSetOffDTAARate:0 },
           },
           AccruOrRecOfCG: {
-            ShortTermUnder15Per:  { DateRange:{Upto15Of6:0,Upto15Of9:0,Up16Of9To15Of12:0,Up16Of12To15Of3:0,Up16Of3To31Of3:0} },
-            ShortTermUnder20Per:  { DateRange:{Upto15Of6:0,Upto15Of9:0,Up16Of9To15Of12:0,Up16Of12To15Of3:0,Up16Of3To31Of3:0} },
-            ShortTermUnder30Per:  { DateRange:{Upto15Of6:0,Upto15Of9:0,Up16Of9To15Of12:0,Up16Of12To15Of3:0,Up16Of3To31Of3:0} },
-            ShortTermUnderAppRate:{ DateRange:{Upto15Of6:0,Upto15Of9:0,Up16Of9To15Of12:0,Up16Of12To15Of3:0,Up16Of3To31Of3:0} },
+            ShortTermUnder15Per:   { DateRange:{Upto15Of6:0,Upto15Of9:0,Up16Of9To15Of12:0,Up16Of12To15Of3:0,Up16Of3To31Of3:0} },
+            ...(effectiveAY !== '2024-25' ? { ShortTermUnder20Per: { DateRange:{Upto15Of6:0,Upto15Of9:0,Up16Of9To15Of12:0,Up16Of12To15Of3:0,Up16Of3To31Of3:0} } } : {}),
+            ShortTermUnder30Per:   { DateRange:{Upto15Of6:0,Upto15Of9:0,Up16Of9To15Of12:0,Up16Of12To15Of3:0,Up16Of3To31Of3:0} },
+            ShortTermUnderAppRate: { DateRange:{Upto15Of6:0,Upto15Of9:0,Up16Of9To15Of12:0,Up16Of12To15Of3:0,Up16Of3To31Of3:0} },
             ShortTermUnderDTAARate:{ DateRange:{Upto15Of6:0,Upto15Of9:0,Up16Of9To15Of12:0,Up16Of12To15Of3:0,Up16Of3To31Of3:0} },
-            LongTermUnder10Per:   { DateRange:{Upto15Of6:0,Upto15Of9:0,Up16Of9To15Of12:0,Up16Of12To15Of3:0,Up16Of3To31Of3:0} },
-            LongTermUnder12_5Per: { DateRange:{Upto15Of6:0,Upto15Of9:0,Up16Of9To15Of12:0,Up16Of12To15Of3:0,Up16Of3To31Of3:0} },
-            LongTermUnder20Per:   { DateRange:{Upto15Of6:0,Upto15Of9:0,Up16Of9To15Of12:0,Up16Of12To15Of3:0,Up16Of3To31Of3:0} },
-            LongTermUnderDTAARate:{ DateRange:{Upto15Of6:0,Upto15Of9:0,Up16Of9To15Of12:0,Up16Of12To15Of3:0,Up16Of3To31Of3:0} },
+            LongTermUnder10Per:    { DateRange:{Upto15Of6:0,Upto15Of9:0,Up16Of9To15Of12:0,Up16Of12To15Of3:0,Up16Of3To31Of3:0} },
+            ...(effectiveAY !== '2024-25' ? { LongTermUnder12_5Per: { DateRange:{Upto15Of6:0,Upto15Of9:0,Up16Of9To15Of12:0,Up16Of12To15Of3:0,Up16Of3To31Of3:0} } } : {}),
+            LongTermUnder20Per:    { DateRange:{Upto15Of6:0,Upto15Of9:0,Up16Of9To15Of12:0,Up16Of12To15Of3:0,Up16Of3To31Of3:0} },
+            LongTermUnderDTAARate: { DateRange:{Upto15Of6:0,Upto15Of9:0,Up16Of9To15Of12:0,Up16Of12To15Of3:0,Up16Of3To31Of3:0} },
           },
         },
 
@@ -2988,20 +3008,31 @@ function buildITR5(input: BuildITRInput): object {
             TotProfBusGain:       Math.max(0, bpIncome),
           },
           CapGain: {
-            ShortTerm: {
-              ShortTerm15Per:      0,
-              ShortTerm20Per:      stcg111A,
-              ShortTerm30Per:      0,
-              ShortTermAppRate:    stcgOther,
+            ShortTerm: effectiveAY === '2024-25' ? {
+              ShortTerm15Per:       stcg111A,
+              ShortTerm30Per:       0,
+              ShortTermAppRate:     stcgOther,
               ShortTermSplRateDTAA: 0,
-              TotalShortTerm:      totalSTCG,
+              TotalShortTerm:       totalSTCG,
+            } : {
+              ShortTerm15Per:       0,
+              ShortTerm20Per:       stcg111A,
+              ShortTerm30Per:       0,
+              ShortTermAppRate:     stcgOther,
+              ShortTermSplRateDTAA: 0,
+              TotalShortTerm:       totalSTCG,
             },
-            LongTerm: {
-              LongTerm10Per:       0,
-              LongTerm12_5Per:     ltcg112A,
-              LongTerm20Per:       0,
-              LongTermSplRateDTAA: 0,
-              TotalLongTerm:       ltcg112A,
+            LongTerm: effectiveAY === '2024-25' ? {
+              LongTerm10Per:        ltcg112A,
+              LongTerm20Per:        0,
+              LongTermSplRateDTAA:  0,
+              TotalLongTerm:        ltcg112A,
+            } : {
+              LongTerm10Per:        0,
+              LongTerm12_5Per:      ltcg112A,
+              LongTerm20Per:        0,
+              LongTermSplRateDTAA:  0,
+              TotalLongTerm:        ltcg112A,
             },
             ShortTermLongTermTotal: totalCG,
             CapGains30Per115BBH:    0,
