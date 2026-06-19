@@ -2022,8 +2022,9 @@ function buildITR5(input: BuildITRInput): object {
   const netTaxLiab   = Math.max(0, grossTaxLiab + totalInterest - totalTaxPaid);
   const refund       = Math.max(0, totalTaxPaid - grossTaxLiab - totalInterest);
 
-  // 139(8A) PartB-ATI: aggregate liability = balance payable (after TDS), base for 140B
-  const balPayableForATI = Math.max(0, netTaxLiab + totalInterest - totalTaxPaid);
+  // 139(8A) PartB-ATI: aggregate liability = balance payable (after TDS + interest)
+  // netTaxLiab already = grossTaxLiab + totalInterest - totalTaxPaid
+  const balPayableForATI = netTaxLiab;
   let atiAddtnlTax = 0;
   let atiNetPayable = 0;
   let atiTaxDue = 0;
@@ -2173,7 +2174,7 @@ function buildITR5(input: BuildITRInput): object {
             } : {}),
           },
           'PartB-ATI': {
-            UpdatedTotInc:          netTaxLiab,
+            UpdatedTotInc:          totalIncome,  // total updated income from Part B-TI
             AmtPayable:             balPayableForATI,
             AmtRefundable:          refund,
             LastAmtPayable:         0,

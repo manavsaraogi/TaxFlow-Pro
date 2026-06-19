@@ -364,7 +364,20 @@ function computeTax(inp: TaxInputs): TaxComputation {
   const cess = Math.floor(taxAfterRebate * 0.04);
   const netTax = taxAfterRebate + cess;
 
-  // 139(8A) additional tax u/s 140B — 25%/50%/60%/70% based on period
+  // Auto-compute 234A/234B/234F first — 140B base includes these
+  const { int234A: interest234A, int234B: interest234B, int234F: interest234F } = computeAutoInterest(
+    netTax,
+    inp.advanceTax,
+    inp.tdsTCS,
+    taxableIncome,
+    inp.filingDate,
+    inp.dueDate,
+    inp.assessmentYear,
+  );
+  const interest234C = 0; // requires installment-level advance tax data
+  const totalInterest = interest234A + interest234B + interest234C + interest234F;
+
+  // 139(8A) additional tax u/s 140B — 25%/50%/60%/70% on tax + 234A + 234B + 234C (excl. 234F)
   let additionalTax140B = 0;
   let period140B: 1 | 2 | 3 | 4 | null = null;
   if (inp.filingSection === '139(8A)') {
@@ -378,22 +391,11 @@ function computeTax(inp: TaxInputs): TaxComputation {
     period140B = today <= p1End ? 1 : today <= p2End ? 2 : today <= p3End ? 3 : today <= p4End ? 4 : null;
     const rateMap = { 1: 0.25, 2: 0.50, 3: 0.60, 4: 0.70 } as const;
     if (period140B) {
-      additionalTax140B = Math.round(netTax * rateMap[period140B]);
+      // Base = tax + 234A + 234B + 234C (excluding 234F per statute)
+      const base140B = netTax + interest234A + interest234B + interest234C;
+      additionalTax140B = Math.round(base140B * rateMap[period140B]);
     }
   }
-
-  // Auto-compute 234A/234B/234F; 234C requires per-installment data so stays 0
-  const { int234A: interest234A, int234B: interest234B, int234F: interest234F } = computeAutoInterest(
-    netTax,
-    inp.advanceTax,
-    inp.tdsTCS,
-    taxableIncome,
-    inp.filingDate,
-    inp.dueDate,
-    inp.assessmentYear,
-  );
-  const interest234C = 0; // requires installment-level advance tax data
-  const totalInterest = interest234A + interest234B + interest234C + interest234F;
 
   const totalTaxDue = netTax + additionalTax140B + totalInterest;
   const totalPrePaid = inp.tdsTCS + inp.advanceTax + inp.selfAssessmentTax;
