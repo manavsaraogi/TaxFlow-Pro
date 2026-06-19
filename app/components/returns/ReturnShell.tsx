@@ -189,6 +189,7 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate, fo
   const [dirty, setDirty] = useState(false);
   const [showPortalModal, setShowPortalModal] = useState(false);
   const [downloadingJson, setDownloadingJson] = useState(false);
+  const [jsonError, setJsonError] = useState<string | null>(null);
   const [detectedForm, setDetectedForm] = useState<{ formType: ITRFormType; reason: string } | null>(null);
   const [switchingForm, setSwitchingForm] = useState(false);
   const [validation, setValidation] = useState<ValidationResult | null>(null);
@@ -297,9 +298,13 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate, fo
   const handleDownloadITR = useCallback(async () => {
     if (!returnMeta) return;
     setDownloadingJson(true);
+    setJsonError(null);
     try {
       const res = await fetch(`/api/returns/${returnId}/generate-itr`);
-      if (!res.ok) throw new Error('Failed to generate ITR JSON');
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.message ?? 'Failed to generate ITR JSON');
+      }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -311,8 +316,8 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate, fo
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
-    } catch {
-      // silently ignore — user can retry
+    } catch (e: unknown) {
+      setJsonError(e instanceof Error ? e.message : 'Failed to generate ITR JSON');
     } finally {
       setDownloadingJson(false);
     }
@@ -407,7 +412,17 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate, fo
           </button>
 
           {/* Actions */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+            {jsonError && (
+              <div style={{
+                width: '100%', background: 'rgba(224,92,75,0.12)', border: '1px solid rgba(224,92,75,0.4)',
+                borderRadius: '6px', padding: '7px 12px', fontSize: '12px', color: '#e05c4b',
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px',
+              }}>
+                <span>⚠ {jsonError}</span>
+                <button onClick={() => setJsonError(null)} style={{ background: 'none', border: 'none', color: '#e05c4b', cursor: 'pointer', fontSize: '14px', lineHeight: 1, padding: 0 }}>×</button>
+              </div>
+            )}
             <button
               className="btn btn-secondary btn-sm"
               onClick={() => {

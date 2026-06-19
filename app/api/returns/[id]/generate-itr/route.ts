@@ -409,7 +409,28 @@ export async function GET(_req: NextRequest, { params }: Params) {
   };
 
   // ── Build ITR JSON ──
-  const itrJson = buildITRJson({ returnData, client: builderClient, firm: builderFirm, sw });
+  const itrJson = buildITRJson({ returnData, client: builderClient, firm: builderFirm, sw }) as any;
+
+  // ── Block if tax is still due ──
+  const itr = itrJson?.ITR;
+  const inner = itr?.ITR1 ?? itr?.ITR2 ?? itr?.ITR4 ?? itr?.ITR5;
+  const partBTTI = inner?.PartB_TTI ?? inner?.PartBTTI;
+  const balTaxPayable: number =
+    partBTTI?.TaxPayable?.BalTaxPayable ??
+    partBTTI?.BalTaxPayable ??
+    0;
+
+  if (balTaxPayable > 0) {
+    const fmt = (n: number) => `₹${n.toLocaleString('en-IN')}`;
+    return NextResponse.json(
+      {
+        error: 'tax_due',
+        message: `Balance tax of ${fmt(balTaxPayable)} is still payable. Pay self-assessment tax and add the challan under Tax Payments before generating the JSON.`,
+        balTaxPayable,
+      },
+      { status: 422 },
+    );
+  }
 
   const pan = c.pan.toUpperCase();
   const formType = ret.formType;
