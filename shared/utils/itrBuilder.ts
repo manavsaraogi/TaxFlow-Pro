@@ -408,12 +408,40 @@ function computeSlabTax(income: number, regime: 'OLD' | 'NEW', cfg: AYConfig): n
   return 112_500 + Math.round((income - 1_000_000) * 0.30);
 }
 
-function computeSurcharge(tax: number, income: number, regime: 'OLD' | 'NEW'): number {
+function computeSurcharge(
+  tax: number,
+  income: number,
+  regime: 'OLD' | 'NEW',
+  isFirmOrLLP = false,
+  baseTaxAtIncome?: (i: number) => number,
+): number {
+  if (isFirmOrLLP) {
+    if (income <= 10_000_000) return 0;
+    const raw = Math.round(tax * 0.12);
+    if (!baseTaxAtIncome) return raw;
+    const relief = Math.max(0, (tax + raw) - (baseTaxAtIncome(10_000_000) + (income - 10_000_000)));
+    return Math.max(0, raw - relief);
+  }
   if (income <= 5_000_000) return 0;
-  if (income <= 10_000_000) return tax * 0.10;
-  if (income <= 20_000_000) return tax * 0.15;
-  if (income <= 50_000_000) return tax * 0.25;
-  return tax * (regime === 'NEW' ? 0.25 : 0.37);
+  const rate = income > 50_000_000 ? (regime === 'NEW' ? 0.25 : 0.37)
+    : income > 20_000_000 ? 0.25
+    : income > 10_000_000 ? 0.15
+    : 0.10;
+  const raw = Math.round(tax * rate);
+  if (!baseTaxAtIncome) return raw;
+  // Marginal relief: additional tax over threshold must not exceed additional income
+  const thresholds = [5_000_000, 10_000_000, 20_000_000, 50_000_000];
+  let relief = 0;
+  for (const thr of thresholds) {
+    if (income > thr) {
+      const taxAtThr = baseTaxAtIncome(thr);
+      const additionalTax = tax + raw - taxAtThr;
+      if (additionalTax > income - thr) {
+        relief = Math.max(relief, additionalTax - (income - thr));
+      }
+    }
+  }
+  return Math.max(0, raw - relief);
 }
 
 function computeRebate87A(income: number, tax: number, regime: 'OLD' | 'NEW', cfg: AYConfig): number {
@@ -449,7 +477,11 @@ function computeTaxLiability(
   const rebate = computeRebate87A(totalIncome, slabTax, regime, cfg);
   const taxAfterRebate = Math.max(0, slabTax - rebate) + ltcgTax + stcg111ATax;
 
-  const surcharge = Math.round(computeSurcharge(taxAfterRebate, totalIncome + ltcg112A + stcg111A, regime));
+  const incomeForSurcharge = totalIncome + ltcg112A + stcg111A;
+  const baseTaxFn = (isFirmOrLLP || isMMR)
+    ? (i: number) => Math.floor(i * 0.30)
+    : (i: number) => computeSlabTax(i, regime, cfg);
+  const surcharge = computeSurcharge(taxAfterRebate, incomeForSurcharge, regime, !!(isFirmOrLLP), baseTaxFn);
   const taxPlusSurcharge = taxAfterRebate + surcharge;
   const cess = Math.round(taxPlusSurcharge * 0.04);
   const grossTaxLiability = taxPlusSurcharge + cess;

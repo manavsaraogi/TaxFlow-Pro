@@ -96,6 +96,7 @@ async function downloadComputationPDF(returnId: string) {
 
 // â"€â"€â"€ Tax Slabs â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
+// Old regime slabs for individuals/HUF (AY 2025-26 and 2026-27 — same)
 function computeOldRegimeTax(income: number): number {
   if (income <= 250_000) return 0;
   let tax = 0;
@@ -105,12 +106,49 @@ function computeOldRegimeTax(income: number): number {
   return Math.floor(tax);
 }
 
-function computeNewRegimeTax(income: number): number {
-  // FY 2025-26 new regime slabs
+// New regime slabs — AY-aware (Budget 2025 changed slabs for AY 2026-27 onwards)
+function computeNewRegimeTax(income: number, ay = 'AY 2026-27'): number {
+  const ayYear = parseInt(ay.replace('AY ', '').split('-')[0] ?? '2026');
+  if (ayYear >= 2026) {
+    // AY 2026-27+ (FY 2025-26): Budget 2025 new slabs
+    if (income <= 400_000) return 0;
+    let tax = 0;
+    const slabs = [
+      [400_000,   800_000, 0.05],
+      [800_000, 1_200_000, 0.10],
+      [1_200_000, 1_600_000, 0.15],
+      [1_600_000, 2_000_000, 0.20],
+      [2_000_000, 2_400_000, 0.25],
+      [2_400_000, Infinity,  0.30],
+    ] as const;
+    for (const [lo, hi, rate] of slabs) {
+      if (income <= lo) break;
+      tax += (Math.min(income, hi) - lo) * rate;
+    }
+    return Math.floor(tax);
+  }
+  if (ayYear <= 2024) {
+    // AY 2024-25 (FY 2023-24) slabs
+    if (income <= 300_000) return 0;
+    let tax = 0;
+    const slabs = [
+      [300_000,   600_000, 0.05],
+      [600_000,   900_000, 0.10],
+      [900_000, 1_200_000, 0.15],
+      [1_200_000, 1_500_000, 0.20],
+      [1_500_000, Infinity,  0.30],
+    ] as const;
+    for (const [lo, hi, rate] of slabs) {
+      if (income <= lo) break;
+      tax += (Math.min(income, hi) - lo) * rate;
+    }
+    return Math.floor(tax);
+  }
+  // AY 2025-26 (FY 2024-25)
   if (income <= 300_000) return 0;
   let tax = 0;
   const slabs = [
-    [300_000,  700_000, 0.05],
+    [300_000,   700_000, 0.05],
     [700_000, 1_000_000, 0.10],
     [1_000_000, 1_200_000, 0.15],
     [1_200_000, 1_500_000, 0.20],
@@ -123,25 +161,28 @@ function computeNewRegimeTax(income: number): number {
   return Math.floor(tax);
 }
 
-function surchargeRate(income: number): number {
-  if (income > 50_000_000) return 0.37;
+// Individual/AOP surcharge — tiered; new regime caps at 25% (37% removed by Budget 2023)
+function surchargeRate(income: number, regime: string): number {
+  const isNew = regime?.toLowerCase() === 'new';
+  if (income > 50_000_000) return isNew ? 0.25 : 0.37;
   if (income > 20_000_000) return 0.25;
   if (income > 10_000_000) return 0.15;
   if (income > 5_000_000)  return 0.10;
   return 0;
 }
 
-// Firm / LLP surcharge: 12% flat if income > ₹1 Cr (not tiered)
+// Firm/LLP surcharge: 12% flat if income > ₹1 Cr
 function firmSurchargeRate(income: number): number {
   return income > 10_000_000 ? 0.12 : 0;
 }
 
-// Co-operative society slabs (old regime)
+// Co-operative society slabs (old regime) — NO basic exemption, 10% from ₹1
 function computeCoopTax(income: number): number {
-  if (income <= 10_000) return 0;
+  if (income <= 0) return 0;
   let tax = 0;
-  if (income > 20_000)  { tax += (income - 20_000) * 0.20; income = 20_000; }
-  if (income > 10_000)  { tax += (income - 10_000) * 0.10; }
+  if (income > 20_000) { tax += (income - 20_000) * 0.30; income = 20_000; }
+  if (income > 10_000) { tax += (income - 10_000) * 0.20; income = 10_000; }
+  tax += income * 0.10;
   return Math.floor(tax);
 }
 
@@ -216,29 +257,59 @@ function computeTax(inp: TaxInputs): TaxComputation {
   const lotteryIncome = inp.lotteryIncome;
   const normalTaxableIncome = Math.max(0, taxableIncome - lotteryIncome);
 
+  const ay = inp.assessmentYear ?? 'AY 2026-27';
+  const isNew = inp.regime?.toLowerCase() === 'new';
+  const ayYear = parseInt(ay.replace('AY ', '').split('-')[0] ?? '2026');
+
   let taxOnNormalIncome: number;
   if (isFirmOrLLP || isAOPMMR) {
     taxOnNormalIncome = Math.floor(normalTaxableIncome * 0.30);
   } else if (isCoop) {
-    // new regime 115BAD: 22%, old: slab
-    taxOnNormalIncome = inp.regime?.toLowerCase() === 'new'
+    // 115BAD new regime: 22%; old regime: co-op slab (10/20/30% — no basic exemption)
+    taxOnNormalIncome = isNew
       ? Math.floor(normalTaxableIncome * 0.22)
       : computeCoopTax(normalTaxableIncome);
   } else {
-    taxOnNormalIncome = inp.regime?.toLowerCase() === 'old'
-      ? computeOldRegimeTax(normalTaxableIncome)
-      : computeNewRegimeTax(normalTaxableIncome);
+    taxOnNormalIncome = isNew
+      ? computeNewRegimeTax(normalTaxableIncome, ay)
+      : computeOldRegimeTax(normalTaxableIncome);
   }
   const taxOnLottery = Math.floor(lotteryIncome * 0.30);
   const grossTax = taxOnNormalIncome + taxOnLottery;
 
-  const sRate = isFirmOrLLP ? firmSurchargeRate(taxableIncome) : surchargeRate(taxableIncome);
-  const surcharge = Math.floor(grossTax * sRate);
+  // Surcharge with marginal relief at each threshold
+  let surcharge = 0;
+  if (isFirmOrLLP) {
+    const rawSurcharge = taxableIncome > 10_000_000 ? Math.floor(grossTax * 0.12) : 0;
+    if (rawSurcharge > 0) {
+      const relief = Math.max(0, (grossTax + rawSurcharge) - (Math.floor(grossTax * 10_000_000 / taxableIncome) + (taxableIncome - 10_000_000)));
+      surcharge = Math.max(0, rawSurcharge - relief);
+    }
+  } else {
+    const sRate = surchargeRate(taxableIncome, inp.regime);
+    const rawSurcharge = Math.floor(grossTax * sRate);
+    if (rawSurcharge > 0) {
+      // Marginal relief thresholds for tiered surcharge
+      const thresholds = [5_000_000, 10_000_000, 20_000_000, 50_000_000];
+      let relief = 0;
+      for (const thr of thresholds) {
+        if (taxableIncome > thr) {
+          const taxAtThr = isNew ? computeNewRegimeTax(thr, ay) : computeOldRegimeTax(thr);
+          const maxAdditionalTax = taxableIncome - thr;
+          const actualAdditionalTax = grossTax + rawSurcharge - taxAtThr;
+          if (actualAdditionalTax > maxAdditionalTax) {
+            relief = Math.max(relief, actualAdditionalTax - maxAdditionalTax);
+          }
+        }
+      }
+      surcharge = Math.max(0, rawSurcharge - relief);
+    }
+  }
   const taxAfterSurcharge = grossTax + surcharge;
 
-  // No rebate 87A for firms/LLPs/co-ops
-  const rebateLimit = inp.regime?.toLowerCase() === 'new' ? 1_200_000 : 500_000;
-  const rebateCap = inp.regime?.toLowerCase() === 'new' ? 60_000 : 12_500;
+  // Rebate 87A — individuals only (not ITR-5 entities); limit and cap are AY-specific
+  const rebateLimit = isNew ? (ayYear >= 2026 ? 1_200_000 : 700_000) : 500_000;
+  const rebateCap   = isNew ? (ayYear >= 2026 ? 60_000 : 25_000) : 12_500;
   const rebate87A = (!isITR5 && taxableIncome <= rebateLimit) ? Math.min(taxAfterSurcharge, rebateCap) : 0;
   const taxAfterRebate = Math.max(0, taxAfterSurcharge - rebate87A);
 
@@ -494,13 +565,13 @@ export default function TaxSummary({ returnId, returnData }: Props) {
             )}
             <Row label="Gross Tax" value={c.grossTax} bold />
             {c.surcharge > 0 && (
-              <Row label={`Surcharge @ ${Math.round(surchargeRate(c.taxableIncome) * 100)}%`} value={c.surcharge}
-                sub="Applicable as income > ₹50 lakh" />
+              <Row label={`Surcharge @ ${Math.round(surchargeRate(c.taxableIncome, inputs.regime) * 100)}%`} value={c.surcharge}
+                sub={c.taxableIncome > 5_000_000 ? 'Subject to marginal relief' : undefined} />
             )}
             <Row label="Tax after Surcharge" value={c.taxAfterSurcharge} />
             {c.rebate87A > 0 && (
               <Row label="Less: Rebate u/s 87A" value={c.rebate87A} deduction
-                sub={`Income ≤ ₹${inputs.regime?.toLowerCase() === 'new' ? '7,00,000' : '5,00,000'}`} />
+                sub={`Income ≤ ₹${inputs.regime?.toLowerCase() === 'new' ? (parseInt((inputs.assessmentYear ?? '').replace('AY ','').split('-')[0] ?? '2026') >= 2026 ? '12,00,000' : '7,00,000') : '5,00,000'}`} />
             )}
             <Row label="Tax after Rebate" value={c.taxAfterRebate} />
             <Row label="Health & Education Cess @ 4%" value={c.cess} />
