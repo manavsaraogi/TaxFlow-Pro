@@ -3484,7 +3484,7 @@ function buildITR5(input: BuildITRInput): object {
         ScheduleAMT: (() => {
           const amtAddback = viaDeductions; // Chapter VI-A deductions added back for AMT
           const amtAdjIncome = totalIncome + amtAddback; // = grossTotalIncome
-          const amtTaxAmt = amtApplies ? amtOnTI : 0;
+          const amtTaxAmt = amtOnTI; // always fill — portal uses this to determine whether AMT applies
           return {
             TotalIncItem13:             totalIncome,
             AdjustmentSec115JC:        [{ DeductClaimSec6A: amtAddback, DeductClaimSec10AA: 0, DeductClaimSec35AD: 0, Total: amtAddback }],
