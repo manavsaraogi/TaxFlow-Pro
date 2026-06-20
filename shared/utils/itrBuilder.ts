@@ -3528,10 +3528,11 @@ function buildITR5(input: BuildITRInput): object {
               AmtCreditUtilized: 0, BalAmtCreditCarryFwd: 0,
             });
           }
+          const amtcTax115JC = amtApplies ? amtLiability : 0;
           return {
-            TaxSection115JC: amtLiability,
+            TaxSection115JC: amtcTax115JC,
             TaxOthProvisions: regularTaxLiab,
-            AmtTaxCreditAvailable: Math.max(0, amtLiability - regularTaxLiab),
+            AmtTaxCreditAvailable: regularTaxLiab - amtcTax115JC,
             ScheduleAMTCDtls: amtcYears,
             CurrAssYr: effectiveAY ?? '2024-25',
             CurrYrAmtCreditFwd: 0, CurrYrCreditBalBF: 0, CurrYrCreditCarryFwd: 0,
