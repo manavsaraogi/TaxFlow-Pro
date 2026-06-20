@@ -3653,9 +3653,10 @@ function buildITR5(input: BuildITRInput): object {
   };
 }
 
-// CBDT offline utility HMAC-SHA256 signing key (extracted from ITR5 AY 2024-25 V1.14 VBA)
-const ITR5_HMAC_KEY = Buffer.from('RoduFpNqMzQlWO9Q', 'latin1');
-const ITR5_HMAC_ITERS = 1977;
+// CBDT offline utility HMAC-SHA256 signing key (extracted from ITR5 AY 2025-26 V1.9 VBA)
+// Key rotated from RoduFpNqMzQlWO9Q (AY 2024-25) to LO3QtH59fGuVaETa (AY 2025-26 V1.9)
+const ITR5_HMAC_KEY = Buffer.from('LO3QtH59fGuVaETa', 'latin1');
+const ITR5_HMAC_ITERS = 1978;
 
 export function signITR5Json(itrObj: any): any {
   const inner = itrObj?.ITR?.ITR5;
@@ -3664,7 +3665,7 @@ export function signITR5Json(itrObj: any): any {
   // Compact JSON with Digest:"-" — remove escaped \n sequences as CBDT VBA does
   const compact = JSON.stringify(itrObj).replace(/\\n/g, '');
 
-  // Iterated HMAC-SHA256: 1 initial + 1977 more = 1978 total
+  // Iterated HMAC-SHA256: 1 initial + 1978 more = 1979 total (matches HMACSHA256A in VBA V1.9)
   let h = createHmac('sha256', ITR5_HMAC_KEY)
     .update(Buffer.from(compact, 'latin1'))
     .digest();
