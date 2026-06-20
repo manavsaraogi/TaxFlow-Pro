@@ -1952,8 +1952,11 @@ function buildITR5(input: BuildITRInput): object {
     return 0.37;
   }
   // Surcharge on CG is capped at 15%
-  const cgSurchargeRate  = usesMMR ? 0.15 : Math.min(getSurchargeRate(grossTotalIncome), 0.15);
-  const normalSurRate    = usesMMR ? 0.37 : getSurchargeRate(grossTotalIncome);
+  // AY 2025-26 utility applies 37% MMR surcharge on trusts regardless of income.
+  // AY 2024-25 utility did not — so gate this behaviour on AY 2025-26+.
+  const mmrtSurcharge    = usesMMR && effectiveAY >= '2025-26' ? 0.37 : 0;
+  const cgSurchargeRate  = mmrtSurcharge > 0 ? 0.15 : Math.min(getSurchargeRate(grossTotalIncome), 0.15);
+  const normalSurRate    = mmrtSurcharge > 0 ? mmrtSurcharge : getSurchargeRate(grossTotalIncome);
   const surchargeOnNormal = Math.round(taxOnNormal * normalSurRate);
   const surchargeOnCG    = Math.round((taxOnSTCG111A + taxOnLTCG112A) * cgSurchargeRate);
   const surcharge        = surchargeOnNormal + surchargeOnCG;
@@ -2002,10 +2005,8 @@ function buildITR5(input: BuildITRInput): object {
     // 234B only applies when net tax liability ≥ ₹10,000 (s.208)
     const int234B = grossTaxLiab >= 10_000 && advShortfall > assessedTax * 0.10
       ? Math.ceil(advShortfall * 0.01 * countM(apr1OfAY, filingStr)) : 0;
-    // 234A is not charged for 139(8A) updated returns — the 25%/50% additional
-    // tax under section 140B compensates for late/non-filing (matches CBDT utility behaviour)
     let int234A = 0;
-    if (isLate && !upd) {
+    if (isLate) {
       const base = Math.max(0, grossTaxLiab - (toI(rd.tds?.TotalTDSOnOtherIncome) + toI(rd.tds?.TotalTCS)) - advTaxHere);
       if (base > 0) {
         const afterDue = new Date(dueDate);
