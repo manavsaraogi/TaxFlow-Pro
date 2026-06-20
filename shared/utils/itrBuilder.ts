@@ -478,7 +478,10 @@ function computeTaxLiability(
   const baseTaxFn = (isFirmOrLLP || isMMR)
     ? (i: number) => Math.floor(i * 0.30)
     : (i: number) => computeSlabTax(i, regime, cfg);
-  const surcharge = computeSurcharge(taxAfterRebate, incomeForSurcharge, regime, !!(isFirmOrLLP), baseTaxFn);
+  // MMR surcharge: 25% (new regime) or 37% (old regime) on tax, regardless of income level
+  const surcharge = isMMR
+    ? Math.round(taxAfterRebate * (regime === 'NEW' ? 0.25 : 0.37))
+    : computeSurcharge(taxAfterRebate, incomeForSurcharge, regime, !!(isFirmOrLLP), baseTaxFn);
   const taxPlusSurcharge = taxAfterRebate + surcharge;
   const cess = Math.round(taxPlusSurcharge * 0.04);
   const grossTaxLiability = taxPlusSurcharge + cess;
