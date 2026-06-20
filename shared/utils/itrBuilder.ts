@@ -2994,6 +2994,7 @@ function buildITR5(input: BuildITRInput): object {
                 CostOfImprovements: { CostOfImprovementsDtls: [], TotalImprovecost: 0, TotalindexImprovecost: 0 },
                 ExpOnTrans: 0, TotalDedn: 0, Balance: 0,
                 ExemptionOrDednUs54: { ExemptionOrDednUs54Dtls: [
+                  { ExemptionSecCode: '54D', ExemptionAmount: 0 },
                   { ExemptionSecCode: '54EC', ExemptionAmount: 0 },
                   { ExemptionSecCode: '54G', ExemptionAmount: 0 },
                   { ExemptionSecCode: '54GA', ExemptionAmount: 0 },
@@ -3005,12 +3006,12 @@ function buildITR5(input: BuildITRInput): object {
               Proviso112SectionCode: '22',
               Proviso112Applicabledtls: { FullConsideration: 0, DeductSec48: { Reduction48iii: 0, AquisitCost: 0, ImproveCost: 0, ExpOnTrans: 0, TotalDedn: 0 }, BalanceCG: 0 },
             },
-            NRIProvisoSec48: { BalanceCG: 0, LTCGWithoutBenefitTransferBEListDb: [], LTCGWithoutBenefitTransferBE: 0, LTCGWithoutBenefitTransferAE: 0 },
+            NRIProvisoSec48: { LTCGWithoutBenefitTransferBEListDb: 0, LTCGWithoutBenefitTransferBE: 0, LTCGWithoutBenefitTransferAE: 0, BalanceCG: 0 },
             NRIOnSec112and115: {
               NRIOnSec112and115Dtls: [
-                { SectionCode: '21ciii' },
-                { SectionCode: '5AB1b'  },
-                { SectionCode: '5AC1c'  },
+                { SectionCode: '21ciii', NRIOnSec112and115Dtls_BE: { FullValueConsdRecvUnqshr:0, FairMrktValueUnqshr:0, FullValueConsdSec50CA:0, FullValueConsdOthUnqshr:0, FullConsideration:0, DeductSec48:{Reduction48iii:0,AquisitCost:0,ImproveCost:0,ExpOnTrans:0,TotalDedn:0}, BalanceCG:0 }, NRIOnSec112and115Dtls_AE: { FullValueConsdRecvUnqshr:0, FairMrktValueUnqshr:0, FullValueConsdSec50CA:0, FullValueConsdOthUnqshr:0, FullConsideration:0, DeductSec48:{Reduction48iii:0,AquisitCost:0,ImproveCost:0,ExpOnTrans:0,TotalDedn:0}, BalanceCG:0 } },
+                { SectionCode: '5AB1b',  NRIOnSec112and115Dtls_BE: { FullValueConsdRecvUnqshr:0, FairMrktValueUnqshr:0, FullValueConsdSec50CA:0, FullValueConsdOthUnqshr:0, FullConsideration:0, DeductSec48:{Reduction48iii:0,AquisitCost:0,ImproveCost:0,ExpOnTrans:0,TotalDedn:0}, BalanceCG:0 }, NRIOnSec112and115Dtls_AE: { FullValueConsdRecvUnqshr:0, FairMrktValueUnqshr:0, FullValueConsdSec50CA:0, FullValueConsdOthUnqshr:0, FullConsideration:0, DeductSec48:{Reduction48iii:0,AquisitCost:0,ImproveCost:0,ExpOnTrans:0,TotalDedn:0}, BalanceCG:0 } },
+                { SectionCode: '5AC1c',  NRIOnSec112and115Dtls_BE: { FullValueConsdRecvUnqshr:0, FairMrktValueUnqshr:0, FullValueConsdSec50CA:0, FullValueConsdOthUnqshr:0, FullConsideration:0, DeductSec48:{Reduction48iii:0,AquisitCost:0,ImproveCost:0,ExpOnTrans:0,TotalDedn:0}, BalanceCG:0 }, NRIOnSec112and115Dtls_AE: { FullValueConsdRecvUnqshr:0, FairMrktValueUnqshr:0, FullValueConsdSec50CA:0, FullValueConsdOthUnqshr:0, FullConsideration:0, DeductSec48:{Reduction48iii:0,AquisitCost:0,ImproveCost:0,ExpOnTrans:0,TotalDedn:0}, BalanceCG:0 } },
               ],
             },
             AmtDeemedLtcg:            0,
