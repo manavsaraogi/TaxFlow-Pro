@@ -1952,11 +1952,10 @@ function buildITR5(input: BuildITRInput): object {
     return 0.37;
   }
   // Surcharge on CG is capped at 15%
-  // AY 2025-26 utility applies 37% MMR surcharge on trusts regardless of income.
-  // AY 2024-25 utility did not — so gate this behaviour on AY 2025-26+.
-  const mmrtSurcharge    = usesMMR && effectiveAY >= '2025-26' ? 0.37 : 0;
-  const cgSurchargeRate  = mmrtSurcharge > 0 ? 0.15 : Math.min(getSurchargeRate(grossTotalIncome), 0.15);
-  const normalSurRate    = mmrtSurcharge > 0 ? mmrtSurcharge : getSurchargeRate(grossTotalIncome);
+  // MMR surcharge: trusts/AOPs taxed at Maximum Marginal Rate under s.164 always
+  // attract 37% surcharge (highest individual rate, old regime) regardless of income.
+  const cgSurchargeRate  = usesMMR ? 0.15 : Math.min(getSurchargeRate(grossTotalIncome), 0.15);
+  const normalSurRate    = usesMMR ? 0.37 : getSurchargeRate(grossTotalIncome);
   const surchargeOnNormal = Math.round(taxOnNormal * normalSurRate);
   const surchargeOnCG    = Math.round((taxOnSTCG111A + taxOnLTCG112A) * cgSurchargeRate);
   const surcharge        = surchargeOnNormal + surchargeOnCG;
