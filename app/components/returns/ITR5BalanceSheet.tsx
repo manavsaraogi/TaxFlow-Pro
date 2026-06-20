@@ -104,11 +104,6 @@ function fmt(n: number) {
 
 const INP = 'w-full border border-gray-200 rounded px-2 py-1 text-sm text-right focus:outline-none focus:border-blue-500';
 
-function fmtPrev(n: number) {
-  if (!n) return <span className="text-gray-300">—</span>;
-  return <span>{n.toLocaleString('en-IN')}</span>;
-}
-
 function Row({ label, field, sub, bs, prev, set }: {
   label: string;
   field: keyof BSState;
@@ -117,13 +112,12 @@ function Row({ label, field, sub, bs, prev, set }: {
   prev?: BSState | null;
   set: (key: keyof BSState, val: string) => void;
 }) {
+  const prevVal = prev?.[field] ?? 0;
   return (
     <tr>
       <td className="py-1 pr-2">
         <span className={sub ? 'text-xs text-gray-500 pl-4' : 'text-sm text-gray-700'}>{label}</span>
-      </td>
-      <td className="py-1 w-28 text-right pr-3 text-xs text-gray-400">
-        {fmtPrev(prev?.[field] ?? 0)}
+        {prevVal ? <span className="block text-xs text-gray-400 pl-4">{prevVal.toLocaleString('en-IN')}</span> : null}
       </td>
       <td className="py-1 w-40">
         <input
@@ -218,8 +212,10 @@ export default function ITR5BalanceSheet({ returnId, initialData, onSaved }: Pro
   function TotalRow({ label, value, prevValue }: { label: string; value: number; prevValue?: number }) {
     return (
       <tr className="bg-gray-50 font-semibold text-sm text-gray-800">
-        <td className="py-1.5 pr-2 font-semibold">{label}</td>
-        <td className="py-1.5 text-right pr-3 text-xs text-gray-400 font-normal">{fmtPrev(prevValue ?? 0)}</td>
+        <td className="py-1.5 pr-2 font-semibold">
+          {label}
+          {prevValue ? <span className="block text-xs text-gray-400 font-normal pl-0">{prevValue.toLocaleString('en-IN')}</span> : null}
+        </td>
         <td className="py-1.5 text-right pr-1 text-blue-700">{fmt(value)}</td>
       </tr>
     );
@@ -243,13 +239,6 @@ export default function ITR5BalanceSheet({ returnId, initialData, onSaved }: Pro
         <div className="bg-white border border-gray-200 rounded-lg p-4">
           <h3 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-3">Sources of Funds</h3>
           <table className="w-full border-collapse">
-            <thead>
-              <tr className="border-b border-gray-200">
-                <th className="pb-1 text-left text-xs text-gray-400 font-normal">Particulars</th>
-                <th className="pb-1 text-right pr-3 text-xs text-gray-400 font-normal w-28">Prev. Year</th>
-                <th className="pb-1 text-right text-xs text-gray-400 font-normal w-40">Current Year</th>
-              </tr>
-            </thead>
             <tbody>
               <Row label="Partners' / Members' Capital" field="PartnersCapital" bs={bs} prev={prevBS} set={set} />
               <Row label="Reserves — Revaluation" field="ReservesRevaluation" sub bs={bs} prev={prevBS} set={set} />
@@ -259,13 +248,13 @@ export default function ITR5BalanceSheet({ returnId, initialData, onSaved }: Pro
               <Row label="P&L Credit Balance" field="ReservesPLCredit" sub bs={bs} prev={prevBS} set={set} />
               <TotalRow label="Total Partners' Fund" value={totalPartnersReserves} prevValue={prevBS ? sum(prevBS.PartnersCapital, prevBS.ReservesRevaluation, prevBS.ReservesCapital, prevBS.ReservesStatutory, prevBS.ReservesOther, prevBS.ReservesPLCredit) : undefined} />
 
-              <tr><td colSpan={3} className="pt-3 pb-1"><span className="text-xs font-semibold text-gray-500">Secured Loans</span></td></tr>
+              <tr><td colSpan={2} className="pt-3 pb-1"><span className="text-xs font-semibold text-gray-500">Secured Loans</span></td></tr>
               <Row label="Foreign Currency Loans" field="SecuredFCYLoans" sub bs={bs} prev={prevBS} set={set} />
               <Row label="From Banks (Rupee)" field="SecuredLoansFromBanks" sub bs={bs} prev={prevBS} set={set} />
               <Row label="From Others (Rupee)" field="SecuredLoansFromOthers" sub bs={bs} prev={prevBS} set={set} />
               <TotalRow label="Total Secured Loans" value={totalSecuredLoans} prevValue={prevBS ? sum(prevBS.SecuredFCYLoans, prevBS.SecuredLoansFromBanks, prevBS.SecuredLoansFromOthers) : undefined} />
 
-              <tr><td colSpan={3} className="pt-3 pb-1"><span className="text-xs font-semibold text-gray-500">Unsecured Loans</span></td></tr>
+              <tr><td colSpan={2} className="pt-3 pb-1"><span className="text-xs font-semibold text-gray-500">Unsecured Loans</span></td></tr>
               <Row label="Foreign Currency Loans" field="UnsecuredFCYLoans" sub bs={bs} prev={prevBS} set={set} />
               <Row label="From Banks (Rupee)" field="UnsecuredLoansFromBanks" sub bs={bs} prev={prevBS} set={set} />
               <Row label="From persons u/s 40A(2)(b)" field="UnsecuredLoansFrom40A2b" sub bs={bs} prev={prevBS} set={set} />
@@ -274,14 +263,16 @@ export default function ITR5BalanceSheet({ returnId, initialData, onSaved }: Pro
 
               <Row label="Deferred Tax Liability" field="DeferredTaxLiability" bs={bs} prev={prevBS} set={set} />
 
-              <tr><td colSpan={3} className="pt-3 pb-1"><span className="text-xs font-semibold text-gray-500">Advances</span></td></tr>
+              <tr><td colSpan={2} className="pt-3 pb-1"><span className="text-xs font-semibold text-gray-500">Advances</span></td></tr>
               <Row label="From persons u/s 40A(2)(b)" field="AdvancesFrom40A2b" sub bs={bs} prev={prevBS} set={set} />
               <Row label="From Others" field="AdvancesFromOthers" sub bs={bs} prev={prevBS} set={set} />
               <TotalRow label="Total Advances" value={totalAdvances} prevValue={prevBS ? sum(prevBS.AdvancesFrom40A2b, prevBS.AdvancesFromOthers) : undefined} />
 
               <tr className="border-t-2 border-gray-400 bg-blue-50">
-                <td className="py-2 font-bold text-gray-900">TOTAL SOURCES</td>
-                <td className="py-2 text-right pr-3 text-xs text-gray-400 font-normal">{prevBS ? fmtPrev(sum(sum(prevBS.PartnersCapital, prevBS.ReservesRevaluation, prevBS.ReservesCapital, prevBS.ReservesStatutory, prevBS.ReservesOther, prevBS.ReservesPLCredit), sum(prevBS.SecuredFCYLoans, prevBS.SecuredLoansFromBanks, prevBS.SecuredLoansFromOthers), sum(prevBS.UnsecuredFCYLoans, prevBS.UnsecuredLoansFromBanks, prevBS.UnsecuredLoansFrom40A2b, prevBS.UnsecuredLoansFromOthers), prevBS.DeferredTaxLiability, sum(prevBS.AdvancesFrom40A2b, prevBS.AdvancesFromOthers))) : null}</td>
+                <td className="py-2 font-bold text-gray-900">
+                  TOTAL SOURCES
+                  {prevBS ? <span className="block text-xs text-gray-400 font-normal">{sum(sum(prevBS.PartnersCapital, prevBS.ReservesRevaluation, prevBS.ReservesCapital, prevBS.ReservesStatutory, prevBS.ReservesOther, prevBS.ReservesPLCredit), sum(prevBS.SecuredFCYLoans, prevBS.SecuredLoansFromBanks, prevBS.SecuredLoansFromOthers), sum(prevBS.UnsecuredFCYLoans, prevBS.UnsecuredLoansFromBanks, prevBS.UnsecuredLoansFrom40A2b, prevBS.UnsecuredLoansFromOthers), prevBS.DeferredTaxLiability, sum(prevBS.AdvancesFrom40A2b, prevBS.AdvancesFromOthers)).toLocaleString('en-IN')}</span> : null}
+                </td>
                 <td className="py-2 text-right font-bold text-blue-800">{fmt(totalSources)}</td>
               </tr>
             </tbody>
@@ -300,14 +291,14 @@ export default function ITR5BalanceSheet({ returnId, initialData, onSaved }: Pro
               </tr>
             </thead>
             <tbody>
-              <tr><td colSpan={3} className="pb-1"><span className="text-xs font-semibold text-gray-500">Fixed Assets</span></td></tr>
+              <tr><td colSpan={2} className="pb-1"><span className="text-xs font-semibold text-gray-500">Fixed Assets</span></td></tr>
               <Row label="Gross Block" field="GrossBlock" sub bs={bs} prev={prevBS} set={set} />
               <Row label="Less: Depreciation" field="Depreciation" sub bs={bs} prev={prevBS} set={set} />
               <TotalRow label="Net Block" value={netBlock} prevValue={prevBS ? prevBS.GrossBlock - prevBS.Depreciation : undefined} />
               <Row label="Capital WIP" field="CapitalWIP" sub bs={bs} prev={prevBS} set={set} />
               <TotalRow label="Total Fixed Assets" value={totalFixedAssets} prevValue={prevBS ? (prevBS.GrossBlock - prevBS.Depreciation + prevBS.CapitalWIP) : undefined} />
 
-              <tr><td colSpan={3} className="pt-3 pb-1"><span className="text-xs font-semibold text-gray-500">Long-term Investments</span></td></tr>
+              <tr><td colSpan={2} className="pt-3 pb-1"><span className="text-xs font-semibold text-gray-500">Long-term Investments</span></td></tr>
               <Row label="Immovable Property" field="LTInvProperty" sub bs={bs} prev={prevBS} set={set} />
               <Row label="Listed Equity" field="LTInvListedEquity" sub bs={bs} prev={prevBS} set={set} />
               <Row label="Unlisted Equity" field="LTInvUnlistedEquity" sub bs={bs} prev={prevBS} set={set} />
@@ -318,7 +309,7 @@ export default function ITR5BalanceSheet({ returnId, initialData, onSaved }: Pro
               <Row label="Others" field="LTInvOthers" sub bs={bs} prev={prevBS} set={set} />
               <TotalRow label="Total LT Investments" value={totalLTInv} prevValue={prevBS ? sum(prevBS.LTInvProperty, prevBS.LTInvListedEquity, prevBS.LTInvUnlistedEquity, prevBS.LTInvPrefShares, prevBS.LTInvGovtTrust, prevBS.LTInvDebentures, prevBS.LTInvMF, prevBS.LTInvOthers) : undefined} />
 
-              <tr><td colSpan={3} className="pt-3 pb-1"><span className="text-xs font-semibold text-gray-500">Short-term Investments</span></td></tr>
+              <tr><td colSpan={2} className="pt-3 pb-1"><span className="text-xs font-semibold text-gray-500">Short-term Investments</span></td></tr>
               <Row label="Listed Equity" field="STInvListedEquity" sub bs={bs} prev={prevBS} set={set} />
               <Row label="Unlisted Equity" field="STInvUnlistedEquity" sub bs={bs} prev={prevBS} set={set} />
               <Row label="Pref. Shares" field="STInvPrefShares" sub bs={bs} prev={prevBS} set={set} />
@@ -328,7 +319,7 @@ export default function ITR5BalanceSheet({ returnId, initialData, onSaved }: Pro
               <Row label="Others" field="STInvOthers" sub bs={bs} prev={prevBS} set={set} />
               <TotalRow label="Total ST Investments" value={totalSTInv} prevValue={prevBS ? sum(prevBS.STInvListedEquity, prevBS.STInvUnlistedEquity, prevBS.STInvPrefShares, prevBS.STInvGovtTrust, prevBS.STInvDebentures, prevBS.STInvMF, prevBS.STInvOthers) : undefined} />
 
-              <tr><td colSpan={3} className="pt-3 pb-1"><span className="text-xs font-semibold text-gray-500">Inventories</span></td></tr>
+              <tr><td colSpan={2} className="pt-3 pb-1"><span className="text-xs font-semibold text-gray-500">Inventories</span></td></tr>
               <Row label="Raw Material" field="InventoriesRawMaterial" sub bs={bs} prev={prevBS} set={set} />
               <Row label="WIP" field="InventoriesWIP" sub bs={bs} prev={prevBS} set={set} />
               <Row label="Finished Goods" field="InventoriesFinishedGoods" sub bs={bs} prev={prevBS} set={set} />
@@ -336,12 +327,12 @@ export default function ITR5BalanceSheet({ returnId, initialData, onSaved }: Pro
               <Row label="Others" field="InventoriesOthers" sub bs={bs} prev={prevBS} set={set} />
               <TotalRow label="Total Inventories" value={totalInventories} prevValue={prevBS ? sum(prevBS.InventoriesRawMaterial, prevBS.InventoriesWIP, prevBS.InventoriesFinishedGoods, prevBS.InventoriesStockInTrade, prevBS.InventoriesOthers) : undefined} />
 
-              <tr><td colSpan={3} className="pt-3 pb-1"><span className="text-xs font-semibold text-gray-500">Sundry Debtors</span></td></tr>
+              <tr><td colSpan={2} className="pt-3 pb-1"><span className="text-xs font-semibold text-gray-500">Sundry Debtors</span></td></tr>
               <Row label="Outstanding > 1 year" field="SundryDebtorsMoreThan1Yr" sub bs={bs} prev={prevBS} set={set} />
               <Row label="Others" field="SundryDebtorsOthers" sub bs={bs} prev={prevBS} set={set} />
               <TotalRow label="Total Debtors" value={totalDebtors} prevValue={prevBS ? sum(prevBS.SundryDebtorsMoreThan1Yr, prevBS.SundryDebtorsOthers) : undefined} />
 
-              <tr><td colSpan={3} className="pt-3 pb-1"><span className="text-xs font-semibold text-gray-500">Cash & Bank Balances</span></td></tr>
+              <tr><td colSpan={2} className="pt-3 pb-1"><span className="text-xs font-semibold text-gray-500">Cash & Bank Balances</span></td></tr>
               <Row label="Balance with Banks" field="BalanceWithBanks" sub bs={bs} prev={prevBS} set={set} />
               <Row label="Cash-in-Hand" field="CashInHand" sub bs={bs} prev={prevBS} set={set} />
               <Row label="Other Cash / Bank" field="OtherCashBankBalances" sub bs={bs} prev={prevBS} set={set} />
@@ -350,13 +341,13 @@ export default function ITR5BalanceSheet({ returnId, initialData, onSaved }: Pro
               <Row label="Other Current Assets" field="OtherCurrentAssets" bs={bs} prev={prevBS} set={set} />
               <TotalRow label="Total Current Assets" value={totalCurrentAssets} prevValue={prevBS ? sum(sum(prevBS.InventoriesRawMaterial, prevBS.InventoriesWIP, prevBS.InventoriesFinishedGoods, prevBS.InventoriesStockInTrade, prevBS.InventoriesOthers), sum(prevBS.SundryDebtorsMoreThan1Yr, prevBS.SundryDebtorsOthers), sum(prevBS.BalanceWithBanks, prevBS.CashInHand, prevBS.OtherCashBankBalances), prevBS.OtherCurrentAssets) : undefined} />
 
-              <tr><td colSpan={3} className="pt-3 pb-1"><span className="text-xs font-semibold text-gray-500">Loans & Advances</span></td></tr>
+              <tr><td colSpan={2} className="pt-3 pb-1"><span className="text-xs font-semibold text-gray-500">Loans & Advances</span></td></tr>
               <Row label="Recoverable in cash or kind" field="LoansRecoverable" sub bs={bs} prev={prevBS} set={set} />
               <Row label="Deposits / Others" field="LoansDepositsToOthers" sub bs={bs} prev={prevBS} set={set} />
               <Row label="Advance Tax / TDS" field="LoansRevenueAuthorities" sub bs={bs} prev={prevBS} set={set} />
               <TotalRow label="Total Loans & Advances" value={totalLoansAdv} prevValue={prevBS ? sum(prevBS.LoansRecoverable, prevBS.LoansDepositsToOthers, prevBS.LoansRevenueAuthorities) : undefined} />
 
-              <tr><td colSpan={3} className="pt-3 pb-1"><span className="text-xs font-semibold text-red-500">Less: Current Liabilities</span></td></tr>
+              <tr><td colSpan={2} className="pt-3 pb-1"><span className="text-xs font-semibold text-red-500">Less: Current Liabilities</span></td></tr>
               <Row label="Sundry Creditors > 1 yr" field="CLSundryCreditors1Yr" sub bs={bs} prev={prevBS} set={set} />
               <Row label="Sundry Creditors Others" field="CLSundryCreditsOthers" sub bs={bs} prev={prevBS} set={set} />
               <Row label="Liability for Leased Assets" field="CLLeasedAssets" sub bs={bs} prev={prevBS} set={set} />
@@ -375,8 +366,10 @@ export default function ITR5BalanceSheet({ returnId, initialData, onSaved }: Pro
               <Row label="Debit Balance in P&L" field="DebitPLBalance" bs={bs} prev={prevBS} set={set} />
 
               <tr className="border-t-2 border-gray-400 bg-blue-50">
-                <td className="py-2 font-bold text-gray-900">TOTAL APPLICATION</td>
-                <td className="py-2 text-right pr-3 text-xs text-gray-400 font-normal">{prevBS ? fmtPrev(sum(prevBS.GrossBlock - prevBS.Depreciation + prevBS.CapitalWIP, sum(prevBS.LTInvProperty, prevBS.LTInvListedEquity, prevBS.LTInvUnlistedEquity, prevBS.LTInvPrefShares, prevBS.LTInvGovtTrust, prevBS.LTInvDebentures, prevBS.LTInvMF, prevBS.LTInvOthers), sum(prevBS.STInvListedEquity, prevBS.STInvUnlistedEquity, prevBS.STInvPrefShares, prevBS.STInvGovtTrust, prevBS.STInvDebentures, prevBS.STInvMF, prevBS.STInvOthers), sum(prevBS.InventoriesRawMaterial, prevBS.InventoriesWIP, prevBS.InventoriesFinishedGoods, prevBS.InventoriesStockInTrade, prevBS.InventoriesOthers, prevBS.SundryDebtorsMoreThan1Yr, prevBS.SundryDebtorsOthers, prevBS.BalanceWithBanks, prevBS.CashInHand, prevBS.OtherCashBankBalances, prevBS.OtherCurrentAssets), sum(prevBS.LoansRecoverable, prevBS.LoansDepositsToOthers, prevBS.LoansRevenueAuthorities), -sum(prevBS.CLSundryCreditors1Yr, prevBS.CLSundryCreditsOthers, prevBS.CLLeasedAssets, prevBS.CLInterestOnLeasedAsset, prevBS.CLInterestAccruedNotDue, prevBS.CLIncomeReceivedInAdvance, prevBS.CLOtherPayables, prevBS.CLOther, prevBS.ProvisionsIncomeTax, prevBS.ProvisionsLeaveGratuity, prevBS.ProvisionsOther), prevBS.MiscExpenditure, prevBS.DeferredTaxAsset, prevBS.DebitPLBalance)) : null}</td>
+                <td className="py-2 font-bold text-gray-900">
+                  TOTAL APPLICATION
+                  {prevBS ? <span className="block text-xs text-gray-400 font-normal">{sum(prevBS.GrossBlock - prevBS.Depreciation + prevBS.CapitalWIP, sum(prevBS.LTInvProperty, prevBS.LTInvListedEquity, prevBS.LTInvUnlistedEquity, prevBS.LTInvPrefShares, prevBS.LTInvGovtTrust, prevBS.LTInvDebentures, prevBS.LTInvMF, prevBS.LTInvOthers), sum(prevBS.STInvListedEquity, prevBS.STInvUnlistedEquity, prevBS.STInvPrefShares, prevBS.STInvGovtTrust, prevBS.STInvDebentures, prevBS.STInvMF, prevBS.STInvOthers), sum(prevBS.InventoriesRawMaterial, prevBS.InventoriesWIP, prevBS.InventoriesFinishedGoods, prevBS.InventoriesStockInTrade, prevBS.InventoriesOthers, prevBS.SundryDebtorsMoreThan1Yr, prevBS.SundryDebtorsOthers, prevBS.BalanceWithBanks, prevBS.CashInHand, prevBS.OtherCashBankBalances, prevBS.OtherCurrentAssets), sum(prevBS.LoansRecoverable, prevBS.LoansDepositsToOthers, prevBS.LoansRevenueAuthorities), -sum(prevBS.CLSundryCreditors1Yr, prevBS.CLSundryCreditsOthers, prevBS.CLLeasedAssets, prevBS.CLInterestOnLeasedAsset, prevBS.CLInterestAccruedNotDue, prevBS.CLIncomeReceivedInAdvance, prevBS.CLOtherPayables, prevBS.CLOther, prevBS.ProvisionsIncomeTax, prevBS.ProvisionsLeaveGratuity, prevBS.ProvisionsOther), prevBS.MiscExpenditure, prevBS.DeferredTaxAsset, prevBS.DebitPLBalance).toLocaleString('en-IN')}</span> : null}
+                </td>
                 <td className="py-2 text-right font-bold text-blue-800">{fmt(totalApplication)}</td>
               </tr>
             </tbody>
