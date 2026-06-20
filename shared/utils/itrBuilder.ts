@@ -1969,7 +1969,7 @@ function buildITR5(input: BuildITRInput): object {
   const amtApplies   = grossTotalIncome > 0 && amtLiability > regularTaxLiab;
   const grossTaxLiab = amtApplies ? amtLiability : regularTaxLiab;
   const deemedIncome115JC  = amtApplies ? grossTotalIncome : 0;
-  const taxDeemed115JC     = amtOnTI; // always = TaxPayableUnderSec115JC; portal requires Sl.1a == ScheduleAMT Sl.4
+  const taxDeemed115JC     = amtApplies ? amtOnTI : 0;
 
   // Interest u/s 234A/234B/234C/234F — use manual override if provided, else auto-compute
   const manualInt234A = toI(gen.interest234A);
@@ -3226,12 +3226,16 @@ function buildITR5(input: BuildITRInput): object {
         // ── PartB_TTI ─────────────────────────────────────────────────────
         PartB_TTI: {
           ComputationOfTaxLiability: {
-            TaxPayableOnDeemedTI: {
-              TaxDeemedTISec115JC: taxDeemed115JC,
-              Surcharge:           Math.round(taxDeemed115JC * normalSurRate),
-              EducationCess:       Math.round(taxDeemed115JC * 1.04 * 0.04),
-              TotalTax:            amtApplies ? amtLiability : 0,
-            },
+            TaxPayableOnDeemedTI: (() => {
+              const sc  = amtApplies ? amtSurcharge : 0;
+              const ces = amtApplies ? amtCess      : 0;
+              return {
+                TaxDeemedTISec115JC: taxDeemed115JC,
+                Surcharge:           sc,
+                EducationCess:       ces,
+                TotalTax:            taxDeemed115JC + sc + ces,
+              };
+            })(),
             TaxPayableOnTI: {
               TaxAtNormalRates:                 taxOnNormal,
               TaxAtSpecialRates:                taxOnSTCG111A + taxOnLTCG112A,
@@ -3247,7 +3251,7 @@ function buildITR5(input: BuildITRInput): object {
             },
             GrossTaxPayable:   grossTaxLiab,
             CreditUS115JD:     0,
-            TaxPaidUnderCredit: Math.max(0, grossTaxLiab - taxDeemed115JC),
+            TaxPaidUnderCredit: grossTaxLiab,
             TaxRelief: {
               Section90:    0,
               Section91:    0,
@@ -3484,7 +3488,7 @@ function buildITR5(input: BuildITRInput): object {
         ScheduleAMT: (() => {
           const amtAddback = viaDeductions; // Chapter VI-A deductions added back for AMT
           const amtAdjIncome = totalIncome + amtAddback; // = grossTotalIncome
-          const amtTaxAmt = amtOnTI; // always fill — portal uses this to determine whether AMT applies
+          const amtTaxAmt = amtApplies ? amtOnTI : 0;
           return {
             TotalIncItem13:             totalIncome,
             AdjustmentSec115JC:        [{ DeductClaimSec6A: amtAddback, DeductClaimSec10AA: 0, DeductClaimSec35AD: 0, Total: amtAddback }],
@@ -3525,9 +3529,9 @@ function buildITR5(input: BuildITRInput): object {
             });
           }
           return {
-            TaxSection115JC: 0,
+            TaxSection115JC: amtLiability,
             TaxOthProvisions: regularTaxLiab,
-            AmtTaxCreditAvailable: Math.max(0, regularTaxLiab - taxDeemed115JC),
+            AmtTaxCreditAvailable: Math.max(0, amtLiability - regularTaxLiab),
             ScheduleAMTCDtls: amtcYears,
             CurrAssYr: effectiveAY ?? '2024-25',
             CurrYrAmtCreditFwd: 0, CurrYrCreditBalBF: 0, CurrYrCreditCarryFwd: 0,
