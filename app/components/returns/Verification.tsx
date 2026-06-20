@@ -331,30 +331,28 @@ export default function Verification({
               label="Aadhaar OTP"
               hint="OTP sent to Aadhaar-linked mobile number. Fastest method."
               checked={data.AadhaarOTPFlag === 'Y'}
-              onChange={(v) => update({ EverifyFlag: v ? 'Y' : 'N', AadhaarOTPFlag: v ? 'Y' : 'N' })}
+              onChange={() => update({ EverifyFlag: 'Y', AadhaarOTPFlag: 'Y', BankAccountFlag: 'N', DematAccountFlag: 'N' })}
               readOnly={readOnly}
             />
             <EVerifyOption
               label="EVC via Bank Account"
               hint="Electronic Verification Code sent to bank-registered mobile."
               checked={data.BankAccountFlag === 'Y'}
-              onChange={(v) => update({ EverifyFlag: v ? 'Y' : 'N', BankAccountFlag: v ? 'Y' : 'N' })}
+              onChange={() => update({ EverifyFlag: 'Y', AadhaarOTPFlag: 'N', BankAccountFlag: 'Y', DematAccountFlag: 'N' })}
               readOnly={readOnly}
             />
             <EVerifyOption
               label="EVC via Demat Account"
               hint="Electronic Verification Code via CDSL/NSDL linked mobile."
               checked={data.DematAccountFlag === 'Y'}
-              onChange={(v) => update({ EverifyFlag: v ? 'Y' : 'N', DematAccountFlag: v ? 'Y' : 'N' })}
+              onChange={() => update({ EverifyFlag: 'Y', AadhaarOTPFlag: 'N', BankAccountFlag: 'N', DematAccountFlag: 'Y' })}
               readOnly={readOnly}
             />
             <EVerifyOption
               label="Send signed ITR-V by post"
               hint="Download ITR-V, sign, and send to CPC Bengaluru within 30 days."
               checked={data.EverifyFlag === 'N' && data.AadhaarOTPFlag !== 'Y' && data.BankAccountFlag !== 'Y' && data.DematAccountFlag !== 'Y'}
-              onChange={(v) => {
-                if (v) update({ EverifyFlag: 'N', AadhaarOTPFlag: 'N', BankAccountFlag: 'N', DematAccountFlag: 'N' });
-              }}
+              onChange={() => update({ EverifyFlag: 'N', AadhaarOTPFlag: 'N', BankAccountFlag: 'N', DematAccountFlag: 'N' })}
               readOnly={readOnly}
             />
           </div>
