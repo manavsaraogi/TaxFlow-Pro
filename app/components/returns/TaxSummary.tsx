@@ -394,13 +394,14 @@ function computeTax(inp: TaxInputs): TaxComputation {
     period140B = today <= p1End ? 1 : today <= p2End ? 2 : today <= p3End ? 3 : today <= p4End ? 4 : null;
     const rateMap = { 1: 0.25, 2: 0.50, 3: 0.60, 4: 0.70 } as const;
     if (period140B) {
-      // Base = tax + 234A + 234B + 234C (excluding 234F per statute)
-      const base140B = netTax + interest234A + interest234B + interest234C;
-      additionalTax140B = Math.round(base140B * rateMap[period140B]);
+      // Base = tax + 234A + 234B + 234C (excluding 234F per statute), rounded to nearest Rs 10 first
+      const base140B = r10(netTax + interest234A + interest234B + interest234C);
+      additionalTax140B = r10(base140B * rateMap[period140B]);
     }
   }
 
-  const totalTaxDue = netTax + additionalTax140B + totalInterest;
+  // Section 288B: round total tax due to nearest Rs 10
+  const totalTaxDue = r10(netTax + additionalTax140B + totalInterest);
   const totalPrePaid = inp.tdsTCS + inp.advanceTax + inp.selfAssessmentTax;
   // Section 288B: balance payable / refund rounded to nearest Rs 10
   const balancePayable = r10(totalTaxDue - totalPrePaid);
