@@ -481,7 +481,18 @@ export default function ITR5General({ returnId, assessmentYear, initialData, onS
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const formRef = useRef<ITR5GeneralState>({ ...EMPTY, ...initialData });
 
-  useEffect(() => { if (initialData) setForm({ ...EMPTY, ...initialData }); }, [initialData]);
+  useEffect(() => {
+    if (initialData) {
+      setForm(prev => {
+        const incoming = { ...EMPTY, ...initialData };
+        // Preserve auto-populated members if initialData saved none yet
+        if ((!initialData.members || (initialData.members as ITR5Member[]).length === 0) && prev.members.length > 0) {
+          return { ...incoming, members: prev.members };
+        }
+        return incoming;
+      });
+    }
+  }, [initialData]);
   useEffect(() => { formRef.current = form; });
   useEffect(() => () => { if (debounceRef.current) { clearTimeout(debounceRef.current); save(formRef.current); } }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
