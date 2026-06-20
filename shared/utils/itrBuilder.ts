@@ -1969,7 +1969,7 @@ function buildITR5(input: BuildITRInput): object {
   const amtApplies   = grossTotalIncome > 0 && amtLiability > regularTaxLiab;
   const grossTaxLiab = amtApplies ? amtLiability : regularTaxLiab;
   const deemedIncome115JC  = amtApplies ? grossTotalIncome : 0;
-  const taxDeemed115JC     = amtApplies ? amtLiability : 0;
+  const taxDeemed115JC     = amtApplies ? amtOnTI : 0;
 
   // Interest u/s 234A/234B/234C/234F — use manual override if provided, else auto-compute
   const manualInt234A = toI(gen.interest234A);
@@ -3484,7 +3484,7 @@ function buildITR5(input: BuildITRInput): object {
         ScheduleAMT: (() => {
           const amtAddback = viaDeductions; // Chapter VI-A deductions added back for AMT
           const amtAdjIncome = totalIncome + amtAddback; // = grossTotalIncome
-          const amtTaxAmt = amtApplies ? r10(amtAdjIncome * 0.185) : 0;
+          const amtTaxAmt = amtApplies ? amtOnTI : 0;
           return {
             TotalIncItem13:             totalIncome,
             AdjustmentSec115JC:        [{ DeductClaimSec6A: amtAddback, DeductClaimSec10AA: 0, DeductClaimSec35AD: 0, Total: amtAddback }],
