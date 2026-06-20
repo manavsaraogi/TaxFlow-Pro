@@ -2268,7 +2268,7 @@ function buildITR5(input: BuildITRInput): object {
             AggrLiabilityNoRefund:  balPayableForATI,
             AddtnlIncTax:           atiAddtnlTax,
             NetPayable:             atiNetPayable,
-            TaxUS140B:              taxUS140BPaid,
+            TaxUS140B:              atiNetPayable,
             TaxDue10_11:            atiTaxDue,
             ...(upd.taxUS140BPayments?.length ? {
               ScheduleIT1: {
