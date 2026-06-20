@@ -1905,9 +1905,13 @@ function buildITR5(input: BuildITRInput): object {
         const additions     = toI(bp5.personalExpenses) + toI(bp5.inadmissibleU40aIa) + toI(bp5.inadmissibleU40A3)
                             + toI(bp5.provisionIncomeTax) + toI(bp5.salaryToPartnersExcess)
                             + toI(bp5.interestToPartnersExcess) + toI(bp5.otherAdditions);
+        // When user hasn't set otherCrossHeadDeductions, auto-derive OS misc income credited to PL
+        const autoOSCross   = toI(bp5.otherCrossHeadDeductions) === 0
+          ? Math.max(0, osIncome - toI(bp5.interestCreditedToPL) - toI(bp5.dividendCreditedToPL) - toI(bp5.rentalIncomeCreditedToPL))
+          : 0;
         const crossHeads    = toI(bp5.dividendCreditedToPL) + toI(bp5.interestCreditedToPL)
                             + toI(bp5.rentalIncomeCreditedToPL) + toI(bp5.capitalGainCreditedToPL)
-                            + toI(bp5.otherCrossHeadDeductions);
+                            + toI(bp5.otherCrossHeadDeductions) + autoOSCross;
         const deductions    = toI(bp5.depreciationITAct) + toI(bp5.deductionU35) + toI(bp5.deductionU10AA)
                             + toI(bp5.deductionU80IC) + toI(bp5.otherBPDeductions);
         const fromOtherHeads = toI(bp5.amtFromOtherHeadsToBP);
@@ -2659,9 +2663,12 @@ function buildITR5(input: BuildITRInput): object {
         // ── ScheduleBP (regular books case) ──────────────────────────────
         ...(!noAccountCase ? (() => {
           const netProfit       = toI(pl.NetProfitBeforeTaxes);
+          const autoOSCrossBP   = toI(bp5.otherCrossHeadDeductions) === 0
+            ? Math.max(0, osIncome - toI(bp5.interestCreditedToPL) - toI(bp5.dividendCreditedToPL) - toI(bp5.rentalIncomeCreditedToPL))
+            : 0;
           const crossHeads      = toI(bp5.dividendCreditedToPL) + toI(bp5.interestCreditedToPL)
                                 + toI(bp5.rentalIncomeCreditedToPL) + toI(bp5.capitalGainCreditedToPL)
-                                + toI(bp5.otherCrossHeadDeductions);
+                                + toI(bp5.otherCrossHeadDeductions) + autoOSCrossBP;
           const bpDeds          = toI(bp5.depreciationITAct) + toI(bp5.deductionU35) + toI(bp5.deductionU10AA)
                                 + toI(bp5.deductionU80IC) + toI(bp5.otherBPDeductions);
           const fromOtherHeads  = toI(bp5.amtFromOtherHeadsToBP);
@@ -2689,9 +2696,9 @@ function buildITR5(input: BuildITRInput): object {
                 IncRecCredPLOthHeadDtls: {
                   HouseProperty:    toI(bp5.rentalIncomeCreditedToPL),
                   CapitalGains:     toI(bp5.capitalGainCreditedToPL),
-                  OtherSources:     toI(bp5.interestCreditedToPL) + toI(bp5.otherCrossHeadDeductions),
+                  OtherSources:     toI(bp5.interestCreditedToPL) + toI(bp5.otherCrossHeadDeductions) + autoOSCrossBP,
                   Dividend:         toI(bp5.dividendCreditedToPL),
-                  OtherThanDividend: toI(bp5.interestCreditedToPL) + toI(bp5.otherCrossHeadDeductions),
+                  OtherThanDividend: toI(bp5.interestCreditedToPL) + toI(bp5.otherCrossHeadDeductions) + autoOSCrossBP,
                   UnderSec115BBF:   0,
                   UnderSec115BBG:   0,
                   UnderSec115BBH:   0,
@@ -3232,13 +3239,13 @@ function buildITR5(input: BuildITRInput): object {
             },
             GrossTaxPayable:   grossTaxLiab,
             CreditUS115JD:     0,
-            TaxPaidUnderCredit: 0,
+            TaxPaidUnderCredit: Math.max(0, grossTaxLiab - taxDeemed115JC),
             TaxRelief: {
               Section90:    0,
               Section91:    0,
               TotTaxRelief: 0,
             },
-            NetTaxLiability: netTaxLiab,
+            NetTaxLiability: grossTaxLiab,
             IntrstPay: {
               IntrstPayUs234A:  int234A,
               IntrstPayUs234B:  int234B,
@@ -3246,7 +3253,7 @@ function buildITR5(input: BuildITRInput): object {
               LateFilingFee234F: int234F,
               TotalIntrstPay:   totalInterest,
             },
-            AggregateTaxInterestLiability: netTaxLiab + totalTaxPaid,
+            AggregateTaxInterestLiability: grossTaxLiab + totalInterest,
           },
           TaxPaid: {
             TaxesPaid: {
@@ -3505,7 +3512,7 @@ function buildITR5(input: BuildITRInput): object {
           return {
             TaxSection115JC: 0,
             TaxOthProvisions: regularTaxLiab,
-            AmtTaxCreditAvailable: 0,
+            AmtTaxCreditAvailable: Math.max(0, regularTaxLiab - taxDeemed115JC),
             ScheduleAMTCDtls: amtcYears,
             CurrAssYr: effectiveAY ?? '2024-25',
             CurrYrAmtCreditFwd: 0, CurrYrCreditBalBF: 0, CurrYrCreditCarryFwd: 0,
