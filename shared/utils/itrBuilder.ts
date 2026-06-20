@@ -3297,7 +3297,7 @@ function buildITR5(input: BuildITRInput): object {
                   IFSCCode:      primaryBank.ifscCode ?? '',
                   BankName:      primaryBank.bankName ?? '',
                   BankAccountNo: primaryBank.accountNumber ?? '',
-                  AccountType:   (primaryBank.accountType as string) ?? 'SB',
+                  AccountType:   ({ SAVINGS: 'SB', CURRENT: 'CA', 'CASH CREDIT': 'CC', OVERDRAFT: 'OD', NRO: 'NRO', CGAS: 'CGAS' } as Record<string,string>)[(primaryBank.accountType as string)?.toUpperCase()] ?? 'SB',
                   UseForRefund:  'true',
                 }],
               } : {}),
