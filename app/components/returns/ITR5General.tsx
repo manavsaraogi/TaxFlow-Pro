@@ -75,6 +75,11 @@ interface ITR5Updated {
   reasons: UpdateReason[];
   taxUS140B: number;
   taxUS140BPayments: ITR5Updated140BChallan[];
+  // Prior (original) return reference figures — used for PartB-ATI
+  priorTotalIncome: number;
+  priorNetPayable: number;
+  priorTDS: number;
+  priorAdvTax: number;
 }
 
 interface ITR5GeneralState {
@@ -223,6 +228,7 @@ const EMPTY_UPDATED: ITR5Updated = {
   updatedAY: '2025-26', previouslyFiled: true, previousFilingType: '1',
   origAckNo: '', origFilingDate: '', laidOutFlag: false, periodCode: '1', reasons: ['2'],
   taxUS140B: 0, taxUS140BPayments: [],
+  priorTotalIncome: 0, priorNetPayable: 0, priorTDS: 0, priorAdvTax: 0,
 };
 
 const EMPTY: ITR5GeneralState = {
@@ -635,6 +641,28 @@ export default function ITR5General({ returnId, assessmentYear, initialData, onS
                   );
                 })}
               </div>
+              {/* Prior return reference figures */}
+              <div style={{ marginBottom: '12px', padding: '10px', borderRadius: '6px', border: '1px solid #d1d5db', background: '#f9fafb' }}>
+                <p style={{ fontSize: '11px', fontWeight: 700, color: '#374151', marginBottom: '8px' }}>Original Return — Reference Figures (earlier period)</p>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+                  {([
+                    { label: 'Total Income (₹)', key: 'priorTotalIncome' },
+                    { label: 'Net Tax Payable (₹)', key: 'priorNetPayable' },
+                    { label: 'TDS / TCS (₹)', key: 'priorTDS' },
+                    { label: 'Advance Tax (₹)', key: 'priorAdvTax' },
+                  ] as { label: string; key: keyof typeof form.updated }[]).map(({ label, key }) => (
+                    <div key={key}>
+                      <label style={{ fontSize: '10px', color: '#6b7280', display: 'block', marginBottom: '2px' }}>{label}</label>
+                      <input type="number" min={0}
+                        style={{ width: '100%', fontSize: '12px', padding: '4px 6px', border: '1px solid #e5e7eb', borderRadius: '4px', background: '#fff', color: '#374151' }}
+                        placeholder="0"
+                        value={(form.updated[key] as number) || ''}
+                        onChange={e => updateUpd({ [key]: Number(e.target.value) || 0 } as any)} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
               {updPeriods.currentPeriod === null && (
                 <p style={{ fontSize: '11px', fontWeight: 700, color: '#dc2626', marginBottom: '8px' }}>⛔ Updated return window has expired for this AY.</p>
               )}
