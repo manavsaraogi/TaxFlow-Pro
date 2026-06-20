@@ -23,6 +23,8 @@
  *   - 234F fee auto-included when filing after due date
  */
 
+import { createHmac } from 'crypto';
+
 import type {
   ReturnData,
   ScheduleSalary,
@@ -3574,6 +3576,35 @@ function buildITR5(input: BuildITRInput): object {
   };
 }
 
+// CBDT offline utility HMAC-SHA256 signing key (extracted from ITR5 AY 2024-25 V1.14 VBA)
+const ITR5_HMAC_KEY = Buffer.from('RoduFpNqMzQlWO9Q', 'latin1');
+const ITR5_HMAC_ITERS = 1977;
+
+export function signITR5Json(itrObj: any): any {
+  const inner = itrObj?.ITR?.ITR5;
+  if (!inner?.CreationInfo) return itrObj;
+
+  // Compact JSON with Digest:"-" — remove escaped \n sequences as CBDT VBA does
+  const compact = JSON.stringify(itrObj).replace(/\\n/g, '');
+
+  // Iterated HMAC-SHA256: 1 initial + 1977 more = 1978 total
+  let h = createHmac('sha256', ITR5_HMAC_KEY)
+    .update(Buffer.from(compact, 'latin1'))
+    .digest();
+  for (let i = 0; i < ITR5_HMAC_ITERS; i++) {
+    h = createHmac('sha256', ITR5_HMAC_KEY).update(h).digest();
+  }
+  const digest = h.toString('base64');
+
+  return {
+    ...itrObj,
+    ITR: {
+      ...itrObj.ITR,
+      ITR5: { ...inner, CreationInfo: { ...inner.CreationInfo, Digest: digest } },
+    },
+  };
+}
+
 function reorderITR5Keys(result: any): any {
   const itr5 = result?.ITR?.ITR5;
   if (!itr5) return result;
@@ -3604,7 +3635,7 @@ export function buildITRJson(input: BuildITRInput): object {
     case 'ITR-1': return buildITR1(input);
     case 'ITR-2': return buildITR2(input);
     case 'ITR-4': return buildITR4(input);
-    case 'ITR-5': return reorderITR5Keys(buildITR5(input));
+    case 'ITR-5': return signITR5Json(reorderITR5Keys(buildITR5(input)));
     default:
       throw new Error(`Unsupported form type: ${(input.returnData as ReturnData).formType}`);
   }
