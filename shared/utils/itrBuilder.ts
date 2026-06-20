@@ -1952,10 +1952,11 @@ function buildITR5(input: BuildITRInput): object {
     return 0.37;
   }
   // Surcharge on CG is capped at 15%
-  // MMR surcharge: trusts/AOPs taxed at Maximum Marginal Rate under s.164 always
-  // attract 37% surcharge (highest individual rate, old regime) regardless of income.
+  // MMR surcharge under s.164: highest individual surcharge regardless of entity's income.
+  // Old regime = 37% (income > 5Cr individual), New regime = 25% (Budget 2023 reduction).
+  const mmrSurRate       = rd.regime === 'NEW' ? 0.25 : 0.37;
   const cgSurchargeRate  = usesMMR ? 0.15 : Math.min(getSurchargeRate(grossTotalIncome), 0.15);
-  const normalSurRate    = usesMMR ? 0.37 : getSurchargeRate(grossTotalIncome);
+  const normalSurRate    = usesMMR ? mmrSurRate : getSurchargeRate(grossTotalIncome);
   const surchargeOnNormal = Math.round(taxOnNormal * normalSurRate);
   const surchargeOnCG    = Math.round((taxOnSTCG111A + taxOnLTCG112A) * cgSurchargeRate);
   const surcharge        = surchargeOnNormal + surchargeOnCG;
