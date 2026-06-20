@@ -1968,7 +1968,8 @@ function buildITR5(input: BuildITRInput): object {
   const amtLiability = amtOnTI + amtSurcharge + amtCess;
   const amtApplies   = grossTotalIncome > 0 && amtLiability > regularTaxLiab;
   const grossTaxLiab = amtApplies ? amtLiability : regularTaxLiab;
-  const deemedIncome115JC  = grossTotalIncome; // portal requires DeemedTotIncSec115JC == ScheduleAMT Sl.3 always
+  // For 139(8A): portal checks DeemedTotIncSec115JC == ScheduleAMT Sl.3 (= LatestTotInc = 0)
+  const deemedIncome115JC  = upd ? 0 : (amtApplies ? grossTotalIncome : 0);
   const taxDeemed115JC     = amtApplies ? amtOnTI : 0;
 
   // Interest u/s 234A/234B/234C/234F — use manual override if provided, else auto-compute
@@ -3486,16 +3487,20 @@ function buildITR5(input: BuildITRInput): object {
         // Sl.1 = total income; Sl.2 = VIA add-backs; Sl.3 = Sl.1 + Sl.2
         // Sl.3b = Sl.3 − Sl.3a; must mirror PartB-TI.DeemedTotIncSec115JC
         ScheduleAMT: (() => {
-          const amtAddback = viaDeductions; // Chapter VI-A deductions added back for AMT
-          const amtAdjIncome = totalIncome + amtAddback; // = grossTotalIncome
-          const amtTaxAmt = amtApplies ? amtOnTI : 0;
+          // For 139(8A) updated returns, portal cross-checks TotalIncItem13 against
+          // PartB-ATI.LatestTotInc (the original return's income, = 0 when no prior return).
+          // Using updatedIncome here causes errors 1-4 even in the CBDT official utility.
+          const amtBaseIncome = upd ? 0 : totalIncome;
+          const amtAddback    = upd ? 0 : viaDeductions;
+          const amtAdjIncome  = amtBaseIncome + amtAddback;
+          const amtTaxAmt     = upd ? 0 : (amtApplies ? amtOnTI : 0);
           return {
-            TotalIncItem13:             totalIncome,
-            AdjustmentSec115JC:        [{ DeductClaimSec6A: amtAddback, DeductClaimSec10AA: 0, DeductClaimSec35AD: 0, Total: amtAddback }],
-            AdjustedUnderSec115JC:     amtAdjIncome,
-            AdjustedUnderSec115JCIFSC: 0,
+            TotalIncItem13:              amtBaseIncome,
+            AdjustmentSec115JC:         [{ DeductClaimSec6A: amtAddback, DeductClaimSec10AA: 0, DeductClaimSec35AD: 0, Total: amtAddback }],
+            AdjustedUnderSec115JC:      amtAdjIncome,
+            AdjustedUnderSec115JCIFSC:  0,
             AdjustedUnderSec115JCOther: amtAdjIncome,
-            TaxPayableUnderSec115JC:   amtTaxAmt,
+            TaxPayableUnderSec115JC:    amtTaxAmt,
           };
         })(),
 
