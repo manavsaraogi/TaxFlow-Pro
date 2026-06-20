@@ -123,6 +123,7 @@ export default function Verification({
                 ...(raw.trpIdentification ? { TRPIdentification: raw.trpIdentification as string } : {}),
                 ...(raw.trpAddress        ? { TRPAddress:        raw.trpAddress        as string } : {}),
               } as VerificationType);
+              setDirty(true);
               setShowTRP(!!(raw.trpName));
             } else {
               setData((prev) => ({ ...prev, AssesseeVerName: clientName }));
