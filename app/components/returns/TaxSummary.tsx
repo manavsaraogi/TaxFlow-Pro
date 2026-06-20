@@ -336,6 +336,10 @@ function computeTax(inp: TaxInputs): TaxComputation {
       const relief = Math.max(0, (grossTax + rawSurcharge) - (Math.floor(grossTax * 10_000_000 / taxableIncome) + (taxableIncome - 10_000_000)));
       surcharge = Math.max(0, rawSurcharge - relief);
     }
+  } else if (isAOPMMR) {
+    // MMR surcharge under s.164: highest individual rate regardless of income
+    // New regime = 25% (Budget 2023), Old regime = 37%
+    surcharge = Math.round(grossTax * (isNew ? 0.25 : 0.37));
   } else {
     const sRate = surchargeRate(taxableIncome, inp.regime);
     const rawSurcharge = Math.floor(grossTax * sRate);
