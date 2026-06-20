@@ -2256,7 +2256,7 @@ function buildITR5(input: BuildITRInput): object {
             ...(upd.taxUS140BPayments?.length ? {
               ScheduleIT1: {
                 TaxPayment1: {
-                  TaxPayments: upd.taxUS140BPayments.map((p, i) => ({
+                  TaxPayments: upd.taxUS140BPayments!.map((p: { bsrCode: string; challanDate: string; challanSerial: number; amount: number }, i: number) => ({
                     slno:          i + 1,
                     BSRCode:       p.bsrCode,
                     DateDep:       p.challanDate,
