@@ -587,6 +587,7 @@ function EVerifyOption({
     }}>
       <input
         type="radio"
+        name="everify-method"
         checked={checked}
         onChange={(e) => !readOnly && onChange(e.target.checked)}
         disabled={readOnly}
