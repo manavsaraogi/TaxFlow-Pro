@@ -2034,6 +2034,7 @@ function buildITR5(input: BuildITRInput): object {
   let atiAddtnlTax = 0;
   let atiNetPayable = 0;
   let atiTaxDue = 0;
+  let taxUS140BPaid = 0;
   if (upd) {
     const updAY = upd.updatedAY ?? itr5AY;
     const endYear = parseInt(updAY.split('-')[1] ?? '25') + 2000;
@@ -2046,7 +2047,7 @@ function buildITR5(input: BuildITRInput): object {
     const aggrLiability = balPayableForATI; // simple case: no prior return credits
     atiAddtnlTax = atiRate > 0 ? r10(Math.max(0, aggrLiability - int234F) * atiRate) : 0;
     atiNetPayable = r10(aggrLiability + atiAddtnlTax);
-    const taxUS140BPaid = (upd.taxUS140BPayments ?? []).reduce((s: number, p: any) => s + toI(p.amount), 0);
+    taxUS140BPaid = (upd.taxUS140BPayments ?? []).reduce((s: number, p: any) => s + toI(p.amount), 0);
     atiTaxDue = r10(Math.max(0, atiNetPayable - taxUS140BPaid));
   }
 
