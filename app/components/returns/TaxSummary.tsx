@@ -398,14 +398,20 @@ function computeTax(inp: TaxInputs): TaxComputation {
     period140B = today <= p1End ? 1 : today <= p2End ? 2 : today <= p3End ? 3 : today <= p4End ? 4 : null;
     const rateMap = { 1: 0.25, 2: 0.50, 3: 0.60, 4: 0.70 } as const;
     if (period140B) {
-      // Base = tax + 234A + 234B + 234C (excluding 234F per statute), rounded to nearest Rs 10 first
-      const base140B = r10(netTax + interest234A + interest234B + interest234C);
-      additionalTax140B = r10(base140B * rateMap[period140B]);
+      // aggrLiability = r10(netTax + all interest incl. 234F) — matches JSON builder
+      // base excludes 234F; additional tax uses Math.round (not r10) to match CBDT utility
+      const aggrLiability = r10(netTax + totalInterest);
+      const base140B = aggrLiability - interest234F;
+      additionalTax140B = Math.round(base140B * rateMap[period140B]);
     }
   }
 
-  // Section 288B: round total tax due to nearest Rs 10
-  const totalTaxDue = r10(netTax + additionalTax140B + totalInterest);
+  // For 139(8A): totalTaxDue = aggrLiability + additionalTax140B (no final r10, matches builder)
+  // For regular returns: r10 per section 288B
+  const aggrLiability140B = inp.filingSection === '139(8A)' ? r10(netTax + totalInterest) : 0;
+  const totalTaxDue = inp.filingSection === '139(8A)'
+    ? aggrLiability140B + additionalTax140B
+    : r10(netTax + totalInterest);
   const totalPrePaid = inp.tdsTCS + inp.advanceTax + inp.selfAssessmentTax;
   // Section 288B: balance payable / refund rounded to nearest Rs 10
   const balancePayable = r10(totalTaxDue - totalPrePaid);
