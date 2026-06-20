@@ -3266,7 +3266,7 @@ function buildITR5(input: BuildITRInput): object {
               LateFilingFee234F: int234F,
               TotalIntrstPay:   totalInterest,
             },
-            AggregateTaxInterestLiability: grossTaxLiab + totalInterest,
+            AggregateTaxInterestLiability: r10(grossTaxLiab + totalInterest),
           },
           TaxPaid: {
             TaxesPaid: {
