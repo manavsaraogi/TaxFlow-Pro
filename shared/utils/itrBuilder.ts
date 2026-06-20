@@ -1880,9 +1880,8 @@ function buildITR5(input: BuildITRInput): object {
   // Portal expects the END year of the AY (e.g. "2026" for AY 2025-26)
   const effectiveAYYear = ayToYear(effectiveAY);
 
-  // SW92202021 is a common registered SWProviderID found in both AY 2024-25 and AY 2025-26
-  // CBDT offline utility VBA binaries — accepts Digest:'-' unlike the AY-specific IDs
-  const itr5SwId = 'SW92202021';
+  // SW90002425 is the registered SWProviderID for AY 2024-25 per CBDT reference JSON
+  const itr5SwId = effectiveAY === '2025-26' ? 'SW90002526' : 'SW90002425';
 
   const toI = (v: unknown) => Math.round(Number(v) || 0);
   const bp5 = (rd as any).itr5BP ?? {};
@@ -2058,8 +2057,18 @@ function buildITR5(input: BuildITRInput): object {
   // Section 288A: total income rounded to nearest Rs 10
   const totalIncome   = r10(Math.max(0, grossTotalIncome - viaDeductions));
 
+  // CYLA helpers per income head (fields differ based on which losses can set off against which heads)
+  const cylaHP  = (n: number) => ({
+    IncCYLA: { IncOfCurYrUnderThatHead: n, BusLossSetoff: 0, OthSrcLossNoRaceHorseSetoff: 0, IncOfCurYrAfterSetOff: n },
+  });
+  const cylaBP  = (n: number) => ({
+    IncCYLA: { IncOfCurYrUnderThatHead: n, HPlossCurYrSetoff: 0, OthSrcLossNoRaceHorseSetoff: 0, IncOfCurYrAfterSetOff: n },
+  });
   const cylaInc = (n: number) => ({
-    IncCYLA: { IncOfCurYrUnderThatHead: n, IncOfCurYrAfterSetOff: n },
+    IncCYLA: { IncOfCurYrUnderThatHead: n, HPlossCurYrSetoff: 0, BusLossSetoff: 0, OthSrcLossNoRaceHorseSetoff: 0, IncOfCurYrAfterSetOff: n },
+  });
+  const cylaOS  = (n: number) => ({
+    IncCYLA: { IncOfCurYrUnderThatHead: n, HPlossCurYrSetoff: 0, BusLossSetoff: 0, IncOfCurYrAfterSetOff: n },
   });
   const bflaRow = (n: number) => ({
     IncBFLA: { IncOfCurYrUndHeadFromCYLA: n, BFlossPrevYrUndSameHeadSetoff: 0, BFUnabsorbedDeprSetoff: 0, BFAllUs35Cl4Setoff: 0, IncOfCurYrAfterSetOffBFLosses: n },
@@ -2240,6 +2249,20 @@ function buildITR5(input: BuildITRInput): object {
             NetPayable:             atiNetPayable,
             TaxUS140B:              toI(upd.taxUS140B),
             TaxDue10_11:            atiTaxDue,
+            ...(upd.taxUS140BPayments?.length ? {
+              ScheduleIT1: {
+                TaxPayment1: {
+                  TaxPayments: upd.taxUS140BPayments.map((p, i) => ({
+                    slno:          i + 1,
+                    BSRCode:       p.bsrCode,
+                    DateDep:       p.challanDate,
+                    SrlNoOfChaln:  p.challanSerial,
+                    Amt:           toI(p.amount),
+                  })),
+                },
+                Total: toI(upd.taxUS140B),
+              },
+            } : {}),
           },
         } : {}),
         PartA_GEN2: {
@@ -2577,7 +2600,7 @@ function buildITR5(input: BuildITRInput): object {
               ForeignTravelExp: toI(pl.PL26),
               ConveyanceExp: 0, TelephoneExp: toI(pl.PL22xi), GuestHouseExp: 0, ClubExp: 0,
               FestivalCelebExp: toI(pl.PL28), Scholarship: 0, Gift: 0, Donation: toI(pl.PL53),
-              RatesTaxesPays: { ExciseCustomsVAT: { UnionExciseDuty:0,ServiceTax:0,VATorSaleTax:0,CentralGoodServiceTax:0,StateGoodServiceTax:0,IntegratedGoodServiceTax:0,UnionTerrGoodServiceTax:0,OthDutyTaxCess:toI(pl.PL21),TotExciseCustomsVAT:toI(pl.PL21) } },
+              RatesTaxesPays: { ExciseCustomsVAT: { UnionExciseDuty:0,ServiceTax:0,VATorSaleTax:0,CentralGoodServiceTax:0,StateGoodServiceTax:0,IntegratedGoodServiceTax:0,UnionTerrGoodServiceTax:0,OthDutyTaxCess:toI(pl.PL21),Cess:0,TotExciseCustomsVAT:toI(pl.PL21) } },
               AuditFee:            toI(pl.PL33),
               SalRemuneration:     0,
               OtherExpenses:       toI(pl.PL37) + toI(pl.PL40) + toI(pl.PL41) + toI(pl.PL42) + toI(pl.PL43) + toI(pl.PL44x) + toI(pl.PL45) + toI(pl.PL46) + toI(pl.PL47) + toI(pl.PL48iv),
@@ -2687,6 +2710,7 @@ function buildITR5(input: BuildITRInput): object {
                   OtherSources:   0,
                   UnderSec115BBF: 0,
                   UnderSec115BBG: 0,
+                  UnderSec115BBH: 0,
                 },
                 ExpDebToPLExemptInc:             0,
                 ExpDebToPLExemptIncDisAllwUs14A: 0,
@@ -2762,6 +2786,8 @@ function buildITR5(input: BuildITRInput): object {
               IncChrgUnHdProftGain: taxableBPIncome,
               BusSetoffCurrYr: {
                 LossSetOffOnBusLoss:     0,
+                SpeculativeInc: { IncOfCurYrUnderThatHead: 0, BusLossSetoff: 0, IncOfCurYrAfterSetOff: 0 },
+                SpecifiedInc:   { IncOfCurYrUnderThatHead: 0, BusLossSetoff: 0, IncOfCurYrAfterSetOff: 0 },
                 TotLossSetOffOnBus:      0,
                 LossRemainSetOffOnBus:   taxableBPIncome,
               },
@@ -2788,6 +2814,12 @@ function buildITR5(input: BuildITRInput): object {
           const deductions    = toI(osData.DeductionUs57iia);
           const grossInc      = Math.max(0, toI(osData.IncomeFromOtherSources));
           const netInc        = Math.max(0, grossInc - deductions);
+          const knownOsItems  = interestGross + dividendGross + toI(osData.RentFromMachPlantBldgs);
+          const derivedAnyOther = Math.max(0, grossInc - knownOsItems);
+          const anyOtherInc   = toI(osData.AnyOtherIncome) || derivedAnyOther;
+          const otherIncDtls  = osData.AnyOtherIncomeDetails?.length
+            ? osData.AnyOtherIncomeDetails.map((d: any) => ({ OthNatOfInc: d.nature ?? '', OthAmount: toI(d.amount) }))
+            : (anyOtherInc > 0 ? [{ OthNatOfInc: 'MISCELLANEOUS INCOME', OthAmount: anyOtherInc }] : []);
           return {
             IncOthThanOwnRaceHorse: {
               GrossIncChrgblTaxAtAppRate: grossInc,
@@ -2808,10 +2840,8 @@ function buildITR5(input: BuildITRInput): object {
               Anyotherpropwithoutcons562x: 0,
               Anyotherpropinadeqcons562x: 0,
               SumRecdPrYrBusTRU562xii:   0,
-              AnyOtherIncome:            toI(osData.AnyOtherIncome),
-              OthersInc:                 osData.AnyOtherIncomeDetails?.length
-                ? { OthersIncDtls: osData.AnyOtherIncomeDetails.map((d: any) => ({ OthNatOfInc: d.nature ?? '', OthAmount: toI(d.amount) })) }
-                : { OthersIncDtls: [] },
+              AnyOtherIncome:            anyOtherInc,
+              OthersInc:                 { OthersIncDtls: otherIncDtls },
               IncChargeableSpecialRates: 0,
               LtryPzzlChrgblUs115BB:     0,
               IncChrgblUs115BBE:         0,
@@ -2871,7 +2901,11 @@ function buildITR5(input: BuildITRInput): object {
                   TotalDedn: otherAssets.reduce((s,e) => s + toI(e.purchaseCost) + toI(e.expenditure), 0),
                 },
                 BalanceCG: stcgOther, LossSec94of7Or94of8: 0, DeemedSTCGDeprAsset: 0,
-                ExemptionOrDednUs54: { ExemptionGrandTotal: 0 },
+                ExemptionOrDednUs54: { ExemptionOrDednUs54Dtls: [
+                  { ExemptionSecCode: '54D', ExemptionAmount: 0 },
+                  { ExemptionSecCode: '54G', ExemptionAmount: 0 },
+                  { ExemptionSecCode: '54GA', ExemptionAmount: 0 },
+                ], ExemptionGrandTotal: 0 },
                 CapgainonAssets: stcgOther,
               },
               TotalAmtDeemedStcg:       0,
@@ -2923,7 +2957,11 @@ function buildITR5(input: BuildITRInput): object {
                 FullConsideration: 0,
                 DeductSec48: { Reduction48iii: 0, AquisitCost: 0, ImproveCost: 0, ExpOnTrans: 0, TotalDedn: 0 },
                 BalanceCG: 0,
-                ExemptionOrDednUs54: { ExemptionGrandTotal: 0 },
+                ExemptionOrDednUs54: { ExemptionOrDednUs54Dtls: [
+                  { ExemptionSecCode: '54D', ExemptionAmount: 0 },
+                  { ExemptionSecCode: '54G', ExemptionAmount: 0 },
+                  { ExemptionSecCode: '54GA', ExemptionAmount: 0 },
+                ], ExemptionGrandTotal: 0 },
                 CapgainonAssets: 0,
               },
             } : {
@@ -3007,6 +3045,7 @@ function buildITR5(input: BuildITRInput): object {
               : { StclSetoff15Per:0,StclSetoff20Per:0,StclSetoff30Per:0,StclSetoffAppRate:0,StclSetoffDTAARate:0,LtclSetOff10Per:0,LtclSetOff12_5Per:0,LtclSetOff20Per:0,LtclSetOffDTAARate:0 },
           },
           AccruOrRecOfCG: {
+            VDATrnsfGainsUnder30Per: { DateRange:{Upto15Of6:0,Upto15Of9:0,Up16Of9To15Of12:0,Up16Of12To15Of3:0,Up16Of3To31Of3:0} },
             ShortTermUnder15Per:   { DateRange:{Upto15Of6:0,Upto15Of9:0,Up16Of9To15Of12:0,Up16Of12To15Of3:0,Up16Of3To31Of3:0} },
             ...(effectiveAY !== '2024-25' ? { ShortTermUnder20Per: { DateRange:{Upto15Of6:0,Upto15Of9:0,Up16Of9To15Of12:0,Up16Of12To15Of3:0,Up16Of3To31Of3:0} } } : {}),
             ShortTermUnder30Per:   { DateRange:{Upto15Of6:0,Upto15Of9:0,Up16Of9To15Of12:0,Up16Of12To15Of3:0,Up16Of3To31Of3:0} },
@@ -3032,10 +3071,10 @@ function buildITR5(input: BuildITRInput): object {
         // ── ScheduleCYLA ─────────────────────────────────────────────────
         ScheduleCYLA: {
           CYLAEditFlag:         'N',
-          HP:                   cylaInc(Math.max(0, hpIncome)),
-          BusProfExclSpecProf:  cylaInc(Math.max(0, bpIncome)),
-          SpeculationIncome:    cylaInc(0),
-          SpecifiedBusIncome:   cylaInc(0),
+          HP:                   cylaHP(Math.max(0, hpIncome)),
+          BusProfExclSpecProf:  cylaBP(Math.max(0, bpIncome)),
+          SpeculationIncome:    cylaBP(0),
+          SpecifiedBusIncome:   cylaBP(0),
           STCG15Per:    cylaInc(effectiveAY === '2024-25' ? stcg111A : 0),
           ...(effectiveAY !== '2024-25' ? { STCG20Per: cylaInc(stcg111A) } : {}),
           STCG30Per:    cylaInc(0),
@@ -3045,7 +3084,7 @@ function buildITR5(input: BuildITRInput): object {
           ...(effectiveAY !== '2024-25' ? { LTCG12_5Per: cylaInc(ltcg112A) } : {}),
           LTCG20Per:    cylaInc(0),
           LTCGDTAARate: cylaInc(0),
-          OthSrcExclRaceHorseLottery: cylaInc(Math.max(0, osIncome)),
+          OthSrcExclRaceHorseLottery: cylaOS(Math.max(0, osIncome)),
           ProfitFrmRaceHorse:   cylaInc(0),
           IncOSDTAA:            cylaInc(0),
           TotalCurYr: {
@@ -3217,7 +3256,10 @@ function buildITR5(input: BuildITRInput): object {
               SelfAssessmentTax: satTax,
               TotalTaxesPaid:    totalTaxPaid,
             },
-            BalTaxPayable: netTaxLiab,
+            BalTaxPayable:       netTaxLiab,
+            NetTaxPayable115TD:  0,
+            TaxPayable115TD:     0,
+            NetRefundAdjust:     0,
           },
           Refund: {
             RefundDue: refund,
