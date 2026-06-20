@@ -16,7 +16,13 @@ export async function GET(_req: NextRequest, { params }: Params) {
       bankAccounts: { where: { isActive: true } },
       returns: {
         orderBy: { createdAt: 'desc' },
-        include: { assessmentYear: true },
+        select: {
+          id: true, status: true, formType: true, regime: true,
+          grossTotalIncome: true, grossTaxLiability: true, refundDue: true,
+          balTaxPayable: true, filedAt: true, acknowledgementNumber: true,
+          createdAt: true, itr5GeneralJson: true,
+          assessmentYear: { select: { ayLabel: true } },
+        },
       },
     },
   });
@@ -65,22 +71,34 @@ export async function GET(_req: NextRequest, { params }: Params) {
       accountType: b.accountType,
       isPrimary: b.isPrimary,
     })),
-    returns: client.returns.map((r) => ({
-      id: r.id,
-      status: r.status,
-      formType: r.formType,
-      regime: r.regime,
-      grossTotalIncome: r.grossTotalIncome,
-      grossTaxLiability: r.grossTaxLiability,
-      refundDue: r.refundDue,
-      balTaxPayable: r.balTaxPayable,
-      filedAt: r.filedAt?.toISOString() ?? null,
-      acknowledgementNumber: r.acknowledgementNumber,
-      createdAt: r.createdAt.toISOString(),
-      assessmentYear: r.assessmentYear
-        ? { ayLabel: r.assessmentYear.ayLabel }
-        : null,
-    })),
+    returns: client.returns.map((r) => {
+      let updatedAY: string | null = null;
+      if ((r as any).itr5GeneralJson) {
+        try {
+          const gen = JSON.parse((r as any).itr5GeneralJson as string);
+          if (gen?.filingSection === '139(8A)' && gen?.updated?.updatedAY) {
+            updatedAY = gen.updated.updatedAY as string;
+          }
+        } catch { /* skip */ }
+      }
+      return {
+        id: r.id,
+        status: r.status,
+        formType: r.formType,
+        regime: r.regime,
+        grossTotalIncome: r.grossTotalIncome,
+        grossTaxLiability: r.grossTaxLiability,
+        refundDue: r.refundDue,
+        balTaxPayable: r.balTaxPayable,
+        filedAt: r.filedAt?.toISOString() ?? null,
+        acknowledgementNumber: r.acknowledgementNumber,
+        createdAt: r.createdAt.toISOString(),
+        assessmentYear: r.assessmentYear
+          ? { ayLabel: r.assessmentYear.ayLabel }
+          : null,
+        updatedAY,
+      };
+    }),
   };
 
   return NextResponse.json({ data });

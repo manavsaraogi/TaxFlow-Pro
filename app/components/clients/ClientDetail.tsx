@@ -59,6 +59,7 @@ interface ReturnData {
   acknowledgementNumber?: string;
   createdAt: string;
   assessmentYear?: { ayLabel: string };
+  updatedAY?: string | null;
 }
 
 interface ClientData {
@@ -482,7 +483,7 @@ function ReturnsTab({ client, onNewReturn, onOpenReturn, onDeleteReturn }: {
                   <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
                     <div>
                       <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                        AY {ret.assessmentYear?.ayLabel}
+                        AY {ret.updatedAY ?? ret.assessmentYear?.ayLabel}
                       </div>
                       <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
                         {ret.regime === 'NEW' ? 'New Regime' : 'Old Regime'}
@@ -496,6 +497,15 @@ function ReturnsTab({ client, onNewReturn, onOpenReturn, onDeleteReturn }: {
                         fontSize: '11px', fontWeight: 700, color: 'var(--brand-text)',
                       }}>
                         {ret.formType}
+                      </span>
+                    )}
+                    {ret.updatedAY && (
+                      <span style={{
+                        padding: '3px 8px', background: 'rgba(139,92,246,0.08)',
+                        border: '1px solid #8b5cf6', borderRadius: '4px',
+                        fontSize: '11px', fontWeight: 700, color: '#7c3aed',
+                      }}>
+                        Updated Return
                       </span>
                     )}
                   </div>
