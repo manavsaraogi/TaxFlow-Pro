@@ -485,6 +485,23 @@ export default function ITR5General({ returnId, assessmentYear, initialData, onS
   useEffect(() => { formRef.current = form; });
   useEffect(() => () => { if (debounceRef.current) { clearTimeout(debounceRef.current); save(formRef.current); } }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Auto-populate members from the most recent other return for this client
+  useEffect(() => {
+    const hasMembers = Array.isArray(initialData?.members) && (initialData.members as ITR5Member[]).length > 0;
+    if (hasMembers) return;
+    fetch(`/api/returns/${returnId}/client-defaults`)
+      .then(r => r.json())
+      .then(({ data }) => {
+        if (Array.isArray(data?.members) && data.members.length > 0) {
+          setForm(prev => {
+            if (prev.members.length > 0) return prev; // user already has members, skip
+            return { ...prev, members: data.members as ITR5Member[] };
+          });
+        }
+      })
+      .catch(() => { /* non-fatal */ });
+  }, [returnId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const save = useCallback(async (data: ITR5GeneralState) => {
     setSaving(true);
     try {

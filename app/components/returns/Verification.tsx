@@ -102,7 +102,34 @@ export default function Verification({
           setData(v);
           setShowTRP(!!(v.TRPName));
         } else {
-          setData((prev) => ({ ...prev, AssesseeVerName: clientName }));
+          // No saved verification — try to pull from another return for this client
+          try {
+            const defRes = await fetch(`/api/returns/${returnId}/client-defaults`);
+            const { data: defaults } = await defRes.json();
+            if (defaults?.verification) {
+              const raw = defaults.verification as Record<string, unknown>;
+              setData({
+                AssesseeVerName: (raw.assesseeVerName as string) ?? (raw.AssesseeVerName as string) ?? clientName,
+                FatherName:      (raw.fatherName      as string) ?? (raw.FatherName      as string) ?? '',
+                PlaceVerSign:    (raw.placeVerSign     as string) ?? (raw.PlaceVerSign     as string) ?? '',
+                DateVerSign:     new Date().toISOString().split('T')[0],
+                Capacity:        (raw.capacity         as string) ?? (raw.Capacity         as string) ?? (formType === 'ITR-5' ? 'PO' : 'S'),
+                EverifyFlag:     (raw.everifyFlag      as string) ?? (raw.EverifyFlag      as string) ?? 'Y',
+                AadhaarOTPFlag:  (raw.aadhaarOTPFlag   as string) ?? (raw.AadhaarOTPFlag   as string) ?? 'N',
+                BankAccountFlag: (raw.bankAccountFlag  as string) ?? (raw.BankAccountFlag  as string) ?? 'N',
+                DematAccountFlag:(raw.dematAccountFlag as string) ?? (raw.DematAccountFlag as string) ?? 'N',
+                ...(raw.signatoryPAN      ? { signatoryPAN:      raw.signatoryPAN      as string } : {}),
+                ...(raw.trpName           ? { TRPName:           raw.trpName           as string } : {}),
+                ...(raw.trpIdentification ? { TRPIdentification: raw.trpIdentification as string } : {}),
+                ...(raw.trpAddress        ? { TRPAddress:        raw.trpAddress        as string } : {}),
+              } as VerificationType);
+              setShowTRP(!!(raw.trpName));
+            } else {
+              setData((prev) => ({ ...prev, AssesseeVerName: clientName }));
+            }
+          } catch {
+            setData((prev) => ({ ...prev, AssesseeVerName: clientName }));
+          }
         }
       } catch {
         setData((prev) => ({ ...prev, AssesseeVerName: clientName }));
