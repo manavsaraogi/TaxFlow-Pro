@@ -57,6 +57,13 @@ type UpdateReason = '1' | '2' | '3' | '4' | '5' | '6' | '7' | 'OTH';
 type UpdatedAY = '2024-25' | '2025-26';
 type UpdatedPeriod = '1' | '2' | '3' | '4';
 
+interface ITR5Updated140BChallan {
+  bsrCode: string;
+  challanDate: string;   // YYYY-MM-DD
+  challanSerial: number;
+  amount: number;
+}
+
 interface ITR5Updated {
   updatedAY: UpdatedAY;
   previouslyFiled: boolean;
@@ -66,6 +73,8 @@ interface ITR5Updated {
   laidOutFlag: boolean;
   periodCode: UpdatedPeriod;
   reasons: UpdateReason[];
+  taxUS140B: number;
+  taxUS140BPayments: ITR5Updated140BChallan[];
 }
 
 interface ITR5GeneralState {
@@ -213,6 +222,7 @@ const EMPTY_MEMBER: ITR5Member = {
 const EMPTY_UPDATED: ITR5Updated = {
   updatedAY: '2025-26', previouslyFiled: true, previousFilingType: '1',
   origAckNo: '', origFilingDate: '', laidOutFlag: false, periodCode: '1', reasons: ['2'],
+  taxUS140B: 0, taxUS140BPayments: [],
 };
 
 const EMPTY: ITR5GeneralState = {
@@ -605,36 +615,82 @@ export default function ITR5General({ returnId, assessmentYear, initialData, onS
             </div>
           )}
           {form.filingSection === '139(8A)' && (
-            <div style={{ marginTop: '12px', borderRadius: '8px', border: '1px solid #f59e0b', background: '#fffbeb', padding: '12px' }}>
-              <p style={{ fontSize: '12px', fontWeight: 700, color: '#92400e', marginBottom: '4px' }}>⚠ Updated Return — Additional Tax u/s 140B</p>
-              <p style={{ fontSize: '12px', color: '#b45309', marginBottom: '10px' }}>
-                Pay additional tax on <strong>incremental tax + interest</strong> via Sec 140B challan before filing:
-              </p>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '10px' }}>
-                {[
+            <div style={{ marginTop: '12px', borderRadius: '8px', border: '1px solid #f59e0b', background: '#fffbeb', padding: '14px' }}>
+              <p style={{ fontSize: '12px', fontWeight: 700, color: '#92400e', marginBottom: '8px' }}>Additional Tax u/s 140B — Updated Return</p>
+
+              {/* Period indicator */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', marginBottom: '12px' }}>
+                {([
                   { period: 1, pct: '25%', label: 'Within 12 months of AY end', deadline: updPeriods.p1End },
-                  { period: 2, pct: '50%', label: '12–24 months of AY end', deadline: updPeriods.p2End },
-                ].map(({ period, pct, label, deadline }) => {
+                  { period: 2, pct: '50%', label: '12–24 months of AY end',     deadline: updPeriods.p2End },
+                ] as const).map(({ period, pct, label, deadline }) => {
                   const active = updPeriods.currentPeriod === period;
                   return (
-                    <div key={period} style={{ borderRadius: '6px', border: `1px solid ${active ? '#f59e0b' : '#fde68a'}`, background: active ? '#fef3c7' : '#fff', padding: '10px', textAlign: 'center' }}>
-                      <div style={{ fontSize: '11px', fontWeight: 600, color: '#92400e', marginBottom: '4px' }}>
-                        Period {period}
-                        {active && <span style={{ marginLeft: '6px', background: '#f59e0b', color: '#fff', borderRadius: '4px', padding: '1px 5px', fontSize: '9px', fontWeight: 700 }}>NOW</span>}
-                      </div>
-                      <div style={{ fontSize: '22px', fontWeight: 700, color: '#92400e', lineHeight: 1 }}>{pct}</div>
-                      <div style={{ fontSize: '10px', color: '#b45309', marginTop: '4px' }}>{label}</div>
-                      <div style={{ fontSize: '10px', color: '#78350f', fontWeight: 600, marginTop: '2px' }}>by {deadline}</div>
+                    <div key={period} style={{ borderRadius: '6px', border: `1px solid ${active ? '#f59e0b' : '#fde68a'}`, background: active ? '#fef3c7' : '#fff', padding: '8px', textAlign: 'center' }}>
+                      <div style={{ fontSize: '10px', fontWeight: 600, color: '#92400e' }}>Period {period}{active && <span style={{ marginLeft: '5px', background: '#f59e0b', color: '#fff', borderRadius: '3px', padding: '0 4px', fontSize: '9px' }}>NOW</span>}</div>
+                      <div style={{ fontSize: '20px', fontWeight: 700, color: '#92400e' }}>{pct}</div>
+                      <div style={{ fontSize: '10px', color: '#b45309' }}>{label}</div>
+                      <div style={{ fontSize: '10px', color: '#78350f', fontWeight: 600 }}>by {deadline}</div>
                     </div>
                   );
                 })}
               </div>
               {updPeriods.currentPeriod === null && (
-                <p style={{ fontSize: '11px', fontWeight: 700, color: '#dc2626', marginBottom: '6px' }}>⛔ Updated return window has expired for this AY.</p>
+                <p style={{ fontSize: '11px', fontWeight: 700, color: '#dc2626', marginBottom: '8px' }}>⛔ Updated return window has expired for this AY.</p>
               )}
-              <p style={{ fontSize: '10px', color: '#b45309' }}>
-                Enter the 140B challan under <strong>Tax Payments</strong> before generating the JSON.
-              </p>
+
+              {/* Total tax paid u/s 140B */}
+              <div style={{ marginBottom: '10px' }}>
+                <label className={lbl} style={{ color: '#92400e' }}><Req />Total Tax Paid u/s 140B (₹)</label>
+                <input
+                  type="number" min={0} className={inp}
+                  value={form.updated.taxUS140B || ''}
+                  onChange={e => updateUpd({ taxUS140B: Number(e.target.value) || 0 })}
+                  placeholder="e.g. 1570"
+                />
+              </div>
+
+              {/* Challan table */}
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                  <label className={lbl} style={{ color: '#92400e', margin: 0 }}>140B Challan Details</label>
+                  <button type="button" onClick={() => updateUpd({ taxUS140BPayments: [...(form.updated.taxUS140BPayments ?? []), { bsrCode: '', challanDate: '', challanSerial: 0, amount: 0 }] })}
+                    style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '4px', border: '1px solid #f59e0b', background: '#fef3c7', color: '#92400e', cursor: 'pointer', fontWeight: 600 }}>
+                    + Add Challan
+                  </button>
+                </div>
+                {(form.updated.taxUS140BPayments ?? []).length === 0 && (
+                  <p style={{ fontSize: '11px', color: '#b45309', fontStyle: 'italic' }}>No challan added yet. Click "+ Add Challan".</p>
+                )}
+                {(form.updated.taxUS140BPayments ?? []).map((ch, i) => (
+                  <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr auto', gap: '6px', marginBottom: '6px', alignItems: 'end' }}>
+                    <div>
+                      <label className={lbl}>BSR Code</label>
+                      <input className={`${inp} font-mono`} maxLength={7} placeholder="7 digits" value={ch.bsrCode}
+                        onChange={e => { const p = [...(form.updated.taxUS140BPayments ?? [])]; p[i] = { ...p[i], bsrCode: e.target.value.replace(/\D/g,'').slice(0,7) }; updateUpd({ taxUS140BPayments: p }); }} />
+                    </div>
+                    <div>
+                      <label className={lbl}>Date of Deposit</label>
+                      <input type="date" className={inp} value={ch.challanDate}
+                        onChange={e => { const p = [...(form.updated.taxUS140BPayments ?? [])]; p[i] = { ...p[i], challanDate: e.target.value }; updateUpd({ taxUS140BPayments: p }); }} />
+                    </div>
+                    <div>
+                      <label className={lbl}>Serial No.</label>
+                      <input type="number" min={1} className={inp} placeholder="e.g. 1" value={ch.challanSerial || ''}
+                        onChange={e => { const p = [...(form.updated.taxUS140BPayments ?? [])]; p[i] = { ...p[i], challanSerial: Number(e.target.value) || 0 }; updateUpd({ taxUS140BPayments: p }); }} />
+                    </div>
+                    <div>
+                      <label className={lbl}>Amount (₹)</label>
+                      <input type="number" min={0} className={inp} placeholder="e.g. 1570" value={ch.amount || ''}
+                        onChange={e => { const p = [...(form.updated.taxUS140BPayments ?? [])]; p[i] = { ...p[i], amount: Number(e.target.value) || 0 }; updateUpd({ taxUS140BPayments: p }); }} />
+                    </div>
+                    <button type="button" onClick={() => { const p = (form.updated.taxUS140BPayments ?? []).filter((_,j) => j !== i); updateUpd({ taxUS140BPayments: p }); }}
+                      style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid #fca5a5', background: '#fef2f2', color: '#dc2626', cursor: 'pointer', fontSize: '12px', marginBottom: '1px' }}>
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
