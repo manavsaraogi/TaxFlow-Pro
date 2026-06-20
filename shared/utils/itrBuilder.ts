@@ -3288,6 +3288,7 @@ function buildITR5(input: BuildITRInput): object {
                   BankName:      primaryBank.bankName ?? '',
                   BankAccountNo: primaryBank.accountNumber ?? '',
                   AccountType:   (primaryBank.accountType as string) ?? 'SB',
+                  UseForRefund:  'true',
                 }],
               } : {}),
             },

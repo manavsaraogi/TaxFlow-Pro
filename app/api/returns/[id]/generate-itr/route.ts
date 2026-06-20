@@ -407,7 +407,14 @@ export async function GET(_req: NextRequest, { params }: Params) {
     incomeSummary: null,
     taxComputation: null,
     verification,
-  };
+    bankAccounts: ret.client.bankAccounts.map((b: any) => ({
+      ifscCode: b.ifscCode,
+      bankName: b.bankName,
+      accountNumber: b.accountNumber,
+      accountType: b.accountType ?? 'SB',
+      isPrimary: b.isPrimary,
+    })),
+  } as any;
 
   // ── Build ITR JSON ──
   const itrJson = buildITRJson({ returnData, client: builderClient, firm: builderFirm, sw }) as any;
