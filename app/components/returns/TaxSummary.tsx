@@ -300,8 +300,11 @@ function computeTax(inp: TaxInputs): TaxComputation {
     ? Math.max(0, inp.businessIncome + hpIncome + inp.otherSourcesIncome + inp.lotteryIncome)
     : Math.max(0, inp.grossSalary - inp.standardDeduction + hpIncome + inp.otherSourcesIncome + inp.lotteryIncome);
 
+  const r10 = (n: number) => Math.round(n / 10) * 10;
+
   const totalDeductions = inp.regime?.toLowerCase() === 'old' && !isITR5 ? inp.chapterVIADeductions : 0;
-  const taxableIncome = Math.max(0, grossTotalIncome - totalDeductions);
+  // Section 288A: total income rounded to nearest Rs 10
+  const taxableIncome = r10(Math.max(0, grossTotalIncome - totalDeductions));
   const lotteryIncome = inp.lotteryIncome;
   const normalTaxableIncome = Math.max(0, taxableIncome - lotteryIncome);
 
@@ -399,7 +402,8 @@ function computeTax(inp: TaxInputs): TaxComputation {
 
   const totalTaxDue = netTax + additionalTax140B + totalInterest;
   const totalPrePaid = inp.tdsTCS + inp.advanceTax + inp.selfAssessmentTax;
-  const balancePayable = totalTaxDue - totalPrePaid; // negative = refund
+  // Section 288B: balance payable / refund rounded to nearest Rs 10
+  const balancePayable = r10(totalTaxDue - totalPrePaid);
 
   return {
     grossTotalIncome, totalDeductions, taxableIncome, lotteryIncome,
