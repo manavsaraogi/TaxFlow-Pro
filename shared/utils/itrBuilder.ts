@@ -3314,7 +3314,8 @@ function buildITR5(input: BuildITRInput): object {
         } : {}),
 
         // ── Verification ─────────────────────────────────────────────────
-        Verification: rd.verification ? buildVerification(rd.verification, date, client.pan) : undefined,
+        // Always include — omitting it causes the portal to spin silently with no error
+        Verification: buildVerification(rd.verification ?? {} as any, date, client.pan),
 
         // ── ManufacturingAccount ──────────────────────────────────────────
         ManufacturingAccount: {
