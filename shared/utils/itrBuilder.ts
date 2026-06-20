@@ -1969,7 +1969,7 @@ function buildITR5(input: BuildITRInput): object {
   const amtApplies   = grossTotalIncome > 0 && amtLiability > regularTaxLiab;
   const grossTaxLiab = amtApplies ? amtLiability : regularTaxLiab;
   const deemedIncome115JC  = amtApplies ? grossTotalIncome : 0;
-  const taxDeemed115JC     = amtApplies ? amtOnTI : 0;
+  const taxDeemed115JC     = amtOnTI; // always = TaxPayableUnderSec115JC; portal requires Sl.1a == ScheduleAMT Sl.4
 
   // Interest u/s 234A/234B/234C/234F — use manual override if provided, else auto-compute
   const manualInt234A = toI(gen.interest234A);
