@@ -241,6 +241,65 @@ export function validateReturn(
     addTab('verification', 'Verification', errors);
   }
 
+  // ── ITR-5 portal pre-flight checks ───────────────────────────────────────
+  const isITR5 = meta?.formType === 'ITR5';
+  if (isITR5) {
+    // itr5_general tab: filing section & 139(8A) checks
+    {
+      const errors: FieldError[] = [];
+      const warnings: FieldError[] = [];
+      const upd = returnData?.updatedReturn;
+      const filingSection = returnData?.filingSection ?? returnData?.itr5General?.filingSection;
+
+      if (filingSection === '139(8A)') {
+        // Portal error 6 & 7: TaxUS140B must be > 0
+        const taxUS140B = Number(upd?.taxUS140B ?? 0);
+        if (!(taxUS140B > 0)) {
+          errors.push({
+            field: 'upd.taxUS140B',
+            message: 'Section 140B tax payment is required for updated return u/s 139(8A) — enter the amount paid and challan details',
+          });
+        }
+        // Challan details must be present
+        if (taxUS140B > 0 && !(upd?.taxUS140BPayments?.length > 0)) {
+          errors.push({
+            field: 'upd.taxUS140BPayments',
+            message: 'Enter challan details (BSR code, date, serial, amount) for Section 140B payment',
+          });
+        }
+      }
+
+      // P&L balance check (portal error 8): PartnerAccBalTrf = AmtAvlAppr − TrfToReserves
+      const pl = returnData?.plSchedule ?? returnData?.partAPL;
+      if (pl) {
+        const netProfit = Number(pl.NetProfitBeforeTaxes ?? 0);
+        const pl49 = Number(pl.PL49 ?? 0);
+        const amtAvlAppr = Math.max(0, netProfit - pl49);
+        const trfToReserves = Number(pl.TrfToReserves ?? 0);
+        const partnerBal = Number(pl.PL50 ?? 0);
+        const expected = amtAvlAppr - trfToReserves;
+        if (amtAvlAppr > 0 && partnerBal !== expected) {
+          warnings.push({
+            field: 'pl.PL50',
+            message: `Balance carried to P&L account (Sl.61) should be ₹${expected.toLocaleString('en-IN')} (= AmtAvlAppr − TrfToReserves) — will be auto-corrected in JSON`,
+          });
+        }
+
+        // P&L other income details (portal error 9)
+        const miscOthIncome = Number(pl.PL14xi ?? 0) + Number(pl.PL14xia ?? 0);
+        const hasDetails = Array.isArray(pl.OtherIncomeDetails) && pl.OtherIncomeDetails.length > 0;
+        if (miscOthIncome > 0 && !hasDetails) {
+          warnings.push({
+            field: 'pl.OtherIncomeDetails',
+            message: `Sl.14x(ic) has ₹${miscOthIncome.toLocaleString('en-IN')} but no breakdown — "MISCELLANEOUS INCOME" will be auto-added in JSON`,
+          });
+        }
+      }
+
+      addTab('itr5_general', 'ITR-5 General / 139(8A)', errors, warnings);
+    }
+  }
+
   const errorCount = tabs.reduce((s, t) => s + t.errors.length, 0);
   const warningCount = tabs.reduce((s, t) => s + t.warnings.length, 0);
 

@@ -2571,10 +2571,16 @@ function buildITR5(input: BuildITRInput): object {
               MiscOthIncome:              toI(pl.PL14xi) + toI(pl.PL14xia),
               TotOthIncome:               totOthIncome,
               LiabilityWrittenBack:       0,
-              OtherIncDtls:              (pl.OtherIncomeDetails ?? []).map((d: any) => ({
-                NatureOfIncome: d.nature ?? '',
-                Amount:         toI(d.amount),
-              })),
+              OtherIncDtls: (() => {
+                const miscAmt = toI(pl.PL14xi) + toI(pl.PL14xia);
+                const mapped = (pl.OtherIncomeDetails ?? [])
+                  .map((d: any) => ({ NatureOfIncome: d.nature ?? '', Amount: toI(d.amount) }))
+                  .filter((d: any) => d.Amount > 0);
+                // Portal requires breakdown when MiscOthIncome > 0 (error 9)
+                return mapped.length > 0 ? mapped
+                  : miscAmt > 0 ? [{ NatureOfIncome: 'MISCELLANEOUS INCOME', Amount: miscAmt }]
+                  : [];
+              })(),
             },
             TotCreditsToPL: totCreditsToPL,
           },
@@ -2622,8 +2628,9 @@ function buildITR5(input: BuildITRInput): object {
               ProfitAfterTax:  Math.max(0, toI(pl.NetProfitBeforeTaxes) - toI(pl.PL49)),
               BalBFPrevYr:     0,
               AmtAvlAppr:      Math.max(0, toI(pl.NetProfitBeforeTaxes) - toI(pl.PL49)),
-              Appropriations:  {TrfToReserves: 0},
-              PartnerAccBalTrf: toI(pl.PL50),
+              Appropriations:  {TrfToReserves: toI(pl.TrfToReserves)},
+              // Portal error 8: must equal AmtAvlAppr − TrfToReserves (auto-derived)
+              PartnerAccBalTrf: Math.max(0, toI(pl.NetProfitBeforeTaxes) - toI(pl.PL49)) - toI(pl.TrfToReserves),
             },
           },
           PersumptiveInc44AD: {
@@ -3472,11 +3479,12 @@ function buildITR5(input: BuildITRInput): object {
 
         // ── ScheduleAMT ──────────────────────────────────────────────────
         ScheduleAMT: {
-          TotalIncItem13:             grossTotalIncome,
+          // Must equal PartB-TI.TotalIncome (portal errors 1-5 if mismatched)
+          TotalIncItem13:             totalIncome,
           AdjustmentSec115JC:        [{ DeductClaimSec6A:0,DeductClaimSec10AA:0,DeductClaimSec35AD:0,Total:0 }],
-          AdjustedUnderSec115JC:     grossTotalIncome,
+          AdjustedUnderSec115JC:     totalIncome,
           AdjustedUnderSec115JCIFSC: 0,
-          AdjustedUnderSec115JCOther: grossTotalIncome,
+          AdjustedUnderSec115JCOther: totalIncome,
           TaxPayableUnderSec115JC:   0,
         },
 
