@@ -2020,8 +2020,10 @@ function buildITR5(input: BuildITRInput): object {
   const tcs      = toI(rd.tds?.TotalTCS);
   const satTax   = toI(rd.taxPayments?.TotalSelfAssessmentTax);
   const totalTaxPaid = advTax + tdsOther + tcs + satTax;
-  const netTaxLiab   = Math.max(0, grossTaxLiab + totalInterest - totalTaxPaid);
-  const refund       = Math.max(0, totalTaxPaid - grossTaxLiab - totalInterest);
+  // Section 288B: tax payable / refund rounded to nearest Rs 10
+  const r10 = (n: number) => Math.round(n / 10) * 10;
+  const netTaxLiab   = r10(Math.max(0, grossTaxLiab + totalInterest - totalTaxPaid));
+  const refund       = r10(Math.max(0, totalTaxPaid - grossTaxLiab - totalInterest));
 
   // 139(8A) PartB-ATI: aggregate liability = balance payable (after TDS + interest)
   // netTaxLiab already = grossTaxLiab + totalInterest - totalTaxPaid
@@ -2039,10 +2041,10 @@ function buildITR5(input: BuildITRInput): object {
     const now = new Date(date);
     const atiRate = now <= p1End ? 0.25 : now <= p2End ? 0.50 : now <= p3End ? 0.60 : now <= p4End ? 0.70 : 0;
     const aggrLiability = balPayableForATI; // simple case: no prior return credits
-    atiAddtnlTax = atiRate > 0 ? Math.round(Math.max(0, aggrLiability - int234F) * atiRate) : 0;
-    atiNetPayable = aggrLiability + atiAddtnlTax;
+    atiAddtnlTax = atiRate > 0 ? r10(Math.max(0, aggrLiability - int234F) * atiRate) : 0;
+    atiNetPayable = r10(aggrLiability + atiAddtnlTax);
     const taxUS140BPaid = toI(upd.taxUS140B);
-    atiTaxDue = Math.max(0, atiNetPayable - taxUS140BPaid);
+    atiTaxDue = r10(Math.max(0, atiNetPayable - taxUS140BPaid));
   }
 
   // Bank for refund — pulled from returnData bankAccounts
@@ -2053,7 +2055,8 @@ function buildITR5(input: BuildITRInput): object {
     ? applyDeductionCaps(rd.deductions, grossTotalIncome)
     : applyDeductionCaps({ TotalChapVIADeductions: 0 } as DeductionsChapterVIA, 0);
   const viaDeductions = cappedVIA.TotalChapVIADeductions;
-  const totalIncome   = Math.max(0, grossTotalIncome - viaDeductions);
+  // Section 288A: total income rounded to nearest Rs 10
+  const totalIncome   = r10(Math.max(0, grossTotalIncome - viaDeductions));
 
   const cylaInc = (n: number) => ({
     IncCYLA: { IncOfCurYrUnderThatHead: n, IncOfCurYrAfterSetOff: n },
