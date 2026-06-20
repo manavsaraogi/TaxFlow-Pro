@@ -252,19 +252,13 @@ export function validateReturn(
       const filingSection = returnData?.filingSection ?? returnData?.itr5General?.filingSection;
 
       if (filingSection === '139(8A)') {
-        // Portal error 6 & 7: TaxUS140B must be > 0
-        const taxUS140B = Number(upd?.taxUS140B ?? 0);
-        if (!(taxUS140B > 0)) {
-          errors.push({
-            field: 'upd.taxUS140B',
-            message: 'Section 140B tax payment is required for updated return u/s 139(8A) — enter the amount paid and challan details',
-          });
-        }
-        // Challan details must be present
-        if (taxUS140B > 0 && !(upd?.taxUS140BPayments?.length > 0)) {
+        // Portal error 6 & 7: at least one challan with amount > 0 required
+        const payments: any[] = upd?.taxUS140BPayments ?? [];
+        const taxUS140BPaid = payments.reduce((s: number, p: any) => s + Number(p.amount ?? 0), 0);
+        if (!(taxUS140BPaid > 0)) {
           errors.push({
             field: 'upd.taxUS140BPayments',
-            message: 'Enter challan details (BSR code, date, serial, amount) for Section 140B payment',
+            message: 'Section 140B challan details are required for updated return u/s 139(8A) — add BSR code, date, serial and amount',
           });
         }
       }

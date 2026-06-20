@@ -639,17 +639,6 @@ export default function ITR5General({ returnId, assessmentYear, initialData, onS
                 <p style={{ fontSize: '11px', fontWeight: 700, color: '#dc2626', marginBottom: '8px' }}>⛔ Updated return window has expired for this AY.</p>
               )}
 
-              {/* Total tax paid u/s 140B */}
-              <div style={{ marginBottom: '10px' }}>
-                <label className={lbl} style={{ color: '#92400e' }}><Req />Total Tax Paid u/s 140B (₹)</label>
-                <input
-                  type="number" min={0} className={inp}
-                  value={form.updated.taxUS140B || ''}
-                  onChange={e => updateUpd({ taxUS140B: Number(e.target.value) || 0 })}
-                  placeholder="e.g. 1570"
-                />
-              </div>
-
               {/* Challan table */}
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
@@ -690,6 +679,14 @@ export default function ITR5General({ returnId, assessmentYear, initialData, onS
                     </button>
                   </div>
                 ))}
+                {(form.updated.taxUS140BPayments ?? []).length > 0 && (() => {
+                  const total = (form.updated.taxUS140BPayments ?? []).reduce((s, ch) => s + (ch.amount || 0), 0);
+                  return (
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px', padding: '6px 8px', background: '#fef3c7', borderRadius: '4px', border: '1px solid #f59e0b' }}>
+                      <span style={{ fontSize: '12px', fontWeight: 700, color: '#92400e' }}>Total Tax Paid u/s 140B: ₹{total.toLocaleString('en-IN')}</span>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           )}

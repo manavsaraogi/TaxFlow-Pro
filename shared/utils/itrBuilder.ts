@@ -2046,7 +2046,7 @@ function buildITR5(input: BuildITRInput): object {
     const aggrLiability = balPayableForATI; // simple case: no prior return credits
     atiAddtnlTax = atiRate > 0 ? r10(Math.max(0, aggrLiability - int234F) * atiRate) : 0;
     atiNetPayable = r10(aggrLiability + atiAddtnlTax);
-    const taxUS140BPaid = toI(upd.taxUS140B);
+    const taxUS140BPaid = (upd.taxUS140BPayments ?? []).reduce((s: number, p: any) => s + toI(p.amount), 0);
     atiTaxDue = r10(Math.max(0, atiNetPayable - taxUS140BPaid));
   }
 
@@ -2251,7 +2251,7 @@ function buildITR5(input: BuildITRInput): object {
             AggrLiabilityNoRefund:  balPayableForATI,
             AddtnlIncTax:           atiAddtnlTax,
             NetPayable:             atiNetPayable,
-            TaxUS140B:              toI(upd.taxUS140B),
+            TaxUS140B:              taxUS140BPaid,
             TaxDue10_11:            atiTaxDue,
             ...(upd.taxUS140BPayments?.length ? {
               ScheduleIT1: {
@@ -2264,7 +2264,7 @@ function buildITR5(input: BuildITRInput): object {
                     Amt:           toI(p.amount),
                   })),
                 },
-                Total: toI(upd.taxUS140B),
+                Total: taxUS140BPaid,
               },
             } : {}),
           },
