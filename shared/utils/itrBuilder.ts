@@ -100,6 +100,18 @@ function toInt(n: number | undefined | null): number {
   return Math.round(n ?? 0);
 }
 
+/** Map DB bank account type strings to ITR JSON enum codes */
+function mapAccountType(type: string | undefined | null): string {
+  const map: Record<string, string> = {
+    // Full names (as stored in DB)
+    SAVINGS: 'SB', CURRENT: 'CA', 'CASH CREDIT': 'CC',
+    OVERDRAFT: 'OD', NRO: 'NRO', CGAS: 'CGAS', OTHER: 'OTH',
+    // Already-coded values (pass through)
+    SB: 'SB', CA: 'CA', CC: 'CC', OD: 'OD', OTH: 'OTH',
+  };
+  return map[(type ?? '').toUpperCase()] ?? 'SB';
+}
+
 function today(): string {
   return new Date().toISOString().split('T')[0];
 }
@@ -3297,7 +3309,7 @@ function buildITR5(input: BuildITRInput): object {
                   IFSCCode:      primaryBank.ifscCode ?? '',
                   BankName:      primaryBank.bankName ?? '',
                   BankAccountNo: primaryBank.accountNumber ?? '',
-                  AccountType:   ({ SAVINGS: 'SB', CURRENT: 'CA', 'CASH CREDIT': 'CC', OVERDRAFT: 'OD', NRO: 'NRO', CGAS: 'CGAS' } as Record<string,string>)[(primaryBank.accountType as string)?.toUpperCase()] ?? 'SB',
+                  AccountType:   mapAccountType(primaryBank.accountType),
                   UseForRefund:  'true',
                 }],
               } : {}),
