@@ -3457,7 +3457,7 @@ function buildITR5(input: BuildITRInput): object {
         Schedule80_IC: {
           Sch80SectionCode: '80-IC_IE',
           DeductInNorthEast: {
-            Sikkim_Und:            { Sch80LocOrDescCode:'INDSTRL_SIKKIM',         Sch80DeductAmtDtls:[{ DeductAmountSec80:0 }] },
+            Sikkim_Und:            { Sch80LocOrDescCode:'INDSRTL_SIKKIM',         Sch80DeductAmtDtls:[{ DeductAmountSec80:0 }] },
             Assam_Und:             { Sch80LocOrDescCode:'INDSRTL_ASSAM',         Sch80DeductAmtDtls:[{ DeductAmountSec80:0 }] },
             ArunachalPradesh_Und:  { Sch80LocOrDescCode:'INDSRTL_ARUNPRADESH',   Sch80DeductAmtDtls:[{ DeductAmountSec80:0 }] },
             Manipur_Und:           { Sch80LocOrDescCode:'INDSRTL_MANIPUR',       Sch80DeductAmtDtls:[{ DeductAmountSec80:0 }] },
