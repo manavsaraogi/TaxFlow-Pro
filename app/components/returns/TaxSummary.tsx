@@ -650,8 +650,8 @@ export default function TaxSummary({ returnId, returnData }: Props) {
             )}
             <Row label="Gross Tax" value={c.grossTax} bold />
             {c.surcharge > 0 && (
-              <Row label={`Surcharge @ ${Math.round(surchargeRate(c.taxableIncome, inputs.regime) * 100)}%`} value={c.surcharge}
-                sub={c.taxableIncome > 5_000_000 ? 'Subject to marginal relief' : undefined} />
+              <Row label={`Surcharge @ ${inputs.usesMMR ? (inputs.regime?.toLowerCase() === 'new' ? 25 : 37) : Math.round(surchargeRate(c.taxableIncome, inputs.regime) * 100)}%`} value={c.surcharge}
+                sub={!inputs.usesMMR && c.taxableIncome > 5_000_000 ? 'Subject to marginal relief' : inputs.usesMMR ? 'Maximum Marginal Rate' : undefined} />
             )}
             <Row label="Tax after Surcharge" value={c.taxAfterSurcharge} />
             {c.rebate87A > 0 && (
