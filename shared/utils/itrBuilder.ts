@@ -2201,7 +2201,6 @@ function buildITR5(input: BuildITRInput): object {
             ifMSME:                    gen.isMSME ? 'Y' : 'N',
             RegNumMSMEDAct2006:        gen.msmeRegNo ?? '',
             NriSEPinIndia:             'NA',
-            OptOutNewTaxRegime:        'N',
             ItrFilingDueDate:          effectiveCfg.dueDateAudit,
           },
         },
@@ -2934,7 +2933,6 @@ function buildITR5(input: BuildITRInput): object {
                   FullConsideration: 0, PropertyValuation: 0, FullConsideration50C: 0,
                   Reduction48iii: 0, AquisitCost: 0, ImproveCost: 0, ExpOnTrans: 0, TotalDedn: 0, Balance: 0,
                   ExemptionOrDednUs54: { ExemptionOrDednUs54Dtls: [
-                    { ExemptionSecCode: '54D', ExemptionAmount: 0 },
                     { ExemptionSecCode: '54G', ExemptionAmount: 0 },
                     { ExemptionSecCode: '54GA', ExemptionAmount: 0 },
                   ], ExemptionGrandTotal: 0 },
@@ -2942,8 +2940,8 @@ function buildITR5(input: BuildITRInput): object {
                 }],
               },
               EquityMFonSTT: [
-                { MFSectionCode: '1A', EquityMFonSTTDtls: { FullConsideration: 0, DeductSec48: { Reduction48iii: 0, AquisitCost: 0, ImproveCost: 0, ExpOnTrans: 0, TotalDedn: 0 }, BalanceCG: 0, LossSec94of7Or94of8: 0, CapgainonAssets: stcg111A } },
-                { MFSectionCode: '5AD1biip', EquityMFonSTTDtls: { FullConsideration: 0, DeductSec48: { Reduction48iii: 0, AquisitCost: 0, ImproveCost: 0, ExpOnTrans: 0, TotalDedn: 0 }, BalanceCG: 0, LossSec94of7Or94of8: 0, CapgainonAssets: 0 } },
+                { MFSectionCode: '1A',        EquityMFonSTTDtls: { FullConsideration: 0, DeductSec48: { Reduction48iii: 0, AquisitCost: 0, ImproveCost: 0, ExpOnTrans: 0, TotalDedn: 0 }, BalanceCG: 0, LossSec94of7Or94of8: 0, CapgainonAssets: stcg111A }, EquityMFonSTTDtls_BE: { FullConsideration: 0, DeductSec48: { Reduction48iii: 0, AquisitCost: 0, ImproveCost: 0, ExpOnTrans: 0, TotalDedn: 0 }, BalanceCG: 0, LossSec94of7Or94of8: 0, CapgainonAssets: 0 }, TotalCapGainonassets: stcg111A },
+                { MFSectionCode: '5AD1biip',  EquityMFonSTTDtls: { FullConsideration: 0, DeductSec48: { Reduction48iii: 0, AquisitCost: 0, ImproveCost: 0, ExpOnTrans: 0, TotalDedn: 0 }, BalanceCG: 0, LossSec94of7Or94of8: 0, CapgainonAssets: 0 }, EquityMFonSTTDtls_BE: { FullConsideration: 0, DeductSec48: { Reduction48iii: 0, AquisitCost: 0, ImproveCost: 0, ExpOnTrans: 0, TotalDedn: 0 }, BalanceCG: 0, LossSec94of7Or94of8: 0, CapgainonAssets: 0 }, TotalCapGainonassets: 0 },
               ],
               AmtDeemedStcg:            0,
               AmtDeemedStcg45iv:        0,
@@ -2993,10 +2991,9 @@ function buildITR5(input: BuildITRInput): object {
               SaleofLandBuildDtls: [{
                 FullConsideration: 0, PropertyValuation: 0, FullConsideration50C: 0,
                 Reduction48iii: 0, AquisitCost: 0, AquisitCostIndex: 0,
-                CostOfImprovements: { CostOfImprovementsDtls: [] },
-                ImproveCost: 0, ExpOnTrans: 0, TotalDedn: 0, Balance: 0,
+                CostOfImprovements: { CostOfImprovementsDtls: [], TotalImprovecost: 0, TotalindexImprovecost: 0 },
+                ExpOnTrans: 0, TotalDedn: 0, Balance: 0,
                 ExemptionOrDednUs54: { ExemptionOrDednUs54Dtls: [
-                  { ExemptionSecCode: '54D', ExemptionAmount: 0 },
                   { ExemptionSecCode: '54EC', ExemptionAmount: 0 },
                   { ExemptionSecCode: '54G', ExemptionAmount: 0 },
                   { ExemptionSecCode: '54GA', ExemptionAmount: 0 },
@@ -3008,13 +3005,12 @@ function buildITR5(input: BuildITRInput): object {
               Proviso112SectionCode: '22',
               Proviso112Applicabledtls: { FullConsideration: 0, DeductSec48: { Reduction48iii: 0, AquisitCost: 0, ImproveCost: 0, ExpOnTrans: 0, TotalDedn: 0 }, BalanceCG: 0 },
             },
-            NRIProvisoSec48:    { BalanceCG: 0 },
+            NRIProvisoSec48: { BalanceCG: 0, LTCGWithoutBenefitTransferBEListDb: [], LTCGWithoutBenefitTransferBE: 0, LTCGWithoutBenefitTransferAE: 0 },
             NRIOnSec112and115: {
               NRIOnSec112and115Dtls: [
-                { SectionCode: '21ciii', FullValueConsdRecvUnqshr:0,FairMrktValueUnqshr:0,FullValueConsdSec50CA:0,FullValueConsdOthUnqshr:0,FullConsideration:0,DeductSec48:{Reduction48iii:0,AquisitCost:0,ImproveCost:0,ExpOnTrans:0,TotalDedn:0},BalanceCG:0 },
-                { SectionCode: '5AB1b',  FullValueConsdRecvUnqshr:0,FairMrktValueUnqshr:0,FullValueConsdSec50CA:0,FullValueConsdOthUnqshr:0,FullConsideration:0,DeductSec48:{Reduction48iii:0,AquisitCost:0,ImproveCost:0,ExpOnTrans:0,TotalDedn:0},BalanceCG:0 },
-                { SectionCode: '5AC1c',  FullValueConsdRecvUnqshr:0,FairMrktValueUnqshr:0,FullValueConsdSec50CA:0,FullValueConsdOthUnqshr:0,FullConsideration:0,DeductSec48:{Reduction48iii:0,AquisitCost:0,ImproveCost:0,ExpOnTrans:0,TotalDedn:0},BalanceCG:0 },
-                { SectionCode: '5ADiii', FullValueConsdRecvUnqshr:0,FairMrktValueUnqshr:0,FullValueConsdSec50CA:0,FullValueConsdOthUnqshr:0,FullConsideration:0,DeductSec48:{Reduction48iii:0,AquisitCost:0,ImproveCost:0,ExpOnTrans:0,TotalDedn:0},BalanceCG:0 },
+                { SectionCode: '21ciii' },
+                { SectionCode: '5AB1b'  },
+                { SectionCode: '5AC1c'  },
               ],
             },
             AmtDeemedLtcg:            0,
@@ -3459,10 +3455,8 @@ function buildITR5(input: BuildITRInput): object {
         // ── Schedule80_IC ────────────────────────────────────────────────
         Schedule80_IC: {
           Sch80SectionCode: '80-IC_IE',
-          DeductInSikkim_Und:     { Sch80LocOrDescCode:'INDSTRL_SIKKIM',         Sch80DeductAmtDtls:[{ DeductAmountSec80:0 }] },
-          DeductInHimachalP_Und:  { Sch80LocOrDescCode:'INDSRTL_HP',             Sch80DeductAmtDtls:[{ DeductAmountSec80:0 }] },
-          DeductInUttaranchal_Und: { Sch80LocOrDescCode:'INDSRTL_UTTARANCHAL',   Sch80DeductAmtDtls:[{ DeductAmountSec80:0 }] },
           DeductInNorthEast: {
+            Sikkim_Und:            { Sch80LocOrDescCode:'INDSTRL_SIKKIM',         Sch80DeductAmtDtls:[{ DeductAmountSec80:0 }] },
             Assam_Und:             { Sch80LocOrDescCode:'INDSRTL_ASSAM',         Sch80DeductAmtDtls:[{ DeductAmountSec80:0 }] },
             ArunachalPradesh_Und:  { Sch80LocOrDescCode:'INDSRTL_ARUNPRADESH',   Sch80DeductAmtDtls:[{ DeductAmountSec80:0 }] },
             Manipur_Und:           { Sch80LocOrDescCode:'INDSRTL_MANIPUR',       Sch80DeductAmtDtls:[{ DeductAmountSec80:0 }] },
