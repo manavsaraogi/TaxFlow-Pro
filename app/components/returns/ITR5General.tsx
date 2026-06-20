@@ -480,13 +480,15 @@ export default function ITR5General({ returnId, assessmentYear, initialData, onS
   const [activeTab, setActiveTab] = useState<GenTab>('basic');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const formRef = useRef<ITR5GeneralState>({ ...EMPTY, ...initialData });
+  const autoPopulatedMembersRef = useRef(false);
 
   useEffect(() => {
     if (initialData) {
       setForm(prev => {
         const incoming = { ...EMPTY, ...initialData };
-        // Preserve auto-populated members if initialData saved none yet
-        if ((!initialData.members || (initialData.members as ITR5Member[]).length === 0) && prev.members.length > 0) {
+        const incomingHasReal = (initialData.members as ITR5Member[] | undefined)?.some(m => m.name || m.pan);
+        // Preserve auto-populated members if saved data has no real members
+        if (!incomingHasReal && autoPopulatedMembersRef.current && prev.members.some(m => m.name || m.pan)) {
           return { ...incoming, members: prev.members };
         }
         return incoming;
@@ -498,14 +500,18 @@ export default function ITR5General({ returnId, assessmentYear, initialData, onS
 
   // Auto-populate members from the most recent other return for this client
   useEffect(() => {
-    const hasMembers = Array.isArray(initialData?.members) && (initialData.members as ITR5Member[]).length > 0;
-    if (hasMembers) return;
+    // Only populate if no member has a real name/PAN filled in
+    const hasMeaningfulMembers = Array.isArray(initialData?.members) &&
+      (initialData.members as ITR5Member[]).some(m => m.name || m.pan);
+    if (hasMeaningfulMembers) return;
     fetch(`/api/returns/${returnId}/client-defaults`)
       .then(r => r.json())
       .then(({ data }) => {
         if (Array.isArray(data?.members) && data.members.length > 0) {
           setForm(prev => {
-            if (prev.members.length > 0) return prev; // user already has members, skip
+            const hasReal = prev.members.some(m => m.name || m.pan);
+            if (hasReal) return prev;
+            autoPopulatedMembersRef.current = true;
             return { ...prev, members: data.members as ITR5Member[] };
           });
         }
