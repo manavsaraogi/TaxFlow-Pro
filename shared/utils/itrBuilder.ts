@@ -1942,6 +1942,8 @@ function buildITR5(input: BuildITRInput): object {
 
   // Surcharge on normal income + special rate income
   // Rates: 10% (>50L), 15% (>1Cr), 25% (>2Cr), 37% (>5Cr) — but 15% cap on STCG/LTCG surcharge
+  // When MMR applies (trust/AOP taxed at maximum marginal rate), surcharge is always 37%
+  // regardless of the entity's actual income (MMR = highest individual rate incl. highest surcharge)
   function getSurchargeRate(inc: number): number {
     if (inc <= 5000000)   return 0;
     if (inc <= 10000000)  return 0.10;
@@ -1950,8 +1952,8 @@ function buildITR5(input: BuildITRInput): object {
     return 0.37;
   }
   // Surcharge on CG is capped at 15%
-  const cgSurchargeRate  = Math.min(getSurchargeRate(grossTotalIncome), 0.15);
-  const normalSurRate    = getSurchargeRate(grossTotalIncome);
+  const cgSurchargeRate  = usesMMR ? 0.15 : Math.min(getSurchargeRate(grossTotalIncome), 0.15);
+  const normalSurRate    = usesMMR ? 0.37 : getSurchargeRate(grossTotalIncome);
   const surchargeOnNormal = Math.round(taxOnNormal * normalSurRate);
   const surchargeOnCG    = Math.round((taxOnSTCG111A + taxOnLTCG112A) * cgSurchargeRate);
   const surcharge        = surchargeOnNormal + surchargeOnCG;
@@ -2000,8 +2002,10 @@ function buildITR5(input: BuildITRInput): object {
     // 234B only applies when net tax liability ≥ ₹10,000 (s.208)
     const int234B = grossTaxLiab >= 10_000 && advShortfall > assessedTax * 0.10
       ? Math.ceil(advShortfall * 0.01 * countM(apr1OfAY, filingStr)) : 0;
+    // 234A is not charged for 139(8A) updated returns — the 25%/50% additional
+    // tax under section 140B compensates for late/non-filing (matches CBDT utility behaviour)
     let int234A = 0;
-    if (isLate) {
+    if (isLate && !upd) {
       const base = Math.max(0, grossTaxLiab - (toI(rd.tds?.TotalTDSOnOtherIncome) + toI(rd.tds?.TotalTCS)) - advTaxHere);
       if (base > 0) {
         const afterDue = new Date(dueDate);
@@ -2046,8 +2050,10 @@ function buildITR5(input: BuildITRInput): object {
     const now = new Date(date);
     const atiRate = now <= p1End ? 0.25 : now <= p2End ? 0.50 : now <= p3End ? 0.60 : now <= p4End ? 0.70 : 0;
     const aggrLiability = balPayableForATI; // simple case: no prior return credits
-    atiAddtnlTax = atiRate > 0 ? r10(Math.max(0, aggrLiability - int234F) * atiRate) : 0;
-    atiNetPayable = r10(aggrLiability + atiAddtnlTax);
+    // Additional tax: standard round (not r10) — matches CBDT utility behaviour
+    // NetPayable = BalTaxPayable + AddtnlIncTax (also not r10'd)
+    atiAddtnlTax = atiRate > 0 ? Math.round(Math.max(0, aggrLiability - int234F) * atiRate) : 0;
+    atiNetPayable = aggrLiability + atiAddtnlTax;
     taxUS140BPaid = (upd.taxUS140BPayments ?? []).reduce((s: number, p: any) => s + toI(p.amount), 0);
     atiTaxDue = r10(Math.max(0, atiNetPayable - taxUS140BPaid));
   }
