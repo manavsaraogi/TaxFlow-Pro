@@ -94,10 +94,10 @@ export default function Verification({
             AadhaarOTPFlag:  (raw.aadhaarOTPFlag   as string) ?? (raw.AadhaarOTPFlag   as string) ?? 'N',
             BankAccountFlag: (raw.bankAccountFlag  as string) ?? (raw.BankAccountFlag  as string) ?? 'N',
             DematAccountFlag:(raw.dematAccountFlag as string) ?? (raw.DematAccountFlag as string) ?? 'N',
-            ...(raw.signatoryPAN  && { signatoryPAN:      raw.signatoryPAN  as string }),
-            ...(raw.trpName       && { TRPName:           raw.trpName       as string }),
-            ...(raw.trpIdentification && { TRPIdentification: raw.trpIdentification as string }),
-            ...(raw.trpAddress    && { TRPAddress:        raw.trpAddress    as string }),
+            ...(raw.signatoryPAN       ? { signatoryPAN:      raw.signatoryPAN       as string } : {}),
+            ...(raw.trpName            ? { TRPName:           raw.trpName            as string } : {}),
+            ...(raw.trpIdentification  ? { TRPIdentification: raw.trpIdentification  as string } : {}),
+            ...(raw.trpAddress         ? { TRPAddress:        raw.trpAddress         as string } : {}),
           } as VerificationType;
           setData(v);
           setShowTRP(!!(v.TRPName));
