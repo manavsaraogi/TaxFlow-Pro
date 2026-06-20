@@ -3220,7 +3220,7 @@ function buildITR5(input: BuildITRInput): object {
           NetAgricultureIncomeOrOtherIncomeForRate: 0,
           AggregateIncome:           totalIncome,
           LossesOfCurrentYearCarriedFwd: 0,
-          DeemedTotIncSec115JC:          totalIncome,
+          DeemedTotIncSec115JC:          deemedIncome115JC,
         },
 
         // ── PartB_TTI ─────────────────────────────────────────────────────
@@ -3479,15 +3479,21 @@ function buildITR5(input: BuildITRInput): object {
         },
 
         // ── ScheduleAMT ──────────────────────────────────────────────────
-        ScheduleAMT: {
-          // Must equal PartB-TI.TotalIncome (portal errors 1-5 if mismatched)
-          TotalIncItem13:             totalIncome,
-          AdjustmentSec115JC:        [{ DeductClaimSec6A:0,DeductClaimSec10AA:0,DeductClaimSec35AD:0,Total:0 }],
-          AdjustedUnderSec115JC:     totalIncome,
-          AdjustedUnderSec115JCIFSC: 0,
-          AdjustedUnderSec115JCOther: totalIncome,
-          TaxPayableUnderSec115JC:   0,
-        },
+        // Sl.1 = total income; Sl.2 = VIA add-backs; Sl.3 = Sl.1 + Sl.2
+        // Sl.3b = Sl.3 − Sl.3a; must mirror PartB-TI.DeemedTotIncSec115JC
+        ScheduleAMT: (() => {
+          const amtAddback = viaDeductions; // Chapter VI-A deductions added back for AMT
+          const amtAdjIncome = totalIncome + amtAddback; // = grossTotalIncome
+          const amtTaxAmt = amtApplies ? r10(amtAdjIncome * 0.185) : 0;
+          return {
+            TotalIncItem13:             totalIncome,
+            AdjustmentSec115JC:        [{ DeductClaimSec6A: amtAddback, DeductClaimSec10AA: 0, DeductClaimSec35AD: 0, Total: amtAddback }],
+            AdjustedUnderSec115JC:     amtAdjIncome,
+            AdjustedUnderSec115JCIFSC: 0,
+            AdjustedUnderSec115JCOther: amtAdjIncome,
+            TaxPayableUnderSec115JC:   amtTaxAmt,
+          };
+        })(),
 
         // ── ScheduleVIA ───────────────────────────────────────────────────
         ScheduleVIA: (() => {
