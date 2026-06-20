@@ -103,13 +103,30 @@ function toInt(n: number | undefined | null): number {
 /** Map DB bank account type strings to ITR JSON enum codes */
 function mapAccountType(type: string | undefined | null): string {
   const map: Record<string, string> = {
-    // Full names (as stored in DB)
     SAVINGS: 'SB', CURRENT: 'CA', 'CASH CREDIT': 'CC',
     OVERDRAFT: 'OD', NRO: 'NRO', CGAS: 'CGAS', OTHER: 'OTH',
-    // Already-coded values (pass through)
     SB: 'SB', CA: 'CA', CC: 'CC', OD: 'OD', OTH: 'OTH',
   };
   return map[(type ?? '').toUpperCase()] ?? 'SB';
+}
+
+/** Build BankAccountDtls for ITR JSON — works for both AddtnlBankDetails and PriBankDetails layouts */
+function buildBankAccountDtls(bank: any, layout: 'AddtnlBankDetails' | 'PriBankDetails') {
+  const entry = {
+    IFSCCode:      bank?.ifscCode ?? '',
+    BankName:      bank?.bankName ?? '',
+    BankAccountNo: bank?.accountNumber ?? '',
+    AccountType:   mapAccountType(bank?.accountType),
+    UseForRefund:  'true',
+  };
+  if (layout === 'PriBankDetails') {
+    const { UseForRefund: _, ...rest } = entry;
+    return { BankDtlsFlag: bank ? 'Y' : 'N', PriBankDetails: rest };
+  }
+  return {
+    BankDtlsFlag: bank ? 'Y' : 'N',
+    AddtnlBankDetails: [entry],
+  };
 }
 
 function today(): string {
@@ -952,15 +969,7 @@ function buildITR1(input: BuildITRInput): object {
         },
         Refund: {
           RefundDue: taxComp.Refund ?? 0,
-          BankAccountDtls: {
-            AddtnlBankDetails: [{
-              IFSCCode:      '',
-              BankName:      '',
-              BankAccountNo: '',
-              AccountType:   'SB',
-              IsPrimaryAccount: 'Y',
-            }],
-          },
+          BankAccountDtls: buildBankAccountDtls((rd as any).bankAccounts?.[0], 'AddtnlBankDetails'),
         },
         TDSonSalaries: rd.tds ? buildTDSOnSalaries(rd.tds) : { TDSonSalary: [], TotalTDSonSalaries: 0 },
         TDSonOthThanSals: rd.tds ? buildTDSOnOtherIncome(rd.tds) : { TDSonOthThanSal: [], TotalTDSonOthThanSals: 0 },
@@ -1420,14 +1429,7 @@ function buildITR2(input: BuildITRInput): object {
           },
           Refund: {
             RefundDue: refund,
-            BankAccountDtls: {
-              PriBankDetails: {
-                IFSCCode:      '',
-                BankName:      '',
-                BankAccountNo: '',
-                AccountType:   'SB',
-              },
-            },
+            BankAccountDtls: buildBankAccountDtls((rd as any).bankAccounts?.[0], 'PriBankDetails'),
           },
           AssetOutIndiaFlag: 'N',
         },
@@ -1590,15 +1592,7 @@ function buildITR4(input: BuildITRInput): object {
         },
         Refund: {
           RefundDue: refund,
-          BankAccountDtls: {
-            AddtnlBankDetails: [{
-              IFSCCode:         '',
-              BankName:         '',
-              BankAccountNo:    '',
-              AccountType:      'SB',
-              IsPrimaryAccount: 'Y',
-            }],
-          },
+          BankAccountDtls: buildBankAccountDtls((rd as any).bankAccounts?.[0], 'AddtnlBankDetails'),
         },
         // ── ScheduleBP — presumptive income ──────────────────────────────
         ScheduleBP: rd.presumptiveIncome ? (() => {
@@ -3302,18 +3296,7 @@ function buildITR5(input: BuildITRInput): object {
           },
           Refund: {
             RefundDue: refund,
-            BankAccountDtls: {
-              BankDtlsFlag: primaryBank ? 'Y' : 'N',
-              ...(primaryBank ? {
-                AddtnlBankDetails: [{
-                  IFSCCode:      primaryBank.ifscCode ?? '',
-                  BankName:      primaryBank.bankName ?? '',
-                  BankAccountNo: primaryBank.accountNumber ?? '',
-                  AccountType:   mapAccountType(primaryBank.accountType),
-                  UseForRefund:  'true',
-                }],
-              } : {}),
-            },
+            BankAccountDtls: buildBankAccountDtls(primaryBank, 'AddtnlBankDetails'),
           },
           AssetOutsideIndiaFlg: 'NO',
         },
