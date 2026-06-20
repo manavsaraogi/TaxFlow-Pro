@@ -192,6 +192,8 @@ export function validateReturn(
       const e = taxPayments[i];
       if (!e.bsrCode?.trim())
         errors.push({ field: `taxPayments.${i}.bsrCode`, message: 'BSR code is required' });
+      else if (e.bsrCode.trim().length !== 7)
+        errors.push({ field: `taxPayments.${i}.bsrCode`, message: `BSR code must be exactly 7 digits (found ${e.bsrCode.trim().length})` });
       if (!e.challanSerialNo?.trim())
         errors.push({ field: `taxPayments.${i}.challanSerial`, message: 'Challan serial number is required' });
       if (!(e.taxAmount > 0))
@@ -248,7 +250,7 @@ export function validateReturn(
     {
       const errors: FieldError[] = [];
       const warnings: FieldError[] = [];
-      const upd = returnData?.updatedReturn;
+      const upd = returnData?.updatedReturn ?? returnData?.itr5General?.updated;
       const filingSection = returnData?.filingSection ?? returnData?.itr5General?.filingSection;
 
       if (filingSection === '139(8A)') {
@@ -261,6 +263,27 @@ export function validateReturn(
             message: 'Section 140B challan details are required for updated return u/s 139(8A) — add BSR code, date, serial and amount',
           });
         }
+
+        // BSR code 7-digit check on 140B challans
+        for (let i = 0; i < payments.length; i++) {
+          const p = payments[i];
+          if (p.bsrCode?.trim() && p.bsrCode.trim().length !== 7)
+            errors.push({ field: `upd.taxUS140BPayments.${i}.bsrCode`, message: `140B challan BSR code must be exactly 7 digits (found ${p.bsrCode.trim().length})` });
+        }
+
+        // PreviouslyFiledForThisAY consistency
+        const prevFiled = upd?.previouslyFiled; // true = Y, false = N
+        const reasons: string[] = upd?.reasons ?? [];
+        if (prevFiled === true && reasons.includes('1'))
+          errors.push({
+            field: 'updated.previouslyFiled',
+            message: '139(8A): "Previously Filed for this AY" is Yes but reason includes "Did not file earlier (Reason 1)" — set Previously Filed to No',
+          });
+        if (prevFiled === false && reasons.length > 0 && !reasons.includes('1'))
+          errors.push({
+            field: 'updated.previouslyFiled',
+            message: '139(8A): "Previously Filed for this AY" is No but reason is not "Did not file earlier (Reason 1)" — check the reason code',
+          });
       }
 
       // P&L balance check (portal error 8): PartnerAccBalTrf = AmtAvlAppr − TrfToReserves
