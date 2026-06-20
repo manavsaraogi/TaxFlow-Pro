@@ -246,6 +246,15 @@ export function validateReturn(
   // ── ITR-5 portal pre-flight checks ───────────────────────────────────────
   const isITR5 = meta?.formType === 'ITR5';
   if (isITR5) {
+    // Bank account mandatory for AY 2025-26+
+    {
+      const errors: FieldError[] = [];
+      const bankAccounts: any[] = returnData?.client?.bankAccounts ?? [];
+      if (bankAccounts.length === 0)
+        errors.push({ field: 'client.bankAccounts', message: 'Bank account details are mandatory — add a primary bank account in the Client profile before generating JSON' });
+      addTab('verification', 'Verification', errors);
+    }
+
     // itr5_general tab: filing section & 139(8A) checks
     {
       const errors: FieldError[] = [];
