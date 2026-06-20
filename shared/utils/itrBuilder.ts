@@ -2150,7 +2150,7 @@ function buildITR5(input: BuildITRInput): object {
     ITR: {
       ITR5: {
         CreationInfo: {
-          SWVersionNo:      'R13',
+          SWVersionNo:      effectiveAY === '2025-26' ? 'R10' : 'R13',
           SWCreatedBy:      itr5SwId,
           JSONCreatedBy:    itr5SwId,
           JSONCreationDate: date,
