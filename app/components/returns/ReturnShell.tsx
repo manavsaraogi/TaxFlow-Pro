@@ -222,7 +222,8 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate, fo
           clientPAN: data.client?.pan ?? '',
           formType: data.formType as ITRFormType,
           assessmentYear: data.assessmentYear?.ayLabel ?? '',
-          regime: (data.assessmentYear?.regime ?? 'NEW') as TaxRegime,
+          // ITR-5 entities (firms/AOPs/trusts) cannot opt for new regime — always OLD
+          regime: (data.formType === 'ITR-5' ? 'OLD' : (data.assessmentYear?.regime ?? 'NEW')) as TaxRegime,
           status: data.status,
           filingSection: data.filingType === 'REVISED' ? '17' : '11',
           filedAt: data.filedAt,
@@ -511,9 +512,11 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate, fo
             }}>
               {statusLabel(returnMeta.status)}
             </span>
-            <span style={{ fontSize: '11px', fontWeight: 500, padding: '3px 10px', borderRadius: '12px', background: 'rgba(255,255,255,0.1)', color: '#C5D0DC' }}>
-              {returnMeta.regime === 'NEW' ? 'New Regime' : 'Old Regime'}
-            </span>
+            {returnMeta.formType !== 'ITR-5' && (
+              <span style={{ fontSize: '11px', fontWeight: 500, padding: '3px 10px', borderRadius: '12px', background: 'rgba(255,255,255,0.1)', color: '#C5D0DC' }}>
+                {returnMeta.regime === 'NEW' ? 'New Regime' : 'Old Regime'}
+              </span>
+            )}
           </div>
 
           {/* Form switch alert */}
