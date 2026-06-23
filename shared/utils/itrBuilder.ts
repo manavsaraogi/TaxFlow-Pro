@@ -2399,7 +2399,7 @@ function buildITR5(input: BuildITRInput): object {
           } : {}),
           PvtDiscretioneryTrust: {
             PvtDiscTrustShareFlg: 'N',
-            PvtDiscTrustBusIncFlg: 'Y',
+            PvtDiscTrustBusIncFlg: bpIncome > 0 ? 'Y' : 'N',
             PvtDiscTrustWillFlg: 'N',
           },
           NatOfBus: {
