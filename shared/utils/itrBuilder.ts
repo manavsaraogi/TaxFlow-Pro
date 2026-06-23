@@ -134,8 +134,8 @@ function buildBankAccountDtls(bank: any, layout: 'AddtnlBankDetails' | 'PriBankD
       AddtnlBankDetails: [entry],
     };
   }
-  // ITR-1/4: no BankDtlsFlag at BankAccountDtls level per AY 2026-27 schema
   return {
+    BankDtlsFlag: bank ? 'Y' : 'N',
     AddtnlBankDetails: [entry],
   };
 }
@@ -917,7 +917,7 @@ function buildVerification(
     return {
       Declaration: {
         AssesseeVerName: name,
-        ...(father !== '-' ? { FatherName: father } : {}),
+        FatherName: father !== '-' ? father : '',
         AssesseeVerPAN: sigPAN,
         Capacity: capacity,
         ...(place ? { Place: place } : {}),
@@ -2383,7 +2383,7 @@ function buildITR5(input: BuildITRInput): object {
               TotIncFrmMemberOfAop:           'Y',
               PartnerOrMemberName:            (m.name ?? '').toUpperCase(),
               AddressDetailWithZipCode: {
-                AddrDetail:            ([m.flatNo, m.buildingName, m.streetName, m.localityOrArea].filter(Boolean).join(', ') || m.address || '').toUpperCase() || undefined,
+                AddrDetail:            ([m.flatNo, m.buildingName, m.streetName, m.localityOrArea].filter(Boolean).join(', ') || m.address || '-').toUpperCase(),
                 CityOrTownOrDistrict:  (m.cityOrTownOrDistrict || m.city || 'Delhi').toUpperCase(),
                 StateCode:             m.stateCode ?? '09',
                 CountryCode:           m.countryCode ?? '91',
