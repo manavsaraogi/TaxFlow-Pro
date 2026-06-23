@@ -37,3 +37,20 @@ export async function POST(request: NextRequest, { params }: Params) {
 
   return NextResponse.json({ data: { id: String(account.id) } }, { status: 201 });
 }
+
+// DELETE /api/clients/[id]/bank-accounts?accountId=123
+export async function DELETE(request: NextRequest, { params }: Params) {
+  const auth = await getAuthContext();
+  if (!auth) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const accountId = Number(new URL(request.url).searchParams.get('accountId'));
+  if (!accountId) return NextResponse.json({ error: 'accountId required' }, { status: 400 });
+
+  const account = await prisma.bankAccount.findFirst({
+    where: { id: accountId, client: { firmId: auth.firmId } },
+  });
+  if (!account) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
+  await prisma.bankAccount.delete({ where: { id: accountId } });
+  return NextResponse.json({ data: { success: true } });
+}

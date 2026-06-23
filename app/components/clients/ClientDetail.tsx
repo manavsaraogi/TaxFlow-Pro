@@ -557,6 +557,18 @@ function ReturnsTab({ client, onNewReturn, onOpenReturn, onDeleteReturn }: {
 // ── Bank Tab ──────────────────────────────────────────────────────────────────
 
 function BankTab({ client, onAddBank, onRefresh }: { client: ClientData; onAddBank: () => void; onRefresh: () => void }) {
+  const [deletingId, setDeletingId] = React.useState<number | null>(null);
+
+  async function handleDelete(accountId: number) {
+    if (!confirm('Delete this bank account?')) return;
+    setDeletingId(accountId);
+    try {
+      await fetch(`/api/clients/${client.id}/bank-accounts?accountId=${accountId}`, { method: 'DELETE' });
+      onRefresh();
+    } finally {
+      setDeletingId(null);
+    }
+  }
   const accounts = client.bankAccounts ?? [];
   return (
     <div>
@@ -581,7 +593,17 @@ function BankTab({ client, onAddBank, onRefresh }: { client: ClientData; onAddBa
                   <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>{acc.bankName}</div>
                   <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{acc.accountType}</div>
                 </div>
-                {acc.isPrimary && <span className="badge badge-warning">Primary</span>}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  {acc.isPrimary && <span className="badge badge-warning">Primary</span>}
+                  <button
+                    onClick={() => handleDelete(acc.id)}
+                    disabled={deletingId === acc.id}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '16px', padding: '2px 4px', lineHeight: 1 }}
+                    title="Delete bank account"
+                  >
+                    {deletingId === acc.id ? '…' : '×'}
+                  </button>
+                </div>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
