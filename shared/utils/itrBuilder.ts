@@ -875,11 +875,11 @@ function buildVerification(v: Verification, filingDate: string, pan?: string) {
   const sigPAN = v.signatoryPAN || pan || '';
   return {
     Declaration: {
-      AssesseeVerName:  v.AssesseeVerName || 'Authorised Signatory',
-      FatherName:       v.FatherName || '-',
+      AssesseeVerName:  (v.AssesseeVerName || 'AUTHORISED SIGNATORY').toUpperCase(),
+      FatherName:       (v.FatherName || '').toUpperCase() || undefined,
       AssesseeVerPAN:   sigPAN,
       Capacity:         capacity,
-      Place:            (v as any).Place || (v as any).PlaceVerSign || 'Delhi',
+      Place:            ((v as any).Place || (v as any).PlaceVerSign || 'Delhi').toUpperCase(),
       Date:             (v as any).Date || (v as any).DateVerSign || filingDate,
     },
   };
