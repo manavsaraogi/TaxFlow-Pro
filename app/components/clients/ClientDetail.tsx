@@ -1,7 +1,7 @@
 'use client';
 // File: renderer/app/components/clients/ClientDetail.tsx
 
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import type { AppPage } from '../layout/AppShell';
 
 const ASSESSEE_LABELS: Record<string, string> = {

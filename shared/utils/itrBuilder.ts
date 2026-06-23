@@ -1596,7 +1596,7 @@ function buildITR4(input: BuildITRInput): object {
             clauseiv7provisio139i:       'N',
             AsseseeRepFlg:               'N',
             ResidentialStatus:           (client.residentialStatus ?? 'RES') === 'RNR' ? 'NOR' : (client.residentialStatus ?? 'RES'),
-            ItrFilingDueDate:            rd.presumptiveIncome?.isAuditRequired ? cfg.dueDateAudit : cfg.dueDateIndividual,
+            ItrFilingDueDate:            (rd.presumptiveIncome as any)?.isAuditRequired ? cfg.dueDateAudit : cfg.dueDateIndividual,
             ...(rd.regime === 'OLD' && f10?.optOut ? {
               Form10IEAFiledFlag:        'Y',
               Form10IEAAckNum:           f10.ackNo,
