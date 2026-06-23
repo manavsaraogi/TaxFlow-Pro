@@ -876,7 +876,8 @@ function buildVerification(v: Verification, filingDate: string, pan?: string) {
   return {
     Declaration: {
       AssesseeVerName:  (v.AssesseeVerName || 'AUTHORISED SIGNATORY').toUpperCase(),
-      FatherName:       (v.FatherName || '').toUpperCase() || undefined,
+      // FatherName is optional per schema (not required); omit if blank or placeholder '-'
+      ...(v.FatherName && v.FatherName.trim() !== '-' ? { FatherName: v.FatherName.trim().toUpperCase() } : {}),
       AssesseeVerPAN:   sigPAN,
       Capacity:         capacity,
       Place:            ((v as any).Place || (v as any).PlaceVerSign || 'Delhi').toUpperCase(),
