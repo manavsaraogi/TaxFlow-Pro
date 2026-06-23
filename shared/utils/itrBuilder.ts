@@ -2266,7 +2266,7 @@ function buildITR5(input: BuildITRInput): object {
               PinCode:              client.pinCode ?? 110001,
               Phone:                { STDcode: 0, PhoneNo: 0 },
             },
-            DateOFFormOrIncorp:   gen.dateOfFormation || '2000-01-01',
+            DateOFFormOrIncorp:   gen.dateOfFormation || client.dateOfBirth || '2000-01-01',
             StatusOrCompanyType:  entityStatus.StatusOrCompanyType,
             ...(entityStatus.SubStatus ? { SubStatus: entityStatus.SubStatus } : {}),
           },

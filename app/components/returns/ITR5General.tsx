@@ -457,6 +457,7 @@ interface Props {
   returnId: number;
   assessmentYear?: string;   // e.g. '2025-26', '2024-25'
   initialData?: Partial<ITR5GeneralState> | null;
+  clientDateOfBirth?: string; // YYYY-MM-DD — used to pre-fill dateOfFormation for trusts/firms
   onSaved?: (data: ITR5GeneralState) => void;
 }
 
@@ -473,8 +474,13 @@ const GEN_TABS: { id: GenTab; label: string; icon: string }[] = [
 
 // ── Component ──────────────────────────────────────────────────────────────────
 
-export default function ITR5General({ returnId, assessmentYear, initialData, onSaved }: Props) {
-  const [form, setForm] = useState<ITR5GeneralState>({ ...EMPTY, ...initialData });
+export default function ITR5General({ returnId, assessmentYear, initialData, clientDateOfBirth, onSaved }: Props) {
+  const [form, setForm] = useState<ITR5GeneralState>({
+    ...EMPTY,
+    // Pre-fill dateOfFormation from client profile if not already saved
+    ...(clientDateOfBirth && !initialData?.dateOfFormation ? { dateOfFormation: clientDateOfBirth } : {}),
+    ...initialData,
+  });
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [activeTab, setActiveTab] = useState<GenTab>('basic');

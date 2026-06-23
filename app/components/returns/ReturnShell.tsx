@@ -809,6 +809,9 @@ export default function ReturnShell({ returnId, clientId, onBack, onNavigate, fo
                 returnId={returnMeta.id}
                 assessmentYear={returnMeta.assessmentYear}
                 initialData={(returnData as any)?.itr5General}
+                clientDateOfBirth={(returnData as any)?.client?.dateOfBirth
+                  ? new Date((returnData as any).client.dateOfBirth).toISOString().split('T')[0]
+                  : undefined}
                 onSaved={(data) => {
                   const rd = { ...(returnData ?? {} as any), itr5General: data };
                   setReturnData(rd);
