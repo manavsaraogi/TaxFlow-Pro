@@ -110,7 +110,15 @@ function mapAccountType(type: string | undefined | null): string {
   return map[(type ?? '').toUpperCase()] ?? 'SB';
 }
 
-/** Build BankAccountDtls for ITR JSON — works for both AddtnlBankDetails and PriBankDetails layouts */
+/**
+ * Build BankAccountDtls for ITR JSON.
+ *
+ * AY 2026-27 schema changes:
+ *   - ITR-1/4: BankAccountDtls only has AddtnlBankDetails array (no BankDtlsFlag at that level).
+ *   - ITR-2: BankAccountDtls has BankDtlsFlag + AddtnlBankDetails (no PriBankDetails).
+ *
+ * The 'layout' param is kept for backward-compat but PriBankDetails is now treated like AddtnlBankDetails.
+ */
 function buildBankAccountDtls(bank: any, layout: 'AddtnlBankDetails' | 'PriBankDetails') {
   const entry = {
     IFSCCode:      bank?.ifscCode ?? '',
@@ -120,11 +128,14 @@ function buildBankAccountDtls(bank: any, layout: 'AddtnlBankDetails' | 'PriBankD
     UseForRefund:  'true',
   };
   if (layout === 'PriBankDetails') {
-    const { UseForRefund: _, ...rest } = entry;
-    return { BankDtlsFlag: bank ? 'Y' : 'N', PriBankDetails: rest };
+    // ITR-2: uses BankDtlsFlag + AddtnlBankDetails (PriBankDetails removed in AY 2026-27 schema)
+    return {
+      BankDtlsFlag: bank ? 'Y' : 'N',
+      AddtnlBankDetails: [entry],
+    };
   }
+  // ITR-1/4: no BankDtlsFlag at BankAccountDtls level per AY 2026-27 schema
   return {
-    BankDtlsFlag: bank ? 'Y' : 'N',
     AddtnlBankDetails: [entry],
   };
 }
@@ -551,7 +562,7 @@ function computeTaxLiability(
 // SCHEDULE BUILDERS — ITR-1 INCOME DEDUCTIONS
 // ─────────────────────────────────────────────────────────────────────────────
 
-function buildITR1IncomeDeductions(rd: ReturnData, summary: IncomeSummary, capped: ReturnType<typeof applyDeductionCaps>, stdDedCap: number) {
+function buildITR1IncomeDeductions(rd: ReturnData, summary: IncomeSummary, capped: ReturnType<typeof applyDeductionCaps>, stdDedCap: number, includeGGA = true) {
   const sal = rd.salary;
   const hp = rd.houseProperty;
   const os = rd.otherSources;
@@ -585,7 +596,7 @@ function buildITR1IncomeDeductions(rd: ReturnData, summary: IncomeSummary, cappe
     DeductionUs57iia: toInt(os?.DeductionUs57iia),
     GrossTotIncome: toInt(summary.GrossTotalIncome),
     GrossTotIncomeIncLTCG112A: toInt(summary.GrossTotalIncomeIncLTCG112A ?? summary.GrossTotalIncome),
-    UsrDeductUndChapVIA: buildUsrDeductions(rd.deductions),
+    UsrDeductUndChapVIA: buildUsrDeductions(rd.deductions, includeGGA),
     DeductUndChapVIA: capped,
     TotalIncome: toInt(summary.TotalIncome),
     ExemptIncAgriOthUs10: os?.ExemptIncomeItems?.length
@@ -684,43 +695,41 @@ function buildOtherSourceItem(item: OtherSourceItem) {
 // DEDUCTIONS BUILDER
 // ─────────────────────────────────────────────────────────────────────────────
 
-function buildUsrDeductions(d: DeductionsChapterVIA | null) {
-  if (!d) return {
-    Section80C: 0, Section80CCC: 0, Section80CCDEmployeeOrSE: 0,
-    Section80CCD1B: 0, Section80CCDEmployer: 0, Section80D: 0,
-    Section80DD: 0, Section80DDB: 0, Section80E: 0, Section80EE: 0,
-    Section80G: 0, Section80GG: 0, Section80GGA: 0, Section80GGC: 0,
-    Section80U: 0, Section80TTA: 0, Section80TTB: 0, AnyOthSec80CCH: 0,
-    TotalChapVIADeductions: 0,
+/**
+ * Build user-entered Chapter VI-A deductions.
+ * @param d         Raw deductions from ReturnData (null = no deductions entered)
+ * @param includeGGA Whether to include Section80GGA (ITR-1/2 YES, ITR-4 NO per AY 2026-27 schema)
+ */
+function buildUsrDeductions(d: DeductionsChapterVIA | null, includeGGA = true) {
+  const base = {
+    Section80C: d ? toInt(d.Section80C) : 0,
+    Section80CCC: d ? toInt(d.Section80CCC) : 0,
+    ...(d?.PensionContribution80CCC ? { PensionContribution80CCC: d.PensionContribution80CCC } : {}),
+    Section80CCDEmployeeOrSE: d ? toInt(d.Section80CCDEmployeeOrSE) : 0,
+    Section80CCD1B: d ? toInt(d.Section80CCD1B) : 0,
+    Section80CCDEmployer: d ? toInt(d.Section80CCDEmployer) : 0,
+    ...(d?.PRANNumbers?.length ? { PRANDtls: d.PRANNumbers.map((p) => ({ PRANNum: p })) } : {}),
+    Section80D: d ? toInt(d.Section80D) : 0,
+    Section80DD: d ? toInt(d.Section80DD) : 0,
+    ...(d?.Claimant80DDB ? { Section80DDBUsrType: d.Claimant80DDB } : {}),
+    ...(d?.SpecialDisease80DDB ? { NameOfSpecDisease80DDB: d.SpecialDisease80DDB } : {}),
+    Section80DDB: d ? toInt(d.Section80DDB) : 0,
+    Section80E: d ? toInt(d.Section80E) : 0,
+    Section80EE: d ? toInt(d.Section80EE) : 0,
+    Section80EEA: d ? toInt(d.Section80EEA) : 0,
+    Section80EEB: d ? toInt(d.Section80EEB) : 0,
+    Section80G: d ? toInt(d.Section80G) : 0,
+    Section80GG: d ? toInt(d.Section80GG) : 0,
+    ...(d?.Form10BAAckNum ? { Form10BAAckNum: d.Form10BAAckNum } : {}),
+    ...(includeGGA ? { Section80GGA: d ? toInt(d.Section80GGA) : 0 } : {}),
+    Section80GGC: d ? toInt(d.Section80GGC) : 0,
+    Section80U: d ? toInt(d.Section80U) : 0,
+    Section80TTA: d ? toInt(d.Section80TTA) : 0,
+    Section80TTB: d ? toInt(d.Section80TTB) : 0,
+    AnyOthSec80CCH: d ? toInt(d.AnyOthSec80CCH) : 0,
+    TotalChapVIADeductions: d ? toInt(d.TotalChapVIADeductions) : 0,
   };
-  return {
-    Section80C: toInt(d.Section80C),
-    Section80CCC: toInt(d.Section80CCC),
-    PensionContribution80CCC: d.PensionContribution80CCC,
-    Section80CCDEmployeeOrSE: toInt(d.Section80CCDEmployeeOrSE),
-    Section80CCD1B: toInt(d.Section80CCD1B),
-    Section80CCDEmployer: toInt(d.Section80CCDEmployer),
-    PRANDtls: d.PRANNumbers?.map((p) => ({ PRANNum: p })),
-    Section80D: toInt(d.Section80D),
-    Section80DD: toInt(d.Section80DD),
-    Section80DDBUsrType: d.Claimant80DDB,
-    NameOfSpecDisease80DDB: d.SpecialDisease80DDB,
-    Section80DDB: toInt(d.Section80DDB),
-    Section80E: toInt(d.Section80E),
-    Section80EE: toInt(d.Section80EE),
-    Section80EEA: toInt(d.Section80EEA),
-    Section80EEB: toInt(d.Section80EEB),
-    Section80G: toInt(d.Section80G),
-    Section80GG: toInt(d.Section80GG),
-    Form10BAAckNum: d.Form10BAAckNum,
-    Section80GGA: toInt(d.Section80GGA),
-    Section80GGC: toInt(d.Section80GGC),
-    Section80U: toInt(d.Section80U),
-    Section80TTA: toInt(d.Section80TTA),
-    Section80TTB: toInt(d.Section80TTB),
-    AnyOthSec80CCH: toInt(d.AnyOthSec80CCH),
-    TotalChapVIADeductions: toInt(d.TotalChapVIADeductions),
-  };
+  return base;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -742,8 +751,9 @@ function buildTDSOnSalaries(tds: ScheduleTDS) {
 }
 
 function buildTDSOnOtherIncome(tds: ScheduleTDS) {
+  // AY 2026-27 schema: array field is TDSonOthThanSal (not TDSOthThanSalaryDtls)
   return {
-    TDSOthThanSalaryDtls: tds.TDSOnOtherIncome.map((e: TDSOtherEntry) => ({
+    TDSonOthThanSal: tds.TDSOnOtherIncome.map((e: TDSOtherEntry) => ({
       EmployerOrDeductorOrCollectDetl: {
         TAN: e.EmployerOrDeductorDetails.TAN,
         EmployerName: e.EmployerOrDeductorDetails.EmployerName,
@@ -759,8 +769,9 @@ function buildTDSOnOtherIncome(tds: ScheduleTDS) {
 }
 
 function buildTDS16C(tds: ScheduleTDS) {
+  // AY 2026-27 schema: array field is TDS3Details, total is TotalTDS3Details
   return {
-    TDS3onOthThanSalDtls: tds.TDSOnRent16C.map((e: TDS16CEntry) => ({
+    TDS3Details: tds.TDSOnRent16C.map((e: TDS16CEntry) => ({
       PANofTenant: e.PANofTenant,
       AadhaarofTenant: e.AadhaarofTenant,
       TDSSection: e.TDSSection,
@@ -770,7 +781,7 @@ function buildTDS16C(tds: ScheduleTDS) {
       TDSDeducted: toInt(e.TDSDeducted),
       TDSClaimed: toInt(e.TDSClaimed),
     })),
-    TotalTDS3OnOthThanSal: toInt(tds.TotalTDSOnRent),
+    TotalTDS3Details: toInt(tds.TotalTDSOnRent),
   };
 }
 
@@ -834,6 +845,12 @@ function buildPersonalInfo(client: BuilderClient, opts?: { includeStatus?: strin
     };
   }
 
+  // AY 2026-27 schema: Address requires CountryCodeMobile (integer), MobileNo (integer),
+  // ResidenceNo and LocalityOrArea must be non-empty strings.
+  // PersonalInfo does NOT have ResidentialStatus (removed in AY 2026-27 for ITR-1/4).
+  const mobileInt2 = client.mobileNumber
+    ? parseInt(client.mobileNumber.replace(/\D/g, ''), 10) || 9999999999
+    : 9999999999;
   return {
     AssesseeName: {
       FirstName: name.FirstName,
@@ -844,19 +861,19 @@ function buildPersonalInfo(client: BuilderClient, opts?: { includeStatus?: strin
     DOB: client.dateOfBirth,
     AadhaarCardNo: client.aadhaarNumber,
     Address: {
-      ResidenceNo: '',
+      ResidenceNo: (client.address || 'NA').toUpperCase(),
       ResidenceName: '',
-      RoadOrStreet: client.address,
-      LocalityOrArea: '',
-      CityOrTownOrDistrict: client.city ?? '',
+      RoadOrStreet: '',
+      LocalityOrArea: (client.city || 'NA').toUpperCase(),
+      CityOrTownOrDistrict: (client.city ?? '').toUpperCase(),
       StateCode: (client.state ?? '11') as string,
       CountryCode: '91',
       PinCode: client.pinCode,
-      MobileNo: client.mobileNumber,
-      EmailAddress: client.email,
+      CountryCodeMobile: 91,
+      MobileNo: mobileInt2,
+      ...(client.email ? { EmailAddress: client.email } : {}),
     },
     SecondaryAdd: 'N' as const,
-    ResidentialStatus: client.residentialStatus ?? 'RES',
     EmployerCategory: 'OTH' as const,
     ...(opts?.includeStatus ? { Status: opts.includeStatus } : {}),
   };
@@ -867,26 +884,63 @@ function buildPersonalInfo(client: BuilderClient, opts?: { includeStatus?: strin
 // ─────────────────────────────────────────────────────────────────────────────
 
 // Valid ITR-5 capacity codes: MP DP PA PO ME LQ RP TR EX RA AS OA
+// Valid ITR-5 capacity codes: MP DP PA PO ME LQ RP TR EX RA AS OA
 const VALID_ITR5_CAPACITY = new Set(['MP','DP','PA','PO','ME','LQ','RP','TR','EX','RA','AS','OA']);
-// Valid individual (ITR-1/2/4) capacity codes: S=Self, R=Representative Assessee
+// Valid individual (ITR-1/2/3/4) capacity codes
 const VALID_INDIV_CAPACITY = new Set(['S','R','11','12']);
-function buildVerification(v: Verification, filingDate: string, pan?: string, isITR5 = false) {
+
+/**
+ * Build Verification block — layout varies by form type / AY schema:
+ *   'ITR5'  — ITR-5 AY2025-26: Capacity/Place/Date all inside Declaration
+ *   'ITR14' — ITR-1/4 AY2026-27: Declaration(Name+Father+PAN) + top-level Capacity + Place (no Date)
+ *   'ITR23' — ITR-2/3 AY2026-27: Declaration(Name+Father+PAN) + top-level Capacity + Date + Place
+ */
+function buildVerification(
+  v: Verification,
+  filingDate: string,
+  pan?: string,
+  layout: 'ITR5' | 'ITR14' | 'ITR23' = 'ITR14',
+) {
+  const isITR5   = layout === 'ITR5';
   const validSet = isITR5 ? VALID_ITR5_CAPACITY : VALID_INDIV_CAPACITY;
   const defaultCap = isITR5 ? 'PO' : 'S';
-  const capacity = validSet.has(v.Capacity ?? '') ? v.Capacity : defaultCap;
-  // AssesseeVerPAN must be individual PAN (4th char = 'P').
-  // For trusts/firms, use v.signatoryPAN (the authorized signatory's individual PAN).
-  const sigPAN = v.signatoryPAN || pan || '';
+  const capacity = (validSet.has(v.Capacity ?? '') ? v.Capacity : defaultCap) as string;
+  const sigPAN   = (v as any).signatoryPAN || pan || '';
+  const name     = (v.AssesseeVerName || (isITR5 ? 'AUTHORISED SIGNATORY' : '')).toUpperCase();
+  const father   = (v.FatherName?.trim() && v.FatherName.trim() !== '-'
+                      ? v.FatherName.trim() : '-').toUpperCase();
+  const place    = ((v as any).Place || (v as any).PlaceVerSign || '').toUpperCase() || undefined;
+  const date     = (v as any).Date || (v as any).DateVerSign || filingDate;
+
+  if (isITR5) {
+    // ITR-5 AY2025-26: all fields inside Declaration
+    return {
+      Declaration: {
+        AssesseeVerName: name,
+        ...(father !== '-' ? { FatherName: father } : {}),
+        AssesseeVerPAN: sigPAN,
+        Capacity: capacity,
+        ...(place ? { Place: place } : {}),
+        Date: date,
+      },
+    };
+  }
+
+  if (layout === 'ITR14') {
+    // ITR-1/4 AY2026-27: no Date in Verification
+    return {
+      Declaration: { AssesseeVerName: name, FatherName: father, AssesseeVerPAN: sigPAN },
+      Capacity: capacity,
+      ...(place ? { Place: place } : {}),
+    };
+  }
+
+  // ITR-2/3 AY2026-27: Date required at Verification level
   return {
-    Declaration: {
-      AssesseeVerName:  (v.AssesseeVerName || 'AUTHORISED SIGNATORY').toUpperCase(),
-      // FatherName is optional per schema (not required); omit if blank or placeholder '-'
-      ...(v.FatherName && v.FatherName.trim() !== '-' ? { FatherName: v.FatherName.trim().toUpperCase() } : {}),
-      AssesseeVerPAN:   sigPAN,
-      Capacity:         capacity,
-      Place:            ((v as any).Place || (v as any).PlaceVerSign || '').toUpperCase() || undefined,
-      Date:             (v as any).Date || (v as any).DateVerSign || filingDate,
-    },
+    Declaration: { AssesseeVerName: name, FatherName: father, AssesseeVerPAN: sigPAN },
+    Capacity: capacity,
+    Date: date,
+    ...(place ? { Place: place } : {}),
   };
 }
 
@@ -932,19 +986,21 @@ function buildITR1(input: BuildITRInput): object {
         },
         Form_ITR1: {
           FormName: 'ITR-1',
-          Description: 'For individuals being a resident (other than not ordinarily resident) having total income upto Rs.50 lakh, having Income from Salaries, one house property, other sources (Interest etc.), and agricultural income upto Rs.5000',
+          // Description maxLength=75 per AY 2026-27 schema
+          Description: 'For Individuals having Income from Salaries, one house property',
           AssessmentYear: ayToYear(rd.assessmentYear),
           SchemaVer: 'Ver1.0',
           FormVer: 'Ver1.0',
         },
         PersonalInfo: buildPersonalInfo(client),
         FilingStatus: {
-          ReturnFileSec: rd.filingSection,
+          // AY 2026-27 schema: ReturnFileSec must be an integer (not string)
+          ReturnFileSec: Number(rd.filingSection ?? 11),
           OptOutNewTaxRegime: rd.regime === 'OLD' ? 'Y' : 'N',
           AsseseeRepFlg: 'N',
           ItrFilingDueDate: cfg.dueDateIndividual,
         },
-        ITR1_IncomeDeductions: buildITR1IncomeDeductions(rd, summary, capped, rd.regime === 'NEW' ? cfg.stdDeduction_new : cfg.stdDeduction_old),
+        ITR1_IncomeDeductions: buildITR1IncomeDeductions(rd, summary, capped, rd.regime === 'NEW' ? cfg.stdDeduction_new : cfg.stdDeduction_old, true),
         ITR1_TaxComputation: {
           TotalTaxPayable:     toInt(taxComp.NetTaxPayable),    // tax on TI before rebate
           Rebate87A:           toInt(taxComp.Rebate87A),
@@ -976,9 +1032,18 @@ function buildITR1(input: BuildITRInput): object {
           RefundDue: taxComp.Refund ?? 0,
           BankAccountDtls: buildBankAccountDtls((rd as any).bankAccounts?.[0], 'AddtnlBankDetails'),
         },
-        TDSonSalaries: rd.tds ? buildTDSOnSalaries(rd.tds) : { TDSonSalary: [], TotalTDSonSalaries: 0 },
-        TDSonOthThanSals: rd.tds ? buildTDSOnOtherIncome(rd.tds) : { TDSonOthThanSal: [], TotalTDSonOthThanSals: 0 },
-        ScheduleTDS3Dtls: rd.tds ? buildTDS16C(rd.tds) : { TDS3Details: [], TotalTDS3Details: 0 },
+        // AY 2026-27: TDSonSalary minItems=1 — only include if there are entries
+        ...(rd.tds && rd.tds.TDSOnSalaries.length > 0
+          ? { TDSonSalaries: buildTDSOnSalaries(rd.tds) }
+          : {}),
+        // TDSonOthThanSal array only if entries exist (minItems=1)
+        ...(rd.tds && rd.tds.TDSOnOtherIncome.length > 0
+          ? { TDSonOthThanSals: buildTDSOnOtherIncome(rd.tds) }
+          : { TDSonOthThanSals: { TotalTDSonOthThanSals: 0 } }),
+        // TDS3Details (16C) only if entries exist (minItems=1)
+        ...(rd.tds && rd.tds.TDSOnRent16C.length > 0
+          ? { ScheduleTDS3Dtls: buildTDS16C(rd.tds) }
+          : { ScheduleTDS3Dtls: { TotalTDS3Details: 0 } }),
         TaxPayments: rd.taxPayments ? buildTaxPayments(rd.taxPayments) : { TotalTaxPayments: 0 },
         LTCG112A: rd.ltcg112A
           ? {
@@ -994,7 +1059,7 @@ function buildITR1(input: BuildITRInput): object {
               TotalLTCG112A: toInt(rd.ltcg112A.TaxableLTCG112A),
             }
           : undefined,
-        Verification: rd.verification ? buildVerification(rd.verification, date) : undefined,
+        Verification: rd.verification ? buildVerification(rd.verification, date, undefined, 'ITR14') : undefined,
       },
     },
   };
@@ -1463,7 +1528,7 @@ function buildITR2(input: BuildITRInput): object {
             }
           : undefined,
 
-        Verification: rd.verification ? buildVerification(rd.verification, date) : undefined,
+        Verification: rd.verification ? buildVerification(rd.verification, date, undefined, 'ITR23') : undefined,
       },
     },
   };
@@ -1851,7 +1916,7 @@ function buildITR4(input: BuildITRInput): object {
               TotalTCS: tcs,
             }
           : undefined,
-        Verification: rd.verification ? buildVerification(rd.verification, date) : undefined,
+        Verification: rd.verification ? buildVerification(rd.verification, date, undefined, 'ITR14') : undefined,
       },
     },
   };
@@ -3323,7 +3388,7 @@ function buildITR5(input: BuildITRInput): object {
 
         // ── Verification ─────────────────────────────────────────────────
         // Always include — omitting it causes the portal to spin silently with no error
-        Verification: buildVerification(rd.verification ?? {} as any, date, client.pan, true),
+        Verification: buildVerification(rd.verification ?? {} as any, date, client.pan, 'ITR5'),
 
         // ── ManufacturingAccount ──────────────────────────────────────────
         ManufacturingAccount: {
@@ -4604,35 +4669,7 @@ function buildITR3(input: BuildITRInput): object {
           : undefined,
 
         // ── Verification ──────────────────────────────────────────────────
-        // ITR-3 Verification: Declaration + Capacity + Date + Place at top level
-        Verification: (() => {
-          const v = rd.verification;
-          if (v) {
-            const name = splitName((client.fullName ?? '').toUpperCase());
-            const validCap = new Set(['S', 'R', '11', '12']);
-            const cap = validCap.has(v.Capacity ?? '') ? v.Capacity : 'S';
-            return {
-              Declaration: {
-                AssesseeVerName: (v.AssesseeVerName || name.SurName).toUpperCase(),
-                ...(v.FatherName && v.FatherName.trim() !== '-'
-                  ? { FatherName: v.FatherName.trim().toUpperCase() } : {}),
-                AssesseeVerPAN: (v.signatoryPAN || client.pan).toUpperCase(),
-              },
-              Capacity: cap,
-              Place:    ((v as any).Place || (v as any).PlaceVerSign || '').toUpperCase() || undefined,
-              Date:     (v as any).Date || (v as any).DateVerSign || date,
-            };
-          }
-          return {
-            Declaration: {
-              AssesseeVerName: (client.fullName ?? 'ASSESSEE').toUpperCase(),
-              AssesseeVerPAN:  client.pan.toUpperCase(),
-            },
-            Capacity: 'S',
-            Place:    undefined,
-            Date:     date,
-          };
-        })(),
+        Verification: buildVerification(rd.verification ?? {} as any, date, client.pan, 'ITR23'),
       },
     },
   };
