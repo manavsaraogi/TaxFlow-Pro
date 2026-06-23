@@ -2287,7 +2287,7 @@ function buildITR5(input: BuildITRInput): object {
             ifMSME:                    gen.isMSME ? 'Y' : 'N',
             RegNumMSMEDAct2006:        gen.msmeRegNo ?? '',
             NriSEPinIndia:             'NA',
-            ItrFilingDueDate:          effectiveCfg.dueDateAudit,
+            ItrFilingDueDate:          gen.isAuditRequired ? effectiveCfg.dueDateAudit : effectiveCfg.dueDateIndividual,
           },
         },
         // ── 139(8A) Updated Return ─────────────────────────────────────────────
