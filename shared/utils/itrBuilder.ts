@@ -801,7 +801,7 @@ function buildTaxPayments(tp: ScheduleTaxPayments) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function buildPersonalInfo(client: BuilderClient, opts?: { includeStatus?: string; itr2?: boolean }) {
-  const name = splitName(client.fullName);
+  const name = splitName((client.fullName ?? '').toUpperCase());
   const statusCode = opts?.includeStatus ?? detectStatusFromPAN(client.pan);
   const mobileInt = client.mobileNumber ? parseInt(client.mobileNumber.replace(/\D/g, ''), 10) || undefined : undefined;
 
@@ -817,17 +817,17 @@ function buildPersonalInfo(client: BuilderClient, opts?: { includeStatus?: strin
       DOB: client.dateOfBirth,
       AadhaarCardNo: client.aadhaarNumber,
       Address: {
-        ResidenceNo: client.address || '-',
+        ResidenceNo: (client.address || '').toUpperCase() || undefined,
         ResidenceName: '',
         RoadOrStreet: '',
-        LocalityOrArea: client.city ?? '-',
-        CityOrTownOrDistrict: client.city ?? '',
+        LocalityOrArea: (client.city ?? '').toUpperCase() || undefined,
+        CityOrTownOrDistrict: (client.city ?? '').toUpperCase() || undefined,
         StateCode: (client.state ?? '11') as string,
         CountryCode: '91' as const,
         PinCode: client.pinCode,
         CountryCodeMobile: 91,
-        MobileNo: mobileInt ?? 9999999999,
-        EmailAddress: client.email ?? 'noreply@example.com',
+        ...(mobileInt ? { MobileNo: mobileInt } : {}),
+        ...(client.email ? { EmailAddress: client.email } : {}),
       },
       SecondaryAdd: 'N' as const,
       Status: statusCode,
@@ -868,8 +868,12 @@ function buildPersonalInfo(client: BuilderClient, opts?: { includeStatus?: strin
 
 // Valid ITR-5 capacity codes: MP DP PA PO ME LQ RP TR EX RA AS OA
 const VALID_ITR5_CAPACITY = new Set(['MP','DP','PA','PO','ME','LQ','RP','TR','EX','RA','AS','OA']);
-function buildVerification(v: Verification, filingDate: string, pan?: string) {
-  const capacity = VALID_ITR5_CAPACITY.has(v.Capacity ?? '') ? v.Capacity : 'PO';
+// Valid individual (ITR-1/2/4) capacity codes: S=Self, R=Representative Assessee
+const VALID_INDIV_CAPACITY = new Set(['S','R','11','12']);
+function buildVerification(v: Verification, filingDate: string, pan?: string, isITR5 = false) {
+  const validSet = isITR5 ? VALID_ITR5_CAPACITY : VALID_INDIV_CAPACITY;
+  const defaultCap = isITR5 ? 'PO' : 'S';
+  const capacity = validSet.has(v.Capacity ?? '') ? v.Capacity : defaultCap;
   // AssesseeVerPAN must be individual PAN (4th char = 'P').
   // For trusts/firms, use v.signatoryPAN (the authorized signatory's individual PAN).
   const sigPAN = v.signatoryPAN || pan || '';
@@ -880,7 +884,7 @@ function buildVerification(v: Verification, filingDate: string, pan?: string) {
       ...(v.FatherName && v.FatherName.trim() !== '-' ? { FatherName: v.FatherName.trim().toUpperCase() } : {}),
       AssesseeVerPAN:   sigPAN,
       Capacity:         capacity,
-      Place:            ((v as any).Place || (v as any).PlaceVerSign || 'Delhi').toUpperCase(),
+      Place:            ((v as any).Place || (v as any).PlaceVerSign || '').toUpperCase() || undefined,
       Date:             (v as any).Date || (v as any).DateVerSign || filingDate,
     },
   };
@@ -1527,7 +1531,7 @@ function buildITR4(input: BuildITRInput): object {
             clauseiv7provisio139i:       'N',
             AsseseeRepFlg:               'N',
             ResidentialStatus:           (client.residentialStatus ?? 'RES') === 'RNR' ? 'NOR' : (client.residentialStatus ?? 'RES'),
-            ItrFilingDueDate:            cfg.dueDateAudit,
+            ItrFilingDueDate:            rd.presumptiveIncome?.isAuditRequired ? cfg.dueDateAudit : cfg.dueDateIndividual,
             ...(rd.regime === 'OLD' && f10?.optOut ? {
               Form10IEAFiledFlag:        'Y',
               Form10IEAAckNum:           f10.ackNo,
@@ -3319,7 +3323,7 @@ function buildITR5(input: BuildITRInput): object {
 
         // ── Verification ─────────────────────────────────────────────────
         // Always include — omitting it causes the portal to spin silently with no error
-        Verification: buildVerification(rd.verification ?? {} as any, date, client.pan),
+        Verification: buildVerification(rd.verification ?? {} as any, date, client.pan, true),
 
         // ── ManufacturingAccount ──────────────────────────────────────────
         ManufacturingAccount: {
