@@ -2312,10 +2312,10 @@ function buildITR5(input: BuildITRInput): object {
               PartnerForeignCompFlg:          'NO',
               PercentageOfShareForeignComp:   0,
               TotIncFrmMemberOfAop:           'Y',
-              PartnerOrMemberName:            m.name ?? '',
+              PartnerOrMemberName:            (m.name ?? '').toUpperCase(),
               AddressDetailWithZipCode: {
-                AddrDetail:            [m.flatNo, m.buildingName, m.streetName, m.localityOrArea].filter(Boolean).join(', ') || m.address || '-',
-                CityOrTownOrDistrict:  m.cityOrTownOrDistrict || m.city || 'Delhi',
+                AddrDetail:            ([m.flatNo, m.buildingName, m.streetName, m.localityOrArea].filter(Boolean).join(', ') || m.address || '').toUpperCase() || undefined,
+                CityOrTownOrDistrict:  (m.cityOrTownOrDistrict || m.city || 'Delhi').toUpperCase(),
                 StateCode:             m.stateCode ?? '09',
                 CountryCode:           m.countryCode ?? '91',
                 PinCode:               Number(m.pinCode) || 110001,
