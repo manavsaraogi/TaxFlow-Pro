@@ -3715,10 +3715,934 @@ function reorderITR5Keys(result: any): any {
   return { ITR: { ...result.ITR, ITR5: ordered } };
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// MAIN BUILDER — ITR-3 (Individuals/HUF with business/profession income)
+// AY 2026-27 — schema ITR-3_2026_Main.json
+// ─────────────────────────────────────────────────────────────────────────────
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+function buildITR3(input: BuildITRInput): object {
+  const { returnData: rd, client, sw, filingDate } = input;
+  const date = filingDate ?? today();
+  const ay = rd.assessmentYear ?? '2026-27';
+  const cfg = getAYConfig(ay);
+  const summary = computeIncomeSummary(rd);
+  const capped = rd.deductions
+    ? applyDeductionCaps(rd.deductions, summary.GrossTotalIncome)
+    : applyDeductionCaps({ TotalChapVIADeductions: 0 } as DeductionsChapterVIA, 0);
+  const taxComp = computeTaxLiability(summary, rd.regime, ay);
+
+  // ── Capital gains ─────────────────────────────────────────────────────────
+  const ltcg112ATotal = toInt(rd.ltcg112A?.TaxableLTCG112A ?? 0);
+  const ltcg112AEntries = rd.ltcg112A?.Entries ?? [];
+  const stcg111ATotal = toInt(rd.stcg?.TotalSTCG111A ?? 0);
+  const stcgOtherTotal = toInt(rd.stcg?.TotalSTCGOther ?? 0);
+  const totalCG = ltcg112ATotal + stcg111ATotal + stcgOtherTotal;
+
+  // ── Income totals ─────────────────────────────────────────────────────────
+  const salIncome = toInt(summary.IncomeFromSalary);
+  const hpIncome  = toInt(summary.IncomeFromHP);
+  const osIncome  = toInt(summary.IncomeFromOtherSources);
+  const bpIncome  = 0;   // regular business income — zero for salary+OS only case
+  const grossTotalIncome = toInt(summary.GrossTotalIncome) + totalCG;
+  const totalIncome = Math.max(0, grossTotalIncome - capped.TotalChapVIADeductions);
+
+  // ── TDS / tax paid ────────────────────────────────────────────────────────
+  const tdsSalary  = toInt(rd.tds?.TotalTDSOnSalaries);
+  const tdsOther   = toInt(rd.tds?.TotalTDSOnOtherIncome);
+  const tdsRent    = toInt(rd.tds?.TotalTDSOnRent);
+  const tcs        = toInt(rd.tds?.TotalTCS);
+  const advTax     = toInt(rd.taxPayments?.TotalAdvanceTax);
+  const satTax     = toInt(rd.taxPayments?.TotalSelfAssessmentTax);
+  const totalTaxPaid = tdsSalary + tdsOther + tdsRent + tcs + advTax + satTax;
+
+  taxComp.TotalTaxesPaid = totalTaxPaid;
+  const netTaxLiability  = toInt(taxComp.GrossTaxLiability);
+  const balPayable       = Math.max(0, netTaxLiability - totalTaxPaid);
+  const refund           = totalTaxPaid > netTaxLiability ? totalTaxPaid - netTaxLiability : 0;
+
+  // ── ScheduleCYLA helpers ───────────────────────────────────────────────────
+  const hpLossSetOff   = hpIncome < 0 ? Math.min(Math.abs(hpIncome), 200_000) : 0;
+  const salAfterSetOff = Math.max(0, salIncome - hpLossSetOff);
+  const hpAfterSetOff  = Math.max(0, hpIncome);
+
+  const cylaInc3 = (n: number) => ({
+    IncCYLA: {
+      IncOfCurYrUnderThatHead:     Math.max(0, n),
+      HPlossCurYrSetoff:           0,
+      OthSrcLossNoRaceHorseSetoff: 0,
+      IncOfCurYrAfterSetOff:       Math.max(0, n),
+    },
+  });
+  const cylaBus = (n: number) => ({
+    IncCYLA: {
+      IncOfCurYrUnderThatHead:     Math.max(0, n),
+      HPlossCurYrSetoff:           0,
+      OthSrcLossNoRaceHorseSetoff: 0,
+      IncOfCurYrAfterSetOff:       Math.max(0, n),
+    },
+  });
+
+  // ── ScheduleBFLA helpers ───────────────────────────────────────────────────
+  const bflaRowSal = (n: number) => ({
+    IncBFLA: {
+      IncOfCurYrUndHeadFromCYLA:  Math.max(0, n),
+      IncOfCurYrAfterSetOffBFLosses: Math.max(0, n),
+    },
+  });
+  const bflaRow3 = (n: number) => ({
+    IncBFLA: {
+      IncOfCurYrUndHeadFromCYLA:     Math.max(0, n),
+      BFlossPrevYrUndSameHeadSetoff: 0,
+      BFUnabsorbedDeprSetoff:        0,
+      BFAllUs35Cl4Setoff:            0,
+      IncOfCurYrAfterSetOffBFLosses: Math.max(0, n),
+    },
+  });
+
+  // ── ItrFilingDueDate: ITR-3 schema enum is 2026-08-31/2026-10-31/2026-11-30 ──
+  // Normal individual non-audit due date: 2026-08-31 (extended by CBDT for AY 26-27)
+  const itrFilingDueDate = '2026-08-31';
+
+  // ── DateRange zero helper (used in ScheduleOS — DateRangeTypeOS format) ─────
+  // ITR-3 uses Up16Of6To15Of9 (not Upto15Of9) per DateRangeTypeOS definition
+  const zeroDateRange = () => ({
+    DateRange: { Upto15Of6: 0, Up16Of6To15Of9: 0, Up16Of9To15Of12: 0, Up16Of12To15Of3: 0, Up16Of3To31Of3: 0 },
+  });
+
+  // ── Personal info (ITR-3 uses the itr2=true layout: SurNameOrOrgName, no EmployerCategory) ──
+  const personalInfo = buildPersonalInfo(client, { itr2: true });
+
+  return {
+    ITR: {
+      ITR3: {
+        // ── CreationInfo ──────────────────────────────────────────────────
+        CreationInfo: {
+          SWVersionNo:      sw.SWVersionNo,
+          SWCreatedBy:      sw.SWCreatedBy,
+          JSONCreatedBy:    sw.JSONCreatedBy,
+          JSONCreationDate: date,
+          IntermediaryCity: sw.IntermediaryCity,
+          Digest: '-',
+        },
+
+        // ── Form_ITR3 ─────────────────────────────────────────────────────
+        Form_ITR3: {
+          FormName:       'ITR-3',
+          Description:    'For individuals and HUFs having income from business or profession',
+          AssessmentYear: ayToYear(rd.assessmentYear),
+          SchemaVer:      'Ver1.0',
+          FormVer:        'Ver1.0',
+        },
+
+        // ── PartA_GEN1 ────────────────────────────────────────────────────
+        PartA_GEN1: {
+          PersonalInfo: personalInfo,
+          FilingStatus: {
+            ReturnFileSec:            rd.filingSection,
+            IncFrmBusOrProf:          'Y',
+            SeventhProvisio139:       'N',
+            ResidentialStatus:        (client.residentialStatus ?? 'RES') === 'RNR' ? 'NOR' : (client.residentialStatus ?? 'RES'),
+            HeldUnlistedEqShrPrYrFlg: 'N',
+            ForeignExchangeFlag:      'N',
+            FiiFpiFlag:               'N',
+            ItrFilingDueDate:         itrFilingDueDate,
+            // Regime-related 10IEA fields (business income case)
+            ...(rd.regime === 'OLD' ? { F10IEACurrAYOldRegime: 'N' } : { F10IEACurrAYNewRegime: 'N' }),
+          },
+        },
+
+        // ── PartA_GEN2 ────────────────────────────────────────────────────
+        PartA_GEN2: {
+          AuditInfo: {
+            LiableSec44AAflg: 'N',
+            IncDclrdUs:       'N',
+            LiableSec44ABflg: 'N',
+            LiableSec92Eflg:  'N',
+            AccountAuditFlag: 'N',
+          },
+        },
+
+        // ── PARTA_BS (Balance Sheet — zero/minimal for salary+OS case) ────
+        PARTA_BS: {
+          FundSrc: {
+            PropFund: {
+              PropCap:  0,
+              ResrNSurp: { RevResr: 0, CapResr: 0, StatResr: 0, OthResr: 0, TotResrNSurp: 0 },
+              TotPropFund: 0,
+            },
+            LoanFunds: {
+              SecrLoan: {
+                ForeignCurrLoan: 0,
+                RupeeLoan: { FrmBank: 0, FrmOthrs: 0, TotRupeeLoan: 0 },
+                TotSecrLoan: 0,
+              },
+              UnsecrLoan: { FrmBank: 0, FrmOthrs: 0, TotUnSecrLoan: 0 },
+              TotLoanFund: 0,
+            },
+            DeferredTax: 0,
+            Advances:    { TotalAdvances: 0 },
+            TotFundSrc:  0,
+          },
+          FundApply: {
+            FixedAsset: { GrossBlock: 0, Depreciation: 0, NetBlock: 0, CapWrkProg: 0, TotFixedAsset: 0 },
+            Investments: {
+              LongTermInv: { GovtOthSecQuoted: 0, GovOthSecUnQoted: 0, TotLongTermInv: 0 },
+              TradeInv:    { EquityShares: 0, PreferShares: 0, Debenture: 0, TotTradeInv: 0 },
+              TotInvestments: 0,
+            },
+            CurrAssetLoanAdv: {
+              CurrAsset: {
+                Inventories:  { StoresConsumables: 0, RawMatl: 0, StkInProcess: 0, FinOrTradGood: 0, TotInventries: 0 },
+                SndryDebtors: 0,
+                CashOrBankBal: { CashinHand: 0, BankBal: 0, TotCashOrBankBal: 0 },
+                OthCurrAsset: 0,
+                TotCurrAsset: 0,
+              },
+              LoanAdv:   { AdvRecoverable: 0, Deposits: 0, BalWithRevAuth: 0, TotLoanAdv: 0 },
+              TotCurrAssetLoanAdv: 0,
+              CurrLiabilitiesProv: {
+                CurrLiabilities: { SundryCred: 0, LiabForLeasedAsset: 0, AccrIntonLeasedAsset: 0, AccrIntNotDue: 0, TotCurrLiabilities: 0 },
+                Provisions:      { ITProvision: 0, ELSuperAnnGratProvision: 0, OthProvision: 0, TotProvisions: 0 },
+                TotCurrLiabilitiesProvision: 0,
+              },
+              NetCurrAsset: 0,
+            },
+            MiscAdjust:  { MiscExpndr: 0, DefTaxAsset: 0, AccumaltedLosses: 0, TotMiscAdjust: 0 },
+            TotFundApply: 0,
+          },
+        },
+
+        // ── PARTA_PL (P&L — zero for salary+OS case) ─────────────────────
+        PARTA_PL: {
+          CreditsToPL: {
+            GrossProfitTrnsfFrmTrdAcc: 0,
+            OthIncome: {
+              RentInc:                     0,
+              Comissions:                  0,
+              Dividends:                   0,
+              InterestInc:                 0,
+              ProfitOnSaleFixedAsset:      0,
+              ProfitOnInvChrSTT:           0,
+              ProfitOnOthInv:              0,
+              ProfitOnCurrFluct:           0,
+              ProfitOnCnvInvntryToCapAsst: 0,
+              ProfitOnAgriIncome:          0,
+              MiscOthIncome:               0,
+              TotOthIncome:                0,
+            },
+            TotCreditsToPL: 0,
+          },
+          DebitsToPL: {
+            Freight:           0, ConsumptionOfStores: 0, PowerFuel:    0,
+            RentExpdr:         0, RepairsBldg:         0, RepairMach:   0,
+            EmployeeComp: {
+              SalsWages: 0, Bonus: 0, MedExpReimb: 0, LeaveEncash: 0,
+              LeaveTravelBenft: 0, ContToSuperAnnFund: 0, ContToPF: 0,
+              ContToGratFund: 0, ContToOthFund: 0, OthEmpBenftExpdr: 0, TotEmployeeComp: 0,
+            },
+            Insurances: { MedInsur: 0, LifeInsur: 0, KeyManInsur: 0, OthInsur: 0, TotInsurances: 0 },
+            StaffWelfareExp: 0,
+            Entertainment:     0, Hospitality:         0, Conference:   0,
+            SalePromoExp:      0, Advertisement:       0,
+            CommissionExpdrDtls:  { NonResOtherCompany: 0, Others: 0, Total: 0 },
+            RoyalityDtls:         { NonResOtherCompany: 0, Others: 0, Total: 0 },
+            ProfessionalConstDtls:{ NonResOtherCompany: 0, Others: 0, Total: 0 },
+            HotelBoardLodge:   0, TravelExp:  0, ForeignTravelExp: 0,
+            ConveyanceExp:     0, TelephoneExp: 0, GuestHouseExp: 0,
+            ClubExp:           0, FestivalCelebExp: 0, Scholarship: 0,
+            Gift:              0, Donation: 0,
+            RatesTaxesPays: { ExciseCustomsVAT: { UnionExciseDuty:0,ServiceTax:0,VATorSaleTax:0,CentralGoodServiceTax:0,StateGoodServiceTax:0,IntegratedGoodServiceTax:0,UnionTerrGoodServiceTax:0,OthDutyTaxCess:0,TotExciseCustomsVAT:0 } },
+            AuditFee: 0,
+            OtherExpenses:     0,
+            BadDebtDtls: { BadDebtAmtDtlsTotal: 0, OthersPANNotAvlblDtlTotal: 0, OthersAmtLt1Lakh: 0, BadDebt: 0 },
+            ProvForBadDoubtDebt: 0, OthProvisionsExpdr: 0, PBIDTA: 0,
+            InterestExpdrtDtls:  { NonResOtherCompany: 0, Others: 0, InterestExpdr: 0 },
+            DepreciationAmort:   0,
+            PBT:                 0,
+          },
+          TaxProvAppr: {
+            ProvForCurrTax:     0, ProvDefTax: 0,
+            ProfitAfterTax:     0, BalBFPrevYr: 0,
+            AmtAvlAppr:         0, TrfToReserves: 0, ProprietorAccBalTrf: 0,
+          },
+          NoBooksOfAccPL: {
+            GrossReceipt: 0, GrsRcptAccPayeeOrBankMode: 0, GrsRcptOtherMode: 0,
+            GrossProfit: 0, Expenses: 0, NetProfit: 0,
+            GrossReceiptPrf: 0, GrsRcptAccPayeeOrBankModePrf: 0, GrsRcptOtherModePrf: 0,
+            GrossProfitPrf: 0, ExpensesPrf: 0, NetProfitPrf: 0,
+            TotBusinessProfession: 0,
+          },
+          TurnverFrmSpecActivity: 0,
+          NetIncomeFrmSpecActivity: 0,
+        },
+
+        // ── ITR3ScheduleBP (business/profession — zero for salary+OS case) ─
+        ITR3ScheduleBP: {
+          BusinessIncOthThanSpec: {
+            ProfBfrTaxPL:           0,
+            NetPLFromSpecBus:       0,
+            NetPLFromSpecifiedBus:  0,
+            IncRecCredPLOthHeadDtls: {
+              Salary: 0, HouseProperty: 0, CapitalGains: 0, OtherSources: 0,
+              Dividend: 0, OtherThanDividend: 0,
+              Us115BBF: 0, Us115BBG: 0, '115BBH': 0,
+            },
+            PLUs44sChapXIIG: 0,
+            ProfitLossInclRefrdSec: {
+              ProfitLossUs44AD: 0, ProfitLossUs44ADA: 0, ProfitLossUs44AE: 0,
+              ProfitLossUs44B: 0,  ProfitLossUs44BB: 0,  ProfitLossUs44BBA: 0,
+              ProfitLossUs44BBC: 0, ProfitLossUs44BBD: 0, ProfitLossUs44DA: 0,
+            },
+            TotalProfitFrmActCvrd: 0,
+            ProfitFrmActCvrd: {
+              ProfitFrmActCvrdUndrRule7:    0,
+              ProfitFrmActCvrdUndrRule7A:   0,
+              ProfitFrmActCvrdUndrRule7B1:  0,
+              ProfitFrmActCvrdUndrRule7B1A: 0,
+              ProfitFrmActCvrdUndrRule8:    0,
+            },
+            IncCredPL: {
+              FirmShareInc:    0,
+              AOPBOISharInc:   0,
+              OtherExmptIncDtl: { OperatingDividendName: 'Dividend', OperatingDividendAmt: 0 },
+              OthExempInc:     0,
+              TotExempIncPL:   0,
+            },
+            BalancePLOthThanSpecBus:         0,
+            ExpDebToPLOthHeadDtls: {
+              Salary: 0, HouseProperty: 0, CapitalGains: 0, OtherSources: 0,
+              Us115BBF: 0, Us115BBG: 0, '115BBH': 0,
+            },
+            ExpDebToPLExemptInc:             0,
+            ExpDebToPLExemptIncDisAllwUs14A: 0,
+            TotExpDebPL:                     0,
+            AdjustedPLOthThanSpecBus:        0,
+            DepreciationDebPLCosAct:         0,
+            DepreciationAllowITAct32: {
+              DepreciationAllowUs32_1_ii: 0,
+              DepreciationAllowUs32_1_i:  0,
+              TotDeprAllowITAct:          0,
+            },
+            AdjustPLAfterDeprOthSpecInc:  0,
+            AmtDebPLDisallowUs36:         0,
+            AmtDebPLDisallowUs37:         0,
+            AmtDebPLDisallowUs40:         0,
+            AmtDebPLDisallowUs40A:        0,
+            AmtDebPLDisallowUs43B:        0,
+            InterestDisAllowUs23SMEAct:   0,
+            DeemIncUs41:                  0,
+            DeemIncUs3380HHD80IA:         0,
+            DeemIncUs43CA:                0,
+            OthItemDisallowUs28To44DA:    0,
+            AnyOthIncNotInclInExpDisallowPL: 0,
+            AnyOthIncNotInclInSalary:     0,
+            AnyOthIncNotInclInBonus:      0,
+            AnyOthIncNotInclInCommission: 0,
+            AnyOthIncNotInclInInterest:   0,
+            AnyOthIncNotInclInOthers:     0,
+            IncProfDecLossAccICDSAdj:     0,
+            TotAfterAddToPLDeprOthSpecInc: 0,
+            DeductUs32_1_iii:             0,
+            DebPLUs35ExcessAmt:           0,
+            AmtDisallUs40NowAllow:        0,
+            AmtDisallUs43BNowAllow:       0,
+            AnyOthAmtAllDeduct:           0,
+            DecProfIncLossAccICDSAdj:     0,
+            TotDeductionAmts:             0,
+            PLAftAdjDedBusOthThanSpec:    0,
+            DeemedProfitBusUs: {
+              Section44AD: 0, Section44ADA: 0, Section44AE: 0, Section44B: 0,
+              Section44BB: 0, Section44BBA: 0, Section44BBC: 0, Section44BBD: 0,
+              Section44DA: 0, TotDeemedProfitBusUs: 0,
+            },
+            NetPLAftAdjBusOthThanSpec:    0,
+            NetPLBusOthThanSpec7A7B7C:    0,
+            ChrgblIncUndrRule7:           0,
+            DeemedChrgblIncUndrRule7A:    0,
+            DeemedChrgblIncUndrRule7B1:   0,
+            DeemedChrgblIncUndrRule7B1A:  0,
+            DeemedChrgblIncUndrRule8:     0,
+            IncomeOtherThanRule:          0,
+            BalIncDeemedFrmAgri:          0,
+          },
+          SpecBusinessInc: {
+            NetPLFrmSpecBus:      0,
+            AdditionUs28to44DA:   0,
+            DeductUs28to44DA:     0,
+            AdjustedPLFrmSpecuBus: 0,
+          },
+          SpecifiedBusinessInc: {
+            NetPLFrmSpecifiedBus:           0,
+            AddSec28to44DA:                 0,
+            DedSec28to44DAOTDedSec35AD:     0,
+            ProfitLossSpecifiedBusiness:    0,
+            DeductionUs35AD:                0,
+            PLFrmSpecifiedBus:              0,
+          },
+          IncChrgUnHdProftGain: 0,
+          BusSetoffCurrYr: {
+            LossSetOffOnBusLoss:   0,
+            TotLossSetOffOnBus:    0,
+            LossRemainSetOffOnBus: 0,
+          },
+        },
+
+        // ── ScheduleS (salary) ────────────────────────────────────────────
+        ScheduleS: rd.salary
+          ? {
+              Salaries: rd.salary.Employers.map((emp: any) => ({
+                NameOfEmployer:     emp.NameOfEmployer,
+                NatureOfEmployment: emp.NatureOfEmployment,
+                TANofEmployer:      emp.TANofEmployer,
+                // ITR-3 AddressDetail has no CountryCode field
+                AddressDetail: {
+                  AddrDetail:              (emp.AddressDetail?.AddrDetail ?? '').toUpperCase(),
+                  CityOrTownOrDistrict:    (emp.AddressDetail?.CityOrTownOrDistrict ?? '').toUpperCase(),
+                  StateCode:               emp.AddressDetail?.StateCode ?? '11',
+                  PinCode:                 emp.AddressDetail?.PinCode,
+                },
+                Salarys: {
+                  GrossSalary:            toInt(emp.Salarys.GrossSalary),
+                  Salary:                 toInt(emp.Salarys.Salary),
+                  ValueOfPerquisites:     toInt(emp.Salarys.ValueOfPerquisites),
+                  ProfitsinLieuOfSalary:  toInt(emp.Salarys.ProfitsinLieuOfSalary),
+                  IncomeNotified89A:      toInt(emp.Salarys.IncomeNotified89A),
+                  IncomeNotifiedOther89A: toInt(emp.Salarys.IncomeNotifiedOther89A),
+                },
+              })),
+              TotalGrossSalary:          toInt(rd.salary.TotalGrossSalary),
+              AllwncExtentExemptUs10:    toInt(rd.salary.AllwncExtentExemptUs10),
+              NetSalary:                 toInt(rd.salary.NetSalary),
+              DeductionUS16:             toInt(rd.salary.TotalDeductionUs16),
+              DeductionUnderSection16ia: capAt(rd.salary.DeductionUs16ia, rd.regime === 'NEW' ? cfg.stdDeduction_new : cfg.stdDeduction_old),
+              EntertainmntalwncUs16ii:   capAt(rd.salary.EntertainmentAlw16ii, DEDUCTION_CAPS.EntertainmentAlw16ii),
+              ProfessionalTaxUs16iii:    capAt(rd.salary.ProfessionalTaxUs16iii, DEDUCTION_CAPS.ProfessionalTax16iii),
+              TotIncUnderHeadSalaries:   toInt(rd.salary.IncomeFromSalary),
+            }
+          : undefined,
+
+        // ── ScheduleHP ───────────────────────────────────────────────────
+        ScheduleHP: rd.houseProperty
+          ? {
+              PropertyDetails:             rd.houseProperty.Properties.map(buildPropertyDetails),
+              TotalIncomeChargeableUnHP:   toInt(rd.houseProperty.TotalIncomeFromHP),
+            }
+          : undefined,
+
+        // ── ScheduleCGFor23 ──────────────────────────────────────────────
+        ScheduleCGFor23: {
+          ShortTermCapGainFor23: (() => {
+            const stcg = rd.stcg;
+            const entries111A  = stcg?.Entries111A  ?? [];
+            const otherEntries = stcg?.OtherEntries ?? [];
+            return {
+              EquityMFDTDtls111A: entries111A.length > 0 ? {
+                ShareUnitSaleDetails111A: entries111A.map((e: any) => ({
+                  ISIN:            e.isin ?? '',
+                  ShareUnitName:   e.shareOrUnitName ?? '',
+                  SaleValue:       toInt(e.salesValue),
+                  CostAcquisition: toInt(e.purchaseCost),
+                  Expenditure:     toInt(e.expenditure),
+                  GainLoss:        toInt(e.gainLoss),
+                })),
+                TotalSaleValue:   entries111A.reduce((s: number, e: any) => s + toInt(e.salesValue), 0),
+                TotalCostOfAcq:   entries111A.reduce((s: number, e: any) => s + toInt(e.purchaseCost), 0),
+                TotalExpenditure: entries111A.reduce((s: number, e: any) => s + toInt(e.expenditure), 0),
+                TotalSTCG111A:    stcg111ATotal,
+              } : undefined,
+              SlumpSaleInStcg: {
+                FMV11UAEii: 0, FMV11UAEiii: 0,
+                FullConsideration: 0,
+                NetWorthOfDivision: 0,
+                CapgainonAssets: 0,
+              },
+              NRITransacSec48Dtl: { NRItaxSTTPaid: 0, NRItaxSTTNotPaid: 0 },
+              NRISecur115AD: {
+                FullValueConsdRecvUnqshr: 0, FairMrktValueUnqshr: 0,
+                FullValueConsdSec50CA: 0, FullValueConsdOthUnqshr: 0,
+                FullConsideration: 0,
+                DeductSec48: { AquisitCost: 0, ImproveCost: 0, ExpOnTrans: 0, TotalDedn: 0 },
+                BalanceCG: 0, LossSec94of7Or94of8: 0, CapgainonAssets: 0,
+              },
+              SaleOnOtherAssets: {
+                FullValueConsdRecvUnqshr: 0, FairMrktValueUnqshr: 0,
+                FullValueConsdSec50CA: 0, FullValueConsdOthUnqshr: 0,
+                FullConsideration: stcgOtherTotal,
+                DeductSec48: {
+                  AquisitCost: otherEntries.reduce((s: number, e: any) => s + toInt(e.purchaseCost), 0),
+                  ImproveCost: 0,
+                  ExpOnTrans:  otherEntries.reduce((s: number, e: any) => s + toInt(e.expenditure), 0),
+                  TotalDedn:   otherEntries.reduce((s: number, e: any) => s + toInt(e.purchaseCost) + toInt(e.expenditure), 0),
+                },
+                BalanceCG: stcgOtherTotal,
+                LossSec94of7Or94of8: 0,
+                DeemedStcgOnAssets:  0,
+                ExemptionOrDednUs54: { ExemptionGrandTotal: 0 },
+                CapgainonAssets:     stcgOtherTotal,
+              },
+              TotalAmtDeemedStcg:       0,
+              PassThrIncNatureSTCG:     0,
+              TotalAmtNotTaxUsDTAAStcg: 0,
+              TotalAmtTaxUsDTAAStcg:    0,
+              TotalSTCG:                stcg111ATotal + stcgOtherTotal,
+            };
+          })(),
+          LongTermCapGain23: {
+            SlumpSaleInLtcgDtls: {},
+            SaleOfEquityShareUs112A: (() => {
+              // Required field — BalanceCG, DeductionUs54F, CapgainonAssets always required
+              const base = { BalanceCG: ltcg112ATotal, DeductionUs54F: 0, CapgainonAssets: ltcg112ATotal };
+              if (ltcg112AEntries.length > 0) {
+                return {
+                  ...base,
+                  SaleOfEquityDtls: ltcg112AEntries.map((e) => ({
+                    ISIN:             e.ISIN ?? '',
+                    ShareUnitName:    e.ShareOrUnitName ?? '',
+                    SaleValue:        toInt(e.SalesValue),
+                    PurchaseCost:     toInt(e.PurchaseCost),
+                    FMVasOn31Jan2018: toInt(e.FMVasOn31Jan2018),
+                    Expenditure:      toInt(e.Expenditure),
+                    GainLoss:         toInt(e.GainLoss),
+                  })),
+                  TotalSaleValue:   ltcg112AEntries.reduce((s, e) => s + toInt(e.SalesValue), 0),
+                  TotalCostOfAcq:   ltcg112AEntries.reduce((s, e) => s + toInt(e.PurchaseCost), 0),
+                  TotalExpenditure: 0,
+                  TotalLTCG112A:    ltcg112ATotal,
+                };
+              }
+              return base;
+            })(),
+            SaleofAssetNADtls:   { SaleofAssetNA: undefined },
+            NRIProvisoSec48:     { LTCGWithoutBenefit: 0, DeductionUs54F: 0, BalanceCG: 0 },
+            NRISaleOfEquityShareUs112A: { BalanceCG: 0, DeductionUs54F: 0, CapgainonAssets: 0 },
+            NRISaleofForeignAsset:      { SaleonSpecAsset: 0, DednSpecAssetus115: 0, BalonSpeciAsset: 0 },
+            TotalAmtDeemedLtcg:         0,
+            PassThrIncNatureLTCG:       0,
+            TotalAmtNotTaxUsDTAALtcg:   0,
+            TotalAmtTaxUsDTAALtcg:      0,
+            TotalLTCG:                  ltcg112ATotal,
+          },
+          SumOfCGIncm:        totalCG,
+          IncmFromVDATrnsf:   0,
+          TotScheduleCGFor23: totalCG,
+          DeducClaimInfo: { TotDeductClaim: 0 },
+          CurrYrLosses: {
+            InLossSetOff:   { StclSetoff20Per:0, StclSetoff30Per:0, StclSetoffAppRate:0, StclSetoffDTAARate:0, LtclSetOff12_5Per:0, LtclSetOffDTAARate:0 },
+            InStcg20Per:    { CurrYearIncome:stcg111ATotal, StclSetoff30Per:0, StclSetoffAppRate:0, StclSetoffDTAARate:0, CurrYrCapGain:stcg111ATotal },
+            InStcg30Per:    { CurrYearIncome:0, StclSetoff20Per:0, StclSetoffAppRate:0, StclSetoffDTAARate:0, CurrYrCapGain:0 },
+            InStcgAppRate:  { CurrYearIncome:stcgOtherTotal, StclSetoff20Per:0, StclSetoff30Per:0, StclSetoffDTAARate:0, CurrYrCapGain:stcgOtherTotal },
+            InStcgDTAARate: { CurrYearIncome:0, StclSetoff20Per:0, StclSetoff30Per:0, StclSetoffAppRate:0, CurrYrCapGain:0 },
+            InLtcg12_5Per:  { CurrYearIncome:ltcg112ATotal, StclSetoff20Per:0, StclSetoff30Per:0, StclSetoffAppRate:0, StclSetoffDTAARate:0, LtclSetOffDTAARate:0, CurrYrCapGain:ltcg112ATotal },
+            InLtcgDTAARate: { CurrYearIncome:0, StclSetoff20Per:0, StclSetoff30Per:0, StclSetoffAppRate:0, StclSetoffDTAARate:0, LtclSetOff12_5Per:0, CurrYrCapGain:0 },
+            TotLossSetOff:  { StclSetoff20Per:0, StclSetoff30Per:0, StclSetoffAppRate:0, StclSetoffDTAARate:0, LtclSetOff12_5Per:0, LtclSetOffDTAARate:0 },
+            LossRemainSetOff:{ StclSetoff20Per:0, StclSetoff30Per:0, StclSetoffAppRate:0, StclSetoffDTAARate:0, LtclSetOff12_5Per:0, LtclSetOffDTAARate:0 },
+          },
+          AccruOrRecOfCG: {
+            ShortTermUnder20Per:    { DateRange: { Upto15Of6: 0, Upto15Of9: 0, Up16Of9To15Of12: 0, Up16Of12To15Of3: 0, Up16Of3To31Of3: 0 } },
+            ShortTermUnder30Per:    { DateRange: { Upto15Of6: 0, Upto15Of9: 0, Up16Of9To15Of12: 0, Up16Of12To15Of3: 0, Up16Of3To31Of3: 0 } },
+            ShortTermUnderAppRate:  { DateRange: { Upto15Of6: 0, Upto15Of9: 0, Up16Of9To15Of12: 0, Up16Of12To15Of3: 0, Up16Of3To31Of3: 0 } },
+            ShortTermUnderDTAARate: { DateRange: { Upto15Of6: 0, Upto15Of9: 0, Up16Of9To15Of12: 0, Up16Of12To15Of3: 0, Up16Of3To31Of3: 0 } },
+            LongTermUnder12_5Per:   { DateRange: { Upto15Of6: 0, Upto15Of9: 0, Up16Of9To15Of12: 0, Up16Of12To15Of3: 0, Up16Of3To31Of3: 0 } },
+            LongTermUnderDTAARate:  { DateRange: { Upto15Of6: 0, Upto15Of9: 0, Up16Of9To15Of12: 0, Up16Of12To15Of3: 0, Up16Of3To31Of3: 0 } },
+            VDATrnsfGainsUnder30Per:{ DateRange: { Upto15Of6: 0, Upto15Of9: 0, Up16Of9To15Of12: 0, Up16Of12To15Of3: 0, Up16Of3To31Of3: 0 } },
+          },
+        },
+
+        // ── Schedule112A ─────────────────────────────────────────────────
+        Schedule112A: ltcg112AEntries.length > 0
+          ? {
+              Schedule112ADtls: ltcg112AEntries.map((e) => ({
+                ISIN:            e.ISIN ?? '',
+                ShareUnitName:   e.ShareOrUnitName ?? '',
+                FMVPerShareUnit: toInt(e.FMVasOn31Jan2018),
+                SaleValue:       toInt(e.SalesValue),
+                PurchaseCost:    toInt(e.PurchaseCost),
+                Expenditure:     toInt(e.Expenditure),
+                GainLoss:        toInt(e.GainLoss),
+              })),
+              TotalLTCG112A: ltcg112ATotal,
+            }
+          : undefined,
+
+        // ── ScheduleOS ───────────────────────────────────────────────────
+        ScheduleOS: {
+          IncOthThanOwnRaceHorse: {
+            GrossIncChrgblTaxAtAppRate: Math.max(0, osIncome),
+            DividendGross:              0,
+            DividendOthThan22e:         0,
+            Dividend22e:                0,
+            InterestGross:              0,
+            IntrstFrmSavingBank:        0,
+            IntrstFrmTermDeposit:       0,
+            IntrstFrmIncmTaxRefund:     0,
+            NatofPassThrghIncome:       0,
+            IntrstFrmOthers:            Math.max(0, osIncome),
+            RentFromMachPlantBldgs:     0,
+            Tot562x:                    0,
+            Aggrtvaluewithoutcons562x:  0,
+            Immovpropwithoutcons562x:   0,
+            Immovpropinadeqcons562x:    0,
+            Anyotherpropwithoutcons562x: 0,
+            Anyotherpropinadeqcons562x: 0,
+            FamilyPension:              0,
+            AnyOtherIncome:             0,
+            IncChargeableSpecialRates:  0,
+            LtryPzzlChrgblUs115BB:      0,
+            IncChrgblUs115BBE:          0,
+            CashCreditsUs68:            0,
+            UnExplndInvstmntsUs69:      0,
+            UnExplndMoneyUs69A:         0,
+            UnDsclsdInvstmntsUs69B:     0,
+            UnExplndExpndtrUs69C:       0,
+            AmtBrwdRepaidOnHundiUs69D:  0,
+            OthersGross:                0,
+            PassThrIncOSChrgblSplRate:  0,
+            Deductions: {
+              Expenses:         0,
+              DeductionUs57iia: capAt(rd.otherSources?.DeductionUs57iia ?? 0, 25_000),
+              Depreciation:     0,
+              TotDeductions:    capAt(rd.otherSources?.DeductionUs57iia ?? 0, 25_000),
+            },
+            BalanceNoRaceHorse: Math.max(0, osIncome - capAt(rd.otherSources?.DeductionUs57iia ?? 0, 25_000)),
+          },
+          TotOthSrcNoRaceHorse: Math.max(0, osIncome),
+          IncFrmLottery:        zeroDateRange(),
+          DividendIncUs115BBDA:    zeroDateRange(),
+          DividendIncUs115BBDAaiii: zeroDateRange(),
+          DividendIncUs115A1ai:    zeroDateRange(),
+          DividendIncUs115AC:      zeroDateRange(),
+          DividendIncUs115ACA:     zeroDateRange(),
+          DividendIncUs115AD1i:    zeroDateRange(),
+          NOT89A:                  zeroDateRange(),
+          DividendDTAA:            zeroDateRange(),
+          IncChargeable:           Math.max(0, osIncome),
+        },
+
+        // ── ScheduleVIA ──────────────────────────────────────────────────
+        ScheduleVIA: (() => {
+          const usrRaw = rd.deductions && rd.regime === 'OLD'
+            ? buildUsrDeductions(rd.deductions)
+            : buildUsrDeductions(null);
+          const cappedRaw = rd.deductions && rd.regime === 'OLD'
+            ? capped
+            : applyDeductionCaps({ TotalChapVIADeductions: 0 } as DeductionsChapterVIA, 0);
+          // UsrDeductUndChapVIA requires TotPartBchapterVIA, TotPartCchapterVIA, TotPartCAandDchapterVIA
+          const n = (v: unknown) => toInt(v as number);
+          const partB = n((usrRaw as any).Section80C) + n((usrRaw as any).Section80CCC)
+            + n((usrRaw as any).Section80CCDEmployeeOrSE) + n((usrRaw as any).Section80CCD1B)
+            + n((usrRaw as any).Section80CCDEmployer) + n((usrRaw as any).Section80D)
+            + n((usrRaw as any).Section80DD) + n((usrRaw as any).Section80DDB)
+            + n((usrRaw as any).Section80E) + n((usrRaw as any).Section80EE)
+            + n((usrRaw as any).Section80EEA) + n((usrRaw as any).Section80EEB)
+            + n((usrRaw as any).Section80G) + n((usrRaw as any).Section80GG)
+            + n((usrRaw as any).Section80GGA) + n((usrRaw as any).Section80GGC);
+          const partC = n((usrRaw as any).Section80TTA) + n((usrRaw as any).Section80TTB) + n((usrRaw as any).Section80U);
+          const partCAD = n((usrRaw as any).AnyOthSec80CCH);
+          return {
+            UsrDeductUndChapVIA: {
+              ...usrRaw,
+              TotPartBchapterVIA:      partB,
+              TotPartCchapterVIA:      partC,
+              TotPartCAandDchapterVIA: partCAD,
+            },
+            DeductUndChapVIA: {
+              ...cappedRaw,
+              TotPartBchapterVIA:      partB,
+              TotPartCchapterVIA:      partC,
+              TotPartCAandDchapterVIA: partCAD,
+            },
+          };
+        })(),
+
+        // ── ScheduleCYLA ─────────────────────────────────────────────────
+        ScheduleCYLA: {
+          Salary: {
+            IncCYLA: {
+              IncOfCurYrUnderThatHead:     Math.max(0, salIncome),
+              HPlossCurYrSetoff:           hpLossSetOff,
+              OthSrcLossNoRaceHorseSetoff: 0,
+              IncOfCurYrAfterSetOff:       salAfterSetOff,
+            },
+          },
+          HP: {
+            IncCYLA: {
+              IncOfCurYrUnderThatHead:     Math.max(0, hpIncome),
+              OthSrcLossNoRaceHorseSetoff: 0,
+              IncOfCurYrAfterSetOff:       hpAfterSetOff,
+            },
+          },
+          BusProfExclSpecProf: cylaBus(bpIncome),
+          SpeculativeInc:      cylaBus(0),
+          SpecifiedInc:        cylaBus(0),
+          STCG20Per:           cylaInc3(stcg111ATotal),
+          STCG30Per:           cylaInc3(0),
+          STCGAppRate:         cylaInc3(stcgOtherTotal),
+          STCGDTAARate:        cylaInc3(0),
+          LTCG12_5Per:         cylaInc3(ltcg112ATotal),
+          LTCGDTAARate:        cylaInc3(0),
+          OthSrcExclRaceHorse: {
+            IncCYLA: {
+              IncOfCurYrUnderThatHead: Math.max(0, osIncome),
+              IncOfCurYrAfterSetOff:   Math.max(0, osIncome),
+            },
+          },
+          OthSrcRaceHorse: cylaInc3(0),
+          IncOSDTAA:       cylaInc3(0),
+          TotalCurYr: {
+            TotHPlossCurYr:             0,
+            TotBusLoss:                 0,
+            TotOthSrcLossNoRaceHorse:   0,
+          },
+          TotalLossSetOff: {
+            TotHPlossCurYrSetoff:           hpLossSetOff,
+            TotBusLossSetoff:               0,
+            TotOthSrcLossNoRaceHorseSetoff: 0,
+          },
+          LossRemAftSetOff: {
+            BalHPlossCurYrAftSetoff:           0,
+            BalBusLossAftSetoff:               0,
+            BalOthSrcLossNoRaceHorseAftSetoff: 0,
+          },
+        },
+
+        // ── ScheduleBFLA ─────────────────────────────────────────────────
+        ScheduleBFLA: {
+          Salary:              bflaRowSal(salAfterSetOff),
+          HP:                  bflaRow3(hpAfterSetOff),
+          BusProfExclSpecProf: bflaRow3(bpIncome),
+          SpeculativeInc:      bflaRow3(0),
+          SpecifiedInc:        bflaRow3(0),
+          STCG20Per:           bflaRow3(stcg111ATotal),
+          STCG30Per:           bflaRow3(0),
+          STCGAppRate:         bflaRow3(stcgOtherTotal),
+          STCGDTAARate:        bflaRow3(0),
+          LTCG12_5Per:         bflaRow3(ltcg112ATotal),
+          LTCGDTAARate:        bflaRow3(0),
+          OthSrcExclRaceHorse: {
+            IncBFLA: {
+              IncOfCurYrUndHeadFromCYLA:     Math.max(0, osIncome),
+              BFUnabsorbedDeprSetoff:        0,
+              BFAllUs35Cl4Setoff:            0,
+              IncOfCurYrAfterSetOffBFLosses: Math.max(0, osIncome),
+            },
+          },
+          OthSrcRaceHorse: {
+            IncBFLA: { IncOfCurYrUndHeadFromCYLA: 0, BFUnabsorbedDeprSetoff: 0, BFAllUs35Cl4Setoff: 0, IncOfCurYrAfterSetOffBFLosses: 0 },
+          },
+          IncOSDTAA: {
+            IncBFLA: { IncOfCurYrUndHeadFromCYLA: 0, BFUnabsorbedDeprSetoff: 0, BFAllUs35Cl4Setoff: 0, IncOfCurYrAfterSetOffBFLosses: 0 },
+          },
+          TotalBFLossSetOff: {
+            TotBFLossSetoff:       0,
+            TotUnabsorbedDeprSetoff: 0,
+            TotAllUs35cl4Setoff:   0,
+          },
+          IncomeOfCurrYrAftCYLABFLA: grossTotalIncome,
+        },
+
+        // ── PartB-TI ─────────────────────────────────────────────────────
+        'PartB-TI': {
+          Salaries:     toInt(summary.IncomeFromSalary),
+          IncomeFromHP: Math.max(0, toInt(summary.IncomeFromHP)),
+          ProfBusGain: {
+            ProfGainNoSpecBus:    bpIncome,
+            ProfGainSpecBus:      0,
+            ProfGainSpecifiedBus: 0,
+            ProfIncome115BBF:     0,
+            TotProfBusGain:       bpIncome,
+          },
+          CapGain: {
+            ShortTerm: {
+              ShortTerm20Per:       stcg111ATotal,
+              ShortTerm30Per:       0,
+              ShortTermAppRate:     stcgOtherTotal,
+              ShortTermSplRateDTAA: 0,
+              TotalShortTerm:       stcg111ATotal + stcgOtherTotal,
+            },
+            LongTerm: {
+              LongTerm12_5Per:     ltcg112ATotal,
+              LongTermSplRateDTAA: 0,
+              TotalLongTerm:       ltcg112ATotal,
+            },
+            ShortTermLongTermTotal: totalCG,
+            CapGains30Per115BBH:    0,
+            TotalCapGains:          totalCG,
+          },
+          IncFromOS: {
+            OtherSrcThanOwnRaceHorse: Math.max(0, toInt(summary.IncomeFromOtherSources)),
+            IncChargblSplRate:        0,
+            FromOwnRaceHorse:         0,
+            TotIncFromOS:             Math.max(0, toInt(summary.IncomeFromOtherSources)),
+          },
+          TotalTI:                   grossTotalIncome,
+          CurrentYearLoss:           0,
+          BalanceAfterSetoffLosses:  grossTotalIncome,
+          BroughtFwdLossesSetoff:    0,
+          GrossTotalIncome:          grossTotalIncome,
+          IncChargeTaxSplRate111A112: totalCG,
+          DeductionsUndSchVIADtl: {
+            PartBchapterVIA:    capped.TotalChapVIADeductions,
+            PartCchapterVIA:    0,
+            TotDeductUndSchVIA: capped.TotalChapVIADeductions,
+          },
+          DeductionsUnder10Aor10AA: 0,
+          TotalIncome:              totalIncome,
+          IncChargeableTaxSplRates: totalCG,
+          NetAgricultureIncomeOrOtherIncomeForRate: 0,
+          AggregateIncome:          totalIncome,
+          LossesOfCurrentYearCarriedFwd: 0,
+          DeemedIncomeUs115JC:      0,
+        },
+
+        // ── PartB_TTI ────────────────────────────────────────────────────
+        PartB_TTI: {
+          ComputationOfTaxLiability: {
+            TaxPayableOnDeemedTI: {
+              TaxDeemedTISec115JC:  0,
+              SurchargeOnAboveCrore: 0,
+              EducationCess:        0,
+              TotalTax:             0,
+            },
+            TaxPayableOnTI: {
+              TaxAtNormalRatesOnAggrInc:        toInt(taxComp.NetTaxPayable),
+              TaxAtSpecialRates:                Math.round(ltcg112ATotal > 0 ? Math.max(0, ltcg112ATotal - cfg.ltcg112AExempt) * cfg.ltcg112ARate : 0) + Math.round(stcg111ATotal * cfg.stcg111ARate),
+              RebateOnAgriInc:                  0,
+              TaxPayableOnTotInc:               toInt(taxComp.NetTaxPayable) + Math.round(ltcg112ATotal > 0 ? Math.max(0, ltcg112ATotal - cfg.ltcg112AExempt) * cfg.ltcg112ARate : 0) + Math.round(stcg111ATotal * cfg.stcg111ARate),
+              Rebate87A:                        toInt(taxComp.Rebate87A),
+              TaxPayableOnRebate:               toInt(taxComp.TaxAfterRebate),
+              Surcharge25ofSI:                  0,
+              SurchargeOnAboveCrore:            toInt(taxComp.Surcharge),
+              Surcharge25ofSIBeforeMarginal:    0,
+              SurchargeOnAboveCroreBeforeMarginal: toInt(taxComp.Surcharge),
+              TotalSurcharge:                   toInt(taxComp.Surcharge),
+              EducationCess:                    toInt(taxComp.HealthEducationCess),
+              GrossTaxLiability:                netTaxLiability,
+            },
+            GrossTaxPayable: netTaxLiability,
+            GrossTaxPay: {
+              TaxInc17:            netTaxLiability,
+              TaxDeferred17:       0,
+              TaxDeferredPayableCY: 0,
+            },
+            CreditUS115JD:          0,
+            TaxPayAfterCreditUs115JD: netTaxLiability,
+            TaxRelief: {
+              Section89:  0,
+              Section90:  0,
+              Section91:  0,
+              TotTaxRelief: 0,
+            },
+            NetTaxLiability:       netTaxLiability,
+            IntrstPay: {
+              IntrstPayUs234A:  0,
+              IntrstPayUs234B:  0,
+              IntrstPayUs234C:  0,
+              LateFilingFee234F: 0,
+            },
+            AggregateTaxInterestLiability: netTaxLiability,
+          },
+          TaxPaid: {
+            TaxesPaid: {
+              AdvanceTax:        advTax,
+              TDS:               tdsSalary + tdsOther + tdsRent,
+              TCS:               tcs,
+              SelfAssessmentTax: satTax,
+              TotalTaxesPaid:    totalTaxPaid,
+            },
+            BalTaxPayable: balPayable,
+          },
+          Refund: (() => {
+            const bank = (rd as any).bankAccounts?.[0];
+            return {
+              RefundDue: refund,
+              BankAccountDtls: {
+                BankDtlsFlag: bank ? 'Y' : 'N',
+                AddtnlBankDetails: bank ? [{
+                  IFSCCode:      bank.ifscCode ?? '',
+                  BankName:      bank.bankName ?? '',
+                  BankAccountNo: bank.accountNumber ?? '',
+                  AccountType:   mapAccountType(bank.accountType),
+                  UseForRefund:  'true',
+                }] : undefined,
+              },
+            };
+          })(),
+          AssetOutIndiaFlag: 'NO',
+        },
+
+        // ── ScheduleTDS1 (TDS on salary) — omit if no entries (minItems: 1) ──
+        ...(rd.tds?.TDSOnSalaries?.length
+          ? { ScheduleTDS1: buildTDSOnSalaries(rd.tds) }
+          : { ScheduleTDS1: { TotalTDSonSalaries: 0 } }),
+
+        // ── ScheduleTDS2 (TDS on other income) — omit if no entries ──────
+        ...(rd.tds?.TDSOnOtherIncome?.length
+          ? { ScheduleTDS2: buildTDSOnOtherIncome(rd.tds) }
+          : { ScheduleTDS2: { TotalTDSonOthThanSals: 0 } }),
+
+        // ── ScheduleTDS3 (TDS u/s 194IB rent) — omit if no entries ───────
+        ...(rd.tds?.TDSOnRent16C?.length
+          ? { ScheduleTDS3: buildTDS16C(rd.tds) }
+          : { ScheduleTDS3: { TotalTDS3OnOthThanSal: 0 } }),
+
+        // ── ScheduleIT (advance tax / SAT challans) — omit if no entries ─
+        ...(rd.taxPayments && (rd.taxPayments.AdvanceTaxPayments?.length || rd.taxPayments.SelfAssessmentPayments?.length)
+          ? { ScheduleIT: buildTaxPayments(rd.taxPayments) }
+          : { ScheduleIT: { TotalTaxPayments: toInt(rd.taxPayments?.TotalTaxPaid) } }),
+
+        // ── ScheduleTCS ───────────────────────────────────────────────────
+        ScheduleTCS: rd.tds?.TCSEntries?.length
+          ? {
+              TCSDetails: rd.tds.TCSEntries.map((t) => ({
+                TAN:           t.EmployerOrDeductorDetails?.TAN ?? '',
+                CollectorName: t.EmployerOrDeductorDetails?.EmployerName ?? '',
+                TotalTCS:      toInt(t.TCSCollected),
+              })),
+              TotalTCS: tcs,
+            }
+          : undefined,
+
+        // ── Verification ──────────────────────────────────────────────────
+        // ITR-3 Verification: Declaration + Capacity + Date + Place at top level
+        Verification: (() => {
+          const v = rd.verification;
+          if (v) {
+            const name = splitName((client.fullName ?? '').toUpperCase());
+            const validCap = new Set(['S', 'R', '11', '12']);
+            const cap = validCap.has(v.Capacity ?? '') ? v.Capacity : 'S';
+            return {
+              Declaration: {
+                AssesseeVerName: (v.AssesseeVerName || name.SurName).toUpperCase(),
+                ...(v.FatherName && v.FatherName.trim() !== '-'
+                  ? { FatherName: v.FatherName.trim().toUpperCase() } : {}),
+                AssesseeVerPAN: (v.signatoryPAN || client.pan).toUpperCase(),
+              },
+              Capacity: cap,
+              Place:    ((v as any).Place || (v as any).PlaceVerSign || '').toUpperCase() || undefined,
+              Date:     (v as any).Date || (v as any).DateVerSign || date,
+            };
+          }
+          return {
+            Declaration: {
+              AssesseeVerName: (client.fullName ?? 'ASSESSEE').toUpperCase(),
+              AssesseeVerPAN:  client.pan.toUpperCase(),
+            },
+            Capacity: 'S',
+            Place:    undefined,
+            Date:     date,
+          };
+        })(),
+      },
+    },
+  };
+}
+
 export function buildITRJson(input: BuildITRInput): object {
   switch (input.returnData.formType) {
     case 'ITR-1': return buildITR1(input);
     case 'ITR-2': return buildITR2(input);
+    case 'ITR-3': return buildITR3(input);
     case 'ITR-4': return buildITR4(input);
     case 'ITR-5': return signITR5Json(reorderITR5Keys(buildITR5(input)));
     default:

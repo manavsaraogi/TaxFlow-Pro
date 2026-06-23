@@ -24,7 +24,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Which ITR form is applicable */
-export type ITRFormType = 'ITR-1' | 'ITR-2' | 'ITR-4' | 'ITR-5';
+export type ITRFormType = 'ITR-1' | 'ITR-2' | 'ITR-3' | 'ITR-4' | 'ITR-5';
 
 /** Tax regime */
 export type TaxRegime = 'OLD' | 'NEW';
